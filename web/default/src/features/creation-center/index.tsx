@@ -30,8 +30,11 @@ import {
   Library,
   MessageSquare,
   Plus,
+  RefreshCw,
   Send,
   Sparkles,
+  Timer,
+  Trash2,
   Upload,
   Video,
 } from 'lucide-react'
@@ -52,8 +55,34 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { PublicLayout } from '@/components/layout'
-import { getCreationCatalog } from './api'
-import type { CreationMode, CreationModel, CreationView } from './types'
+import {
+  getCreationCatalog,
+  getCreationErrorMessage,
+  getCreationVideoTask,
+  submitCreationTask,
+} from './api'
+import {
+  CREATION_DURATION_OPTIONS,
+  CREATION_RESOLUTION_OPTIONS,
+  DEFAULT_CREATION_VIDEO_OPTIONS,
+  formatCreationCountdown,
+  getCreationCountdownSeconds,
+  getCreationHistoryStorageKey,
+  getCreationVideoRequestOptions,
+  loadCreationHistory,
+  saveCreationHistory,
+  upsertCreationHistoryItem,
+  type CreationDuration,
+  type CreationHistoryItem,
+  type CreationResolution,
+  type CreationVideoOptions,
+} from './session'
+import type {
+  CreationMode,
+  CreationModel,
+  CreationResult,
+  CreationView,
+} from './types'
 
 const MODES: CreationMode[] = ['chat', 'image', 'video']
 
@@ -70,6 +99,18 @@ export function CreationCenter() {
   const [assets, setAssets] = useState<string[]>([])
   const [uploadOpen, setUploadOpen] = useState(false)
   const [sessionNumber, setSessionNumber] = useState(1)
+  const [result, setResult] = useState<CreationResult>()
+  const [historyItems, setHistoryItems] = useState<CreationHistoryItem[]>([])
+  const [videoOptions, setVideoOptions] = useState<CreationVideoOptions>(
+    DEFAULT_CREATION_VIDEO_OPTIONS
+  )
+  const [previewNow, setPreviewNow] = useState(Date.now())
+  const [submitting, setSubmitting] = useState(false)
+  const [refreshingTask, setRefreshingTask] = useState(false)
+  const historyStorageKey = useMemo(
+    () => getCreationHistoryStorageKey(auth.user?.id),
+    [auth.user?.id]
+  )
 
   const catalogQuery = useQuery({
     queryKey: ['creation-models'],
@@ -88,20 +129,98 @@ export function CreationCenter() {
       models.find((model) => model.id === selectedByMode[mode]) ?? models[0],
     [mode, models, selectedByMode]
   )
+  const modeCounts = useMemo(
+    () =>
+      MODES.reduce(
+        (counts, item) => ({
+          ...counts,
+          [item]:
+            catalogQuery.data?.data?.modes.find((group) => group.mode === item)
+              ?.models.length ?? 0,
+        }),
+        {} as Record<CreationMode, number>
+      ),
+    [catalogQuery.data?.data?.modes]
+  )
 
   useEffect(() => {
     if (!models.length || selectedByMode[mode]) return
     setSelectedByMode((current) => ({ ...current, [mode]: models[0].id }))
   }, [mode, models, selectedByMode])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    setHistoryItems(loadCreationHistory(window.localStorage, historyStorageKey))
+  }, [historyStorageKey])
+
+  useEffect(() => {
+    if (
+      result?.mode !== 'video' ||
+      result.videoUrl ||
+      result.status === 'completed' ||
+      result.status === 'failed'
+    ) {
+      return
+    }
+
+    setPreviewNow(Date.now())
+    const timer = window.setInterval(() => setPreviewNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [
+    result?.createdAt,
+    result?.mode,
+    result?.status,
+    result?.taskId,
+    result?.videoUrl,
+  ])
+
+  const persistHistoryItem = (item: CreationHistoryItem) => {
+    if (typeof window === 'undefined') return
+    setHistoryItems((current) => {
+      const next = upsertCreationHistoryItem(current, item)
+      saveCreationHistory(window.localStorage, historyStorageKey, next)
+      return next
+    })
+  }
+
+  const updateHistoryResult = (nextResult: CreationResult) => {
+    if (typeof window === 'undefined') return
+    const identity = nextResult.taskId || nextResult.id
+    if (!identity) return
+
+    setHistoryItems((current) => {
+      const next = current.map((item) => {
+        const itemIdentity = item.result.taskId || item.result.id || item.id
+        if (itemIdentity !== identity) return item
+        return {
+          ...item,
+          model: nextResult.model,
+          result: {
+            ...item.result,
+            ...nextResult,
+            createdAt: nextResult.createdAt ?? item.result.createdAt,
+            duration: nextResult.duration ?? item.result.duration,
+            estimateSeconds:
+              nextResult.estimateSeconds ?? item.result.estimateSeconds,
+            resolution: nextResult.resolution ?? item.result.resolution,
+          },
+        }
+      })
+      saveCreationHistory(window.localStorage, historyStorageKey, next)
+      return next
+    })
+  }
+
   const selectMode = (nextMode: CreationMode) => {
     setMode(nextMode)
     setView('preview')
+    setResult(undefined)
   }
 
   const startNewSession = () => {
     setPrompt('')
     setView('preview')
+    setResult(undefined)
     setSessionNumber((current) => current + 1)
     toast.success(t('A new creation session is ready.'))
   }
@@ -117,12 +236,140 @@ export function CreationCenter() {
     toast.success(t('Assets added to the current session.'))
   }
 
-  const submit = () => {
+  const submit = async () => {
     if (!auth.user) {
       navigate({ to: '/sign-in', search: { redirect: '/creation' } })
       return
     }
-    toast.info(t('Generation submission will be connected in the next step.'))
+    if (!selectedModel) {
+      toast.error(t('Select a model before submitting.'))
+      return
+    }
+    const trimmedPrompt = prompt.trim()
+    if (!trimmedPrompt) {
+      toast.error(t('Write a prompt before submitting.'))
+      return
+    }
+
+    setSubmitting(true)
+    setView('preview')
+    const createdAt = Date.now()
+    const videoRequestOptions =
+      mode === 'video'
+        ? getCreationVideoRequestOptions(videoOptions)
+        : undefined
+    try {
+      const nextResult = await submitCreationTask({
+        mode,
+        model: selectedModel,
+        prompt: trimmedPrompt,
+        videoOptions: mode === 'video' ? videoOptions : undefined,
+      })
+      const enrichedResult: CreationResult = {
+        ...nextResult,
+        createdAt,
+        duration: mode === 'video' ? videoOptions.duration : undefined,
+        estimateSeconds: videoRequestOptions?.estimateSeconds,
+        resolution: mode === 'video' ? videoOptions.resolution : undefined,
+      }
+      setResult(enrichedResult)
+      persistHistoryItem({
+        createdAt,
+        id: getCreationHistoryItemId(enrichedResult, mode),
+        mode,
+        model: selectedModel.id,
+        prompt: trimmedPrompt,
+        result: enrichedResult,
+        videoOptions: mode === 'video' ? videoOptions : undefined,
+      })
+      if (nextResult.status === 'failed') {
+        toast.error(nextResult.error || t('Creation task failed.'))
+      } else if (nextResult.mode === 'video') {
+        toast.success(t('Video task submitted. Refresh its status later.'))
+      } else {
+        toast.success(t('Creation task completed.'))
+      }
+    } catch (error) {
+      const message = getCreationErrorMessage(error)
+      const failedResult: CreationResult = {
+        mode,
+        model: selectedModel.id,
+        createdAt,
+        duration: mode === 'video' ? videoOptions.duration : undefined,
+        estimateSeconds: videoRequestOptions?.estimateSeconds,
+        resolution: mode === 'video' ? videoOptions.resolution : undefined,
+        status: 'failed',
+        error: message,
+      }
+      setResult(failedResult)
+      persistHistoryItem({
+        createdAt,
+        id: getCreationHistoryItemId(failedResult, mode),
+        mode,
+        model: selectedModel.id,
+        prompt: trimmedPrompt,
+        result: failedResult,
+        videoOptions: mode === 'video' ? videoOptions : undefined,
+      })
+      toast.error(message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const refreshVideoTask = async () => {
+    if (!result?.taskId || result.mode !== 'video') return
+    setRefreshingTask(true)
+    try {
+      const nextResult = await getCreationVideoTask({
+        taskId: result.taskId,
+        model: result.model,
+      })
+      const enrichedResult = {
+        ...nextResult,
+        createdAt: result.createdAt,
+        duration: result.duration,
+        estimateSeconds: result.estimateSeconds,
+        resolution: result.resolution,
+      }
+      setResult(enrichedResult)
+      updateHistoryResult(enrichedResult)
+      toast.success(t('Task status refreshed.'))
+    } catch (error) {
+      const message = getCreationErrorMessage(error)
+      const failedResult: CreationResult = {
+        ...result,
+        status: 'failed',
+        error: message,
+      }
+      setResult(failedResult)
+      updateHistoryResult(failedResult)
+      toast.error(message)
+    } finally {
+      setRefreshingTask(false)
+    }
+  }
+
+  const selectHistoryItem = (item: CreationHistoryItem) => {
+    setMode(item.mode)
+    setSelectedByMode((current) => ({
+      ...current,
+      [item.mode]: item.model,
+    }))
+    setPrompt(item.prompt)
+    setResult(item.result)
+    if (item.videoOptions) {
+      setVideoOptions(item.videoOptions)
+    }
+    setView('preview')
+  }
+
+  const clearHistory = () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(historyStorageKey)
+    }
+    setHistoryItems([])
+    toast.success(t('Creation history cleared.'))
   }
 
   return (
@@ -133,15 +380,17 @@ export function CreationCenter() {
             mode={mode}
             models={models}
             selectedModel={selectedModel}
+            modeCounts={modeCounts}
             loading={catalogQuery.isLoading}
             error={catalogQuery.isError}
             onModeChange={selectMode}
-            onModelChange={(model) =>
+            onModelChange={(model) => {
               setSelectedByMode((current) => ({
                 ...current,
                 [mode]: model.id,
               }))
-            }
+              setResult(undefined)
+            }}
             onHistory={() => setView('history')}
             onNewSession={startNewSession}
             onUpload={() => setUploadOpen(true)}
@@ -155,7 +404,15 @@ export function CreationCenter() {
                 model={selectedModel}
                 view={view}
                 assets={assets}
+                historyItems={historyItems}
+                result={result}
+                now={previewNow}
+                submitting={submitting}
+                refreshingTask={refreshingTask}
                 onViewChange={setView}
+                onSelectHistory={selectHistoryItem}
+                onClearHistory={clearHistory}
+                onRefreshTask={refreshVideoTask}
               />
             </div>
 
@@ -163,8 +420,13 @@ export function CreationCenter() {
               prompt={prompt}
               assets={assets}
               authenticated={!!auth.user}
+              mode={mode}
+              model={selectedModel}
+              videoOptions={videoOptions}
+              submitting={submitting}
               sessionNumber={sessionNumber}
               onPromptChange={setPrompt}
+              onVideoOptionsChange={setVideoOptions}
               onUpload={() => setUploadOpen(true)}
               onSubmit={submit}
             />
@@ -185,6 +447,7 @@ type SidebarProps = {
   mode: CreationMode
   models: CreationModel[]
   selectedModel?: CreationModel
+  modeCounts: Record<CreationMode, number>
   loading: boolean
   error: boolean
   onModeChange: (mode: CreationMode) => void
@@ -213,6 +476,7 @@ function CreationSidebar(props: SidebarProps) {
             <ModeButton
               key={item}
               mode={item}
+              count={props.modeCounts[item]}
               active={props.mode === item}
               onClick={() => props.onModeChange(item)}
             />
@@ -295,6 +559,7 @@ function CreationSidebar(props: SidebarProps) {
 
 function ModeButton(props: {
   mode: CreationMode
+  count: number
   active: boolean
   onClick: () => void
 }) {
@@ -326,7 +591,10 @@ function ModeButton(props: {
       )}
     >
       <Icon className='size-4' />
-      <span>{label}</span>
+      <span>
+        {label}
+        {props.count > 0 ? ` ${props.count}` : ''}
+      </span>
     </button>
   )
 }
@@ -337,6 +605,17 @@ function ModelButton(props: {
   onClick: () => void
 }) {
   const { t } = useTranslation()
+  const tagLabels: Record<string, string> = {
+    advanced: t('Advanced'),
+    chat: t('Chat'),
+    code: t('Code'),
+    fast: t('Fast'),
+    generation: t('Generation'),
+    image: t('Image'),
+    reasoning: t('Reasoning'),
+    video: t('Video'),
+  }
+  const visibleTags = props.model.tags?.filter((tag) => tag !== 'async') ?? []
 
   return (
     <button
@@ -369,15 +648,15 @@ function ModelButton(props: {
           </span>
         </span>
       </div>
-      {!!props.model.tags?.length && (
+      {!!visibleTags.length && (
         <span className='mt-2 flex flex-wrap gap-1'>
-          {props.model.tags.slice(0, 2).map((tag) => (
+          {visibleTags.slice(0, 2).map((tag) => (
             <Badge
               key={tag}
               variant='secondary'
               className='h-4 px-1.5 text-[10px]'
             >
-              {tag}
+              {tagLabels[tag] ?? tag}
             </Badge>
           ))}
         </span>
@@ -441,7 +720,15 @@ type PreviewProps = {
   model?: CreationModel
   view: CreationView
   assets: string[]
+  historyItems: CreationHistoryItem[]
+  result?: CreationResult
+  now: number
+  submitting: boolean
+  refreshingTask: boolean
   onViewChange: (view: CreationView) => void
+  onSelectHistory: (item: CreationHistoryItem) => void
+  onClearHistory: () => void
+  onRefreshTask: () => void
 }
 
 function CreationPreview(props: PreviewProps) {
@@ -473,13 +760,214 @@ function CreationPreview(props: PreviewProps) {
         {props.view === 'assets' ? (
           <AssetPreview assets={props.assets} />
         ) : props.view === 'history' ? (
-          <HistoryPreview />
+          <HistoryPreview
+            items={props.historyItems}
+            onClearHistory={props.onClearHistory}
+            onSelectHistory={props.onSelectHistory}
+          />
+        ) : props.submitting ? (
+          <SubmittingPreview mode={props.mode} />
+        ) : props.result ? (
+          <ResultPreview
+            result={props.result}
+            now={props.now}
+            refreshingTask={props.refreshingTask}
+            onRefreshTask={props.onRefreshTask}
+          />
         ) : (
           <EmptyPreview mode={props.mode} model={props.model} />
         )}
       </div>
     </section>
   )
+}
+
+function SubmittingPreview(props: { mode: CreationMode }) {
+  const { t } = useTranslation()
+  const title =
+    props.mode === 'video'
+      ? t('Submitting async media task')
+      : t('Submitting creation task')
+
+  return (
+    <div className='max-w-md text-center'>
+      <div className='bg-primary/10 text-primary mx-auto flex size-14 items-center justify-center rounded-lg'>
+        <RefreshCw className='size-6 animate-spin' />
+      </div>
+      <h3 className='mt-4 text-sm font-semibold'>{title}</h3>
+      <p className='text-muted-foreground mt-2 text-xs leading-5'>
+        {t('Please keep this page open while the request is being submitted.')}
+      </p>
+    </div>
+  )
+}
+
+function ResultPreview(props: {
+  result: CreationResult
+  now: number
+  refreshingTask: boolean
+  onRefreshTask: () => void
+}) {
+  const { t } = useTranslation()
+  const statusLabel = getStatusLabel(props.result.status, t)
+  const countdownSeconds = getCreationCountdownSeconds(
+    props.result.createdAt,
+    props.result.estimateSeconds,
+    props.now
+  )
+
+  if (props.result.status === 'failed') {
+    return (
+      <div className='max-w-lg text-center'>
+        <div className='bg-destructive/10 text-destructive mx-auto flex size-14 items-center justify-center rounded-lg'>
+          <MessageSquare className='size-6' />
+        </div>
+        <h3 className='mt-4 text-sm font-semibold'>{t('Task failed')}</h3>
+        <p className='text-muted-foreground mt-2 text-xs leading-5'>
+          {props.result.error || t('The upstream provider returned an error.')}
+        </p>
+      </div>
+    )
+  }
+
+  if (props.result.mode === 'chat') {
+    return (
+      <div className='w-full max-w-2xl'>
+        <div className='text-muted-foreground mb-2 text-xs'>
+          {props.result.model} · {statusLabel}
+        </div>
+        <div className='bg-muted/40 max-h-[30rem] overflow-auto rounded-lg p-4 text-sm leading-6 whitespace-pre-wrap'>
+          {props.result.outputText || t('No text content was returned.')}
+        </div>
+      </div>
+    )
+  }
+
+  if (props.result.mode === 'image') {
+    return (
+      <div className='w-full max-w-2xl text-center'>
+        {props.result.imageUrl ? (
+          <img
+            src={props.result.imageUrl}
+            alt={t('Generated image')}
+            className='mx-auto max-h-[31rem] w-auto max-w-full rounded-lg object-contain'
+          />
+        ) : (
+          <EmptyMediaResult title={t('Image task returned no image URL')} />
+        )}
+        {props.result.outputText && (
+          <p className='text-muted-foreground mx-auto mt-3 max-w-xl text-xs leading-5'>
+            {props.result.outputText}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className='w-full max-w-2xl text-center'>
+      {props.result.videoUrl ? (
+        <video
+          controls
+          src={props.result.videoUrl}
+          className='mx-auto max-h-[31rem] w-auto max-w-full rounded-lg'
+        />
+      ) : (
+        <EmptyMediaResult title={t('Video task is waiting for a result')} />
+      )}
+      <div className='text-muted-foreground mt-4 space-y-1 text-xs leading-5'>
+        <div>
+          {props.result.model} · {statusLabel}
+        </div>
+        {!props.result.videoUrl && props.result.status !== 'completed' && (
+          <div className='text-primary inline-flex items-center justify-center gap-1.5'>
+            <Timer className='size-3.5' />
+            {countdownSeconds > 0
+              ? `${t('Estimated remaining')} ${formatCreationCountdown(
+                  countdownSeconds
+                )}`
+              : t('Waiting for upstream result')}
+          </div>
+        )}
+        {(props.result.resolution || props.result.duration) && (
+          <div>
+            {[
+              formatCreationResolution(props.result.resolution),
+              props.result.duration && `${props.result.duration}s`,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
+        )}
+        {props.result.taskId && <div>{props.result.taskId}</div>}
+      </div>
+      {props.result.taskId && (
+        <Button
+          variant='outline'
+          size='sm'
+          className='mt-4'
+          onClick={props.onRefreshTask}
+          disabled={props.refreshingTask}
+        >
+          <RefreshCw
+            className={cn('size-4', props.refreshingTask && 'animate-spin')}
+          />
+          {t('Refresh status')}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function EmptyMediaResult(props: { title: string }) {
+  return (
+    <div className='bg-muted/40 text-muted-foreground flex min-h-56 items-center justify-center rounded-lg border border-dashed px-6 text-sm'>
+      {props.title}
+    </div>
+  )
+}
+
+function getStatusLabel(
+  status: CreationResult['status'],
+  t: (key: string) => string
+) {
+  switch (status) {
+    case 'queued':
+      return t('Queued')
+    case 'processing':
+      return t('Processing')
+    case 'completed':
+      return t('Completed')
+    case 'failed':
+      return t('Failed')
+    default:
+      return t('Unknown status')
+  }
+}
+
+function getCreationHistoryItemId(result: CreationResult, mode: CreationMode) {
+  return (
+    result.taskId ||
+    result.id ||
+    `${mode}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  )
+}
+
+function formatCreationResolution(resolution?: string) {
+  switch (resolution) {
+    case '1080p':
+      return '1080'
+    case '2k':
+      return '2K'
+    case '4k':
+      return '4K'
+    default:
+      return resolution
+  }
+}
+
+function formatCreationTime(value: number) {
+  return new Date(value).toLocaleString()
 }
 
 function EmptyPreview(props: { mode: CreationMode; model?: CreationModel }) {
@@ -540,8 +1028,57 @@ function AssetPreview(props: { assets: string[] }) {
   )
 }
 
-function HistoryPreview() {
+function HistoryPreview(props: {
+  items: CreationHistoryItem[]
+  onClearHistory: () => void
+  onSelectHistory: (item: CreationHistoryItem) => void
+}) {
   const { t } = useTranslation()
+
+  if (props.items.length) {
+    return (
+      <div className='flex h-full w-full flex-col gap-3'>
+        <div className='flex items-center justify-between gap-3'>
+          <div>
+            <h3 className='text-sm font-semibold'>{t('History')}</h3>
+            <p className='text-muted-foreground mt-1 text-xs'>
+              {t('History is saved in this browser.')}
+            </p>
+          </div>
+          <Button variant='ghost' size='sm' onClick={props.onClearHistory}>
+            <Trash2 className='size-4' />
+            {t('Clear history')}
+          </Button>
+        </div>
+        <div className='min-h-0 flex-1 space-y-2 overflow-auto pr-1'>
+          {props.items.map((item) => (
+            <button
+              key={item.id}
+              type='button'
+              onClick={() => props.onSelectHistory(item)}
+              className='border-border bg-muted/30 hover:bg-muted flex w-full min-w-0 flex-col gap-2 rounded-lg border p-3 text-left transition-colors'
+            >
+              <span className='flex min-w-0 items-center justify-between gap-2'>
+                <span className='min-w-0 truncate text-xs font-semibold'>
+                  {item.model}
+                </span>
+                <Badge variant='secondary' className='shrink-0 text-[10px]'>
+                  {getStatusLabel(item.result.status, t)}
+                </Badge>
+              </span>
+              <span className='text-muted-foreground line-clamp-2 text-xs leading-5'>
+                {item.prompt}
+              </span>
+              <span className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]'>
+                <span>{formatCreationTime(item.createdAt)}</span>
+                {item.result.taskId && <span>{item.result.taskId}</span>}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className='max-w-md text-center'>
@@ -550,9 +1087,7 @@ function HistoryPreview() {
         {t('No session history yet')}
       </h3>
       <p className='text-muted-foreground mt-2 text-xs leading-5'>
-        {t(
-          'Completed creation tasks will appear here after submission is enabled.'
-        )}
+        {t('Completed creation tasks will appear here after you submit tasks.')}
       </p>
     </div>
   )
@@ -562,8 +1097,13 @@ type ComposerProps = {
   prompt: string
   assets: string[]
   authenticated: boolean
+  mode: CreationMode
+  model?: CreationModel
+  videoOptions: CreationVideoOptions
+  submitting: boolean
   sessionNumber: number
   onPromptChange: (value: string) => void
+  onVideoOptionsChange: (options: CreationVideoOptions) => void
   onUpload: () => void
   onSubmit: () => void
 }
@@ -601,23 +1141,85 @@ function Composer(props: ComposerProps) {
           size='icon-lg'
           aria-label={t('Submit')}
           onClick={props.onSubmit}
-          disabled={!props.prompt.trim()}
+          disabled={!props.prompt.trim() || !props.model || props.submitting}
         >
-          <Send className='size-4' />
+          {props.submitting ? (
+            <RefreshCw className='size-4 animate-spin' />
+          ) : (
+            <Send className='size-4' />
+          )}
         </Button>
       </div>
-      <div className='bg-primary/5 text-primary border-primary/15 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs'>
-        <span>
-          {props.authenticated
-            ? t('Submission is reserved for the next integration step.')
-            : t('Sign in before submitting a real creation task.')}
-        </span>
+      {props.mode === 'video' && (
+        <div className='border-border/70 mt-3 grid gap-3 border-t pt-3 sm:grid-cols-2'>
+          <ComposerOptionGroup
+            label={t('Resolution')}
+            value={props.videoOptions.resolution}
+            options={CREATION_RESOLUTION_OPTIONS}
+            onChange={(value) =>
+              props.onVideoOptionsChange({
+                ...props.videoOptions,
+                resolution: value as CreationResolution,
+              })
+            }
+          />
+          <ComposerOptionGroup
+            label={t('Video duration')}
+            value={props.videoOptions.duration}
+            options={CREATION_DURATION_OPTIONS}
+            onChange={(value) =>
+              props.onVideoOptionsChange({
+                ...props.videoOptions,
+                duration: value as CreationDuration,
+              })
+            }
+          />
+        </div>
+      )}
+      <div className='text-muted-foreground mt-3 flex flex-wrap items-center justify-end gap-2 rounded-lg border px-3 py-2 text-xs'>
+        {!props.authenticated && (
+          <span className='mr-auto'>
+            {t('Sign in before submitting a real creation task.')}
+          </span>
+        )}
         <span className='text-muted-foreground'>
           {t('Session')} #{props.sessionNumber} · {props.assets.length}{' '}
           {t('assets')}
         </span>
       </div>
     </section>
+  )
+}
+
+function ComposerOptionGroup(props: {
+  label: string
+  value: string
+  options: Array<{ value: string; label: string }>
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className='flex min-w-0 items-center gap-2'>
+      <span className='text-muted-foreground w-14 shrink-0 text-xs font-medium'>
+        {props.label}
+      </span>
+      <div className='bg-muted/40 grid min-w-0 flex-1 grid-cols-3 gap-1 rounded-lg border p-1'>
+        {props.options.map((option) => (
+          <button
+            key={option.value}
+            type='button'
+            onClick={() => props.onChange(option.value)}
+            className={cn(
+              'h-8 rounded-md px-2 text-xs font-medium transition-colors',
+              props.value === option.value
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-background'
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 

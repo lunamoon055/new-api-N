@@ -1,0 +1,180 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import type { CreationMode, CreationResult } from './types'
+
+export type CreationResolution = '1080p' | '2k' | '4k'
+export type CreationDuration = '5' | '10' | '15'
+
+export type CreationVideoOptions = {
+  resolution: CreationResolution
+  duration: CreationDuration
+}
+
+export type CreationVideoRequestOptions = {
+  seconds: string
+  size: string
+  estimateSeconds: number
+}
+
+export type CreationHistoryItem = {
+  id: string
+  createdAt: number
+  mode: CreationMode
+  model: string
+  prompt: string
+  result: CreationResult
+  videoOptions?: CreationVideoOptions
+}
+
+export type CreationHistoryStorage = Pick<
+  Storage,
+  'getItem' | 'removeItem' | 'setItem'
+>
+
+export const CREATION_HISTORY_LIMIT = 20
+
+export const CREATION_RESOLUTION_OPTIONS: Array<{
+  value: CreationResolution
+  label: string
+  size: string
+  estimateMultiplier: number
+}> = [
+  { value: '1080p', label: '1080', size: '1920x1080', estimateMultiplier: 1 },
+  { value: '2k', label: '2K', size: '2560x1440', estimateMultiplier: 1.35 },
+  { value: '4k', label: '4K', size: '3840x2160', estimateMultiplier: 1.75 },
+]
+
+export const CREATION_DURATION_OPTIONS: Array<{
+  value: CreationDuration
+  label: string
+  seconds: string
+  estimateSeconds: number
+}> = [
+  { value: '5', label: '5s', seconds: '5', estimateSeconds: 90 },
+  { value: '10', label: '10s', seconds: '10', estimateSeconds: 150 },
+  { value: '15', label: '15s', seconds: '15', estimateSeconds: 210 },
+]
+
+export const DEFAULT_CREATION_VIDEO_OPTIONS: CreationVideoOptions = {
+  resolution: '1080p',
+  duration: '5',
+}
+
+export function getCreationVideoRequestOptions(
+  options: CreationVideoOptions
+): CreationVideoRequestOptions {
+  const resolution =
+    CREATION_RESOLUTION_OPTIONS.find(
+      (item) => item.value === options.resolution
+    ) ?? CREATION_RESOLUTION_OPTIONS[0]
+  const duration =
+    CREATION_DURATION_OPTIONS.find((item) => item.value === options.duration) ??
+    CREATION_DURATION_OPTIONS[0]
+
+  return {
+    seconds: duration.seconds,
+    size: resolution.size,
+    estimateSeconds: Math.ceil(
+      duration.estimateSeconds * resolution.estimateMultiplier
+    ),
+  }
+}
+
+export function getCreationHistoryStorageKey(userId?: number | null) {
+  return `creation-center-history:${userId ?? 'guest'}`
+}
+
+export function loadCreationHistory(
+  storage: CreationHistoryStorage,
+  key: string
+): CreationHistoryItem[] {
+  try {
+    const raw = storage.getItem(key)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter(isCreationHistoryItem)
+      .sort((left, right) => right.createdAt - left.createdAt)
+      .slice(0, CREATION_HISTORY_LIMIT)
+  } catch {
+    storage.removeItem(key)
+    return []
+  }
+}
+
+export function saveCreationHistory(
+  storage: CreationHistoryStorage,
+  key: string,
+  items: CreationHistoryItem[]
+) {
+  storage.setItem(
+    key,
+    JSON.stringify(
+      [...items]
+        .filter(isCreationHistoryItem)
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, CREATION_HISTORY_LIMIT)
+    )
+  )
+}
+
+export function upsertCreationHistoryItem(
+  items: CreationHistoryItem[],
+  item: CreationHistoryItem
+) {
+  return [item, ...items.filter((current) => current.id !== item.id)]
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, CREATION_HISTORY_LIMIT)
+}
+
+export function getCreationCountdownSeconds(
+  createdAt: number | undefined,
+  estimateSeconds: number | undefined,
+  now = Date.now()
+) {
+  if (!createdAt || !estimateSeconds) return 0
+  return Math.max(
+    0,
+    Math.ceil((createdAt + estimateSeconds * 1000 - now) / 1000)
+  )
+}
+
+export function formatCreationCountdown(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const rest = safeSeconds % 60
+  return `${minutes.toString().padStart(2, '0')}:${rest
+    .toString()
+    .padStart(2, '0')}`
+}
+
+function isCreationHistoryItem(value: unknown): value is CreationHistoryItem {
+  if (!value || typeof value !== 'object') return false
+  const item = value as Partial<CreationHistoryItem>
+  return (
+    typeof item.id === 'string' &&
+    typeof item.createdAt === 'number' &&
+    typeof item.model === 'string' &&
+    typeof item.prompt === 'string' &&
+    !!item.result &&
+    typeof item.result === 'object' &&
+    ['chat', 'image', 'video'].includes(item.mode ?? '')
+  )
+}

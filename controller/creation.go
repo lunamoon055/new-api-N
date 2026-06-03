@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -8,7 +10,9 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -24,6 +28,45 @@ var creationModeOrder = []string{
 	creationModeVideo,
 }
 
+type creationModelMetadata struct {
+	Mode        string
+	Description string
+	Tags        []string
+}
+
+var creationModelMetadataByName = map[string]creationModelMetadata{
+	"gpt-5.3-codex": {
+		Mode:        creationModeChat,
+		Description: "面向代码生成、调试和复杂开发协作的高推理对话模型。",
+		Tags:        []string{"chat", "code", "reasoning"},
+	},
+	"gpt-5.4": {
+		Mode:        creationModeChat,
+		Description: "综合能力更强，适合长文本写作、复杂问答和内容分析。",
+		Tags:        []string{"chat", "advanced"},
+	},
+	"gpt-5.4-mini": {
+		Mode:        creationModeChat,
+		Description: "轻量快速，适合日常问答、文案草稿和低延迟创作。",
+		Tags:        []string{"chat", "fast"},
+	},
+	"gpt-image2": {
+		Mode:        creationModeImage,
+		Description: "用于图片生成和视觉创作任务，适合海报、素材和参考图生成。",
+		Tags:        []string{"image", "generation"},
+	},
+	"kling-v3": {
+		Mode:        creationModeVideo,
+		Description: "适合文本生成视频和动态镜头创作的异步视频模型。",
+		Tags:        []string{"video", "async"},
+	},
+	"sora2": {
+		Mode:        creationModeVideo,
+		Description: "按 linksky 异步媒体接口接入的视频生成模型，适合短视频创作。",
+		Tags:        []string{"video", "async"},
+	},
+}
+
 func GetCreationModels(c *gin.Context) {
 	mode, valid := normalizeCreationMode(c.Query("mode"))
 	if !valid {
@@ -36,6 +79,63 @@ func GetCreationModels(c *gin.Context) {
 
 	pricing, _, _ := getPricingForRequest(c)
 	common.ApiSuccess(c, buildCreationModelCatalog(pricing, model.GetVendors(), mode))
+}
+
+func CreationRelayImage(c *gin.Context) {
+	if newAPIError := setupCreationRelayContext(c, "creation-image"); newAPIError != nil {
+		respondCreationRelayError(c, newAPIError)
+		return
+	}
+
+	Relay(c, types.RelayFormatOpenAIImage)
+}
+
+func CreationRelayTask(c *gin.Context) {
+	if newAPIError := setupCreationRelayContext(c, "creation-video"); newAPIError != nil {
+		respondCreationRelayError(c, newAPIError)
+		return
+	}
+
+	RelayTask(c)
+}
+
+func CreationRelayTaskFetch(c *gin.Context) {
+	RelayTaskFetch(c)
+}
+
+func setupCreationRelayContext(c *gin.Context, tokenPrefix string) *types.NewAPIError {
+	if c.GetBool("use_access_token") {
+		return types.NewError(errors.New("暂不支持使用 access token"), types.ErrorCodeAccessDenied, types.ErrOptionWithSkipRetry())
+	}
+
+	userId := c.GetInt("id")
+	userCache, err := model.GetUserCache(userId)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+	}
+	userCache.WriteContext(c)
+
+	usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	if usingGroup == "" {
+		usingGroup = userCache.Group
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
+	}
+
+	tempToken := &model.Token{
+		UserId: userId,
+		Name:   fmt.Sprintf("%s-%s", tokenPrefix, usingGroup),
+		Group:  usingGroup,
+	}
+	if err := middleware.SetupContextForToken(c, tempToken); err != nil {
+		return types.NewError(err, types.ErrorCodeAccessDenied, types.ErrOptionWithSkipRetry())
+	}
+	return nil
+}
+
+func respondCreationRelayError(c *gin.Context, newAPIError *types.NewAPIError) {
+	c.JSON(newAPIError.StatusCode, gin.H{
+		"error": newAPIError.ToOpenAIError(),
+	})
 }
 
 func normalizeCreationMode(mode string) (string, bool) {
@@ -53,16 +153,21 @@ func buildCreationModelCatalog(pricing []model.Pricing, vendors []model.PricingV
 	usedVendorIDs := make(map[int]struct{})
 
 	for _, item := range pricing {
-		mode, ok := getCreationModelMode(item.SupportedEndpointTypes)
+		mode, ok := getCreationModelMode(item.ModelName, item.SupportedEndpointTypes)
 		if !ok || (requestedMode != "" && mode != requestedMode) {
 			continue
+		}
+		metadata := getCreationModelMetadata(item.ModelName)
+		description := strings.TrimSpace(item.Description)
+		if description == "" {
+			description = metadata.Description
 		}
 
 		modelsByMode[mode] = append(modelsByMode[mode], dto.CreationModel{
 			ID:                     item.ModelName,
-			Description:            item.Description,
+			Description:            description,
 			Icon:                   item.Icon,
-			Tags:                   splitCreationModelTags(item.Tags),
+			Tags:                   mergeCreationModelTags(splitCreationModelTags(item.Tags), metadata.Tags),
 			VendorID:               item.VendorID,
 			SupportedEndpointTypes: item.SupportedEndpointTypes,
 		})
@@ -115,7 +220,11 @@ func buildCreationModelCatalog(pricing []model.Pricing, vendors []model.PricingV
 	}
 }
 
-func getCreationModelMode(endpoints []constant.EndpointType) (string, bool) {
+func getCreationModelMode(modelName string, endpoints []constant.EndpointType) (string, bool) {
+	if metadata := getCreationModelMetadata(modelName); metadata.Mode != "" {
+		return metadata.Mode, true
+	}
+
 	hasChat := false
 	hasImage := false
 	hasVideo := false
@@ -147,6 +256,34 @@ func getCreationModelMode(endpoints []constant.EndpointType) (string, bool) {
 	}
 }
 
+func getCreationModelMetadata(modelName string) creationModelMetadata {
+	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	if metadata, ok := creationModelMetadataByName[modelName]; ok {
+		return metadata
+	}
+	switch {
+	case strings.Contains(modelName, "gpt-image") ||
+		strings.Contains(modelName, "nano-banana") ||
+		strings.Contains(modelName, "imagen"):
+		return creationModelMetadata{
+			Mode:        creationModeImage,
+			Description: "用于图片生成和视觉素材创作。",
+			Tags:        []string{"image", "generation"},
+		}
+	case strings.HasPrefix(modelName, "sora") ||
+		strings.HasPrefix(modelName, "veo") ||
+		strings.Contains(modelName, "kling") ||
+		strings.Contains(modelName, "grok-imagine-video"):
+		return creationModelMetadata{
+			Mode:        creationModeVideo,
+			Description: "用于异步视频生成和媒体创作。",
+			Tags:        []string{"video", "async"},
+		}
+	default:
+		return creationModelMetadata{}
+	}
+}
+
 func splitCreationModelTags(raw string) []string {
 	if strings.TrimSpace(raw) == "" {
 		return nil
@@ -164,6 +301,28 @@ func splitCreationModelTags(raw string) []string {
 		}
 		seen[tag] = struct{}{}
 		tags = append(tags, tag)
+	}
+	return tags
+}
+
+func mergeCreationModelTags(groups ...[]string) []string {
+	tags := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, group := range groups {
+		for _, tag := range group {
+			tag = strings.TrimSpace(tag)
+			if tag == "" {
+				continue
+			}
+			if _, ok := seen[tag]; ok {
+				continue
+			}
+			seen[tag] = struct{}{}
+			tags = append(tags, tag)
+		}
+	}
+	if len(tags) == 0 {
+		return nil
 	}
 	return tags
 }

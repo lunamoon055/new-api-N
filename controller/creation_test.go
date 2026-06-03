@@ -53,6 +53,29 @@ func TestBuildCreationModelCatalogCategorizesModels(t *testing.T) {
 	require.Equal(t, []string{"First", "Second"}, creationVendorNames(catalog.Vendors))
 }
 
+func TestBuildCreationModelCatalogOverridesMediaModelsByName(t *testing.T) {
+	catalog := buildCreationModelCatalog([]model.Pricing{
+		{
+			ModelName:              "gpt-image2",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
+		{
+			ModelName:              "kling-v3",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
+		{
+			ModelName:              "sora2",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
+	}, nil, "")
+
+	require.Empty(t, catalog.Modes[0].Models)
+	require.Equal(t, []string{"gpt-image2"}, creationModelIDs(catalog.Modes[1].Models))
+	require.Equal(t, []string{"kling-v3", "sora2"}, creationModelIDs(catalog.Modes[2].Models))
+	require.NotEmpty(t, catalog.Modes[2].Models[1].Description)
+	require.Contains(t, catalog.Modes[2].Models[1].Tags, "video")
+}
+
 func TestBuildCreationModelCatalogFiltersRequestedModeAndRedactsPricing(t *testing.T) {
 	catalog := buildCreationModelCatalog([]model.Pricing{
 		{

@@ -68,6 +68,14 @@ type TaskAdaptor struct {
 	baseURL     string
 }
 
+func isAsyncGenerationsModel(modelName string) bool {
+	return modelName == "sora2"
+}
+
+func isAsyncGenerationsPath(path string) bool {
+	return strings.HasPrefix(strings.Split(path, "?")[0], "/v1/video/async-generations")
+}
+
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.ChannelType = info.ChannelType
 	a.baseURL = info.ChannelBaseUrl
@@ -132,6 +140,9 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if info.Action == constant.TaskActionRemix {
 		return fmt.Sprintf("%s/v1/videos/%s/remix", a.baseURL, info.OriginTaskID), nil
+	}
+	if isAsyncGenerationsPath(info.RequestURLPath) || isAsyncGenerationsModel(info.UpstreamModelName) {
+		return fmt.Sprintf("%s/v1/video/async-generations", a.baseURL), nil
 	}
 	return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
 }
@@ -263,7 +274,11 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		return nil, fmt.Errorf("invalid task_id")
 	}
 
+	modelName, _ := body["model"].(string)
 	uri := fmt.Sprintf("%s/v1/videos/%s", baseUrl, taskID)
+	if isAsyncGenerationsModel(modelName) {
+		uri = fmt.Sprintf("%s/v1/video/async-generations/%s", baseUrl, taskID)
+	}
 
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
@@ -326,6 +341,9 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	var err error
 	if data, err = sjson.SetBytes(data, "id", task.TaskID); err != nil {
 		return nil, errors.Wrap(err, "set id failed")
+	}
+	if data, err = sjson.SetBytes(data, "task_id", task.TaskID); err != nil {
+		return nil, errors.Wrap(err, "set task_id failed")
 	}
 	return data, nil
 }

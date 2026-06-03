@@ -51,3 +51,27 @@ export type CreationCatalogResponse = {
 }
 
 export type CreationView = 'preview' | 'assets' | 'history'
+
+export type CreationResultStatus =
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'unknown'
+
+export type CreationResult = {
+  mode: CreationMode
+  model: string
+  id?: string
+  taskId?: string
+  createdAt?: number
+  estimateSeconds?: number
+  duration?: string
+  resolution?: string
+  status: CreationResultStatus
+  outputText?: string
+  imageUrl?: string
+  videoUrl?: string
+  error?: string
+  raw?: unknown
+}
