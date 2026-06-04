@@ -4557,6 +4557,7 @@
     "History is saved in this browser.": "History is saved in this browser.",
     "Resolution": "Resolution",
     "Video duration": "Duration",
-    "Waiting for upstream result": "Waiting for upstream result"
+    "Waiting for upstream result": "Waiting for upstream result",
+    "Generation is taking longer than expected. You can refresh later or check the task log.": "Generation is taking longer than expected. You can refresh later or check the task log."
   }
 }

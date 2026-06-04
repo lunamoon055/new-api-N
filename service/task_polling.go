@@ -359,10 +359,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if privateData.Key != "" {
 		key = privateData.Key
 	}
-	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
-		"task_id": task.GetUpstreamTaskID(),
-		"action":  task.Action,
-	}, proxy)
+	resp, err := adaptor.FetchTask(baseURL, key, buildVideoTaskFetchBody(task), proxy)
 	if err != nil {
 		return fmt.Errorf("fetchTask failed for task %s: %w", taskId, err)
 	}
@@ -499,6 +496,23 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	return nil
+}
+
+func buildVideoTaskFetchBody(task *model.Task) map[string]any {
+	body := map[string]any{
+		"task_id": task.GetUpstreamTaskID(),
+		"action":  task.Action,
+	}
+	if task.Properties.UpstreamModelName != "" {
+		body["model"] = task.Properties.UpstreamModelName
+	}
+	if task.Properties.OriginModelName != "" {
+		body["origin_model"] = task.Properties.OriginModelName
+		if _, ok := body["model"]; !ok {
+			body["model"] = task.Properties.OriginModelName
+		}
+	}
+	return body
 }
 
 func redactVideoResponseBody(body []byte) []byte {

@@ -70,7 +70,8 @@ export async function submitCreationTask(params: {
   }
 
   const videoOptions = getCreationVideoRequestOptions(
-    params.videoOptions ?? DEFAULT_CREATION_VIDEO_OPTIONS
+    params.videoOptions ?? DEFAULT_CREATION_VIDEO_OPTIONS,
+    params.model.id
   )
   const response = await api.post(
     '/api/creation/video/async-generations',
@@ -162,6 +163,7 @@ function parseVideoResult(raw: unknown, model: string): CreationResult {
   const data = asRecord(raw)
   const envelopeData = asRecord(data.data)
   const source = Object.keys(envelopeData).length ? envelopeData : data
+  const metadata = asRecord(source.metadata)
   const taskId =
     getString(source, 'task_id') ||
     getString(data, 'task_id') ||
@@ -177,7 +179,12 @@ function parseVideoResult(raw: unknown, model: string): CreationResult {
     videoUrl:
       getString(source, 'url') ||
       getString(source, 'result_url') ||
-      getString(source, 'output_url'),
+      getString(source, 'output_url') ||
+      getString(source, 'video_url') ||
+      getString(metadata, 'url') ||
+      getString(metadata, 'result_url') ||
+      getString(metadata, 'output_url') ||
+      getString(metadata, 'video_url'),
     raw,
   }
 }

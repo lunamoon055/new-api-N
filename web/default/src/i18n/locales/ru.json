@@ -4557,6 +4557,7 @@
     "History is saved in this browser.": "История сохранена в этом браузере.",
     "Resolution": "Разрешение",
     "Video duration": "Длительность",
-    "Waiting for upstream result": "Ожидание результата от провайдера"
+    "Waiting for upstream result": "Ожидание результата от провайдера",
+    "Generation is taking longer than expected. You can refresh later or check the task log.": "Генерация занимает больше времени, чем ожидалось. Можно обновить позже или проверить журнал задач."
   }
 }

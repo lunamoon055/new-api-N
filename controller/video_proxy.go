@@ -107,7 +107,14 @@ func VideoProxy(c *gin.Context) {
 			return
 		}
 	case constant.ChannelTypeOpenAI, constant.ChannelTypeSora:
-		videoURL = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.GetUpstreamTaskID())
+		resultURL := strings.TrimSpace(task.GetResultURL())
+		if resultURL != "" && !isTaskProxyURL(resultURL, task.TaskID) {
+			videoURL = resultURL
+		} else if isAsyncGenerationsVideoTask(task) {
+			videoURL = fmt.Sprintf("%s/v1/video/async-generations/%s/content", baseURL, task.GetUpstreamTaskID())
+		} else {
+			videoURL = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.GetUpstreamTaskID())
+		}
 		req.Header.Set("Authorization", "Bearer "+channel.Key)
 	default:
 		// Video URL is stored in PrivateData.ResultURL (fallback to FailReason for old data)
@@ -169,6 +176,29 @@ func VideoProxy(c *gin.Context) {
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
 	}
+}
+
+func isTaskProxyURL(rawURL string, taskID string) bool {
+	if rawURL == "" || taskID == "" {
+		return false
+	}
+	return strings.Contains(rawURL, fmt.Sprintf("/v1/videos/%s/content", taskID))
+}
+
+func isAsyncGenerationsVideoTask(task *model.Task) bool {
+	if task == nil {
+		return false
+	}
+	for _, modelName := range []string{
+		task.Properties.UpstreamModelName,
+		task.Properties.OriginModelName,
+	} {
+		switch strings.ToLower(strings.TrimSpace(modelName)) {
+		case "sora2", "kling-v3":
+			return true
+		}
+	}
+	return false
 }
 
 func writeVideoDataURL(c *gin.Context, dataURL string) error {

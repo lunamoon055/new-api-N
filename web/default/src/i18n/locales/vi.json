@@ -4557,6 +4557,7 @@
     "History is saved in this browser.": "Lịch sử được lưu trong trình duyệt này.",
     "Resolution": "Độ phân giải",
     "Video duration": "Thời lượng",
-    "Waiting for upstream result": "Đang chờ kết quả từ thượng nguồn"
+    "Waiting for upstream result": "Đang chờ kết quả từ thượng nguồn",
+    "Generation is taking longer than expected. You can refresh later or check the task log.": "Quá trình tạo mất nhiều thời gian hơn dự kiến. Bạn có thể làm mới sau hoặc kiểm tra nhật ký tác vụ."
   }
 }

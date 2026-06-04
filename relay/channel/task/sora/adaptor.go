@@ -21,7 +21,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
-	"github.com/tidwall/sjson"
 )
 
 // ============================
@@ -39,18 +38,24 @@ type ImageURL struct {
 }
 
 type responseTask struct {
-	ID                 string `json:"id"`
-	TaskID             string `json:"task_id,omitempty"` //兼容旧接口
-	Object             string `json:"object"`
-	Model              string `json:"model"`
-	Status             string `json:"status"`
-	Progress           int    `json:"progress"`
-	CreatedAt          int64  `json:"created_at"`
-	CompletedAt        int64  `json:"completed_at,omitempty"`
-	ExpiresAt          int64  `json:"expires_at,omitempty"`
-	Seconds            string `json:"seconds,omitempty"`
-	Size               string `json:"size,omitempty"`
-	RemixedFromVideoID string `json:"remixed_from_video_id,omitempty"`
+	ID                 string         `json:"id"`
+	TaskID             string         `json:"task_id,omitempty"` //兼容旧接口
+	Object             string         `json:"object"`
+	Model              string         `json:"model"`
+	Status             string         `json:"status"`
+	Progress           int            `json:"progress"`
+	Created            int64          `json:"created,omitempty"`
+	CreatedAt          int64          `json:"created_at"`
+	CompletedAt        int64          `json:"completed_at,omitempty"`
+	ExpiresAt          int64          `json:"expires_at,omitempty"`
+	Seconds            string         `json:"seconds,omitempty"`
+	Size               string         `json:"size,omitempty"`
+	RemixedFromVideoID string         `json:"remixed_from_video_id,omitempty"`
+	URL                string         `json:"url,omitempty"`
+	ResultURL          string         `json:"result_url,omitempty"`
+	OutputURL          string         `json:"output_url,omitempty"`
+	VideoURL           string         `json:"video_url,omitempty"`
+	Metadata           map[string]any `json:"metadata,omitempty"`
 	Error              *struct {
 		Message string `json:"message"`
 		Code    string `json:"code"`
@@ -69,7 +74,12 @@ type TaskAdaptor struct {
 }
 
 func isAsyncGenerationsModel(modelName string) bool {
-	return modelName == "sora2"
+	switch strings.ToLower(strings.TrimSpace(modelName)) {
+	case "sora2", "kling-v3":
+		return true
+	default:
+		return false
+	}
 }
 
 func isAsyncGenerationsPath(path string) bool {
@@ -96,7 +106,7 @@ func validateRemixRequest(c *gin.Context) *dto.TaskError {
 }
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	if info.Action == constant.TaskActionRemix {
+	if getTaskAction(info) == constant.TaskActionRemix {
 		return validateRemixRequest(c)
 	}
 	return relaycommon.ValidateMultipartDirect(c, info)
@@ -105,7 +115,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 // EstimateBilling 根据用户请求的 seconds 和 size 计算 OtherRatios。
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	// remix 路径的 OtherRatios 已在 ResolveOriginTask 中设置
-	if info.Action == constant.TaskActionRemix {
+	if getTaskAction(info) == constant.TaskActionRemix {
 		return nil
 	}
 
@@ -138,13 +148,27 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	if info.Action == constant.TaskActionRemix {
-		return fmt.Sprintf("%s/v1/videos/%s/remix", a.baseURL, info.OriginTaskID), nil
+	if getTaskAction(info) == constant.TaskActionRemix {
+		return fmt.Sprintf("%s/v1/videos/%s/remix", a.baseURL, getOriginTaskID(info)), nil
 	}
 	if isAsyncGenerationsPath(info.RequestURLPath) || isAsyncGenerationsModel(info.UpstreamModelName) {
 		return fmt.Sprintf("%s/v1/video/async-generations", a.baseURL), nil
 	}
 	return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
+}
+
+func getTaskAction(info *relaycommon.RelayInfo) string {
+	if info == nil || info.TaskRelayInfo == nil {
+		return ""
+	}
+	return info.Action
+}
+
+func getOriginTaskID(info *relaycommon.RelayInfo) string {
+	if info == nil || info.TaskRelayInfo == nil {
+		return ""
+	}
+	return info.OriginTaskID
 }
 
 // BuildRequestHeader sets required headers.
@@ -312,15 +336,15 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		Code: 0,
 	}
 
-	switch resTask.Status {
-	case "queued", "pending":
+	switch strings.ToLower(strings.TrimSpace(resTask.Status)) {
+	case "queued", "pending", "submitted":
 		taskResult.Status = model.TaskStatusQueued
-	case "processing", "in_progress":
+	case "processing", "in_progress", "running":
 		taskResult.Status = model.TaskStatusInProgress
-	case "completed":
+	case "completed", "succeeded", "success", "done":
 		taskResult.Status = model.TaskStatusSuccess
-		// Url intentionally left empty — the caller constructs the proxy URL using the public task ID
-	case "failed", "cancelled":
+		taskResult.Url = extractVideoURL(resTask)
+	case "failed", "cancelled", "canceled":
 		taskResult.Status = model.TaskStatusFailure
 		if resTask.Error != nil {
 			taskResult.Reason = resTask.Error.Message
@@ -337,13 +361,85 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
-	data := task.Data
-	var err error
-	if data, err = sjson.SetBytes(data, "id", task.TaskID); err != nil {
-		return nil, errors.Wrap(err, "set id failed")
+	resTask := responseTask{}
+	if len(task.Data) > 0 {
+		if err := common.Unmarshal(task.Data, &resTask); err != nil {
+			return nil, errors.Wrap(err, "unmarshal sora task data failed")
+		}
 	}
-	if data, err = sjson.SetBytes(data, "task_id", task.TaskID); err != nil {
-		return nil, errors.Wrap(err, "set task_id failed")
+
+	openAIVideo := dto.NewOpenAIVideo()
+	openAIVideo.ID = task.TaskID
+	openAIVideo.TaskID = task.TaskID
+	openAIVideo.Model = taskcommon.DefaultString(resTask.Model, task.Properties.OriginModelName)
+	openAIVideo.Status = task.Status.ToVideoStatus()
+	openAIVideo.SetProgressStr(task.Progress)
+	if openAIVideo.Progress == 0 && resTask.Progress > 0 {
+		openAIVideo.Progress = resTask.Progress
 	}
-	return data, nil
+	openAIVideo.CreatedAt = firstNonZeroInt64(resTask.CreatedAt, resTask.Created, task.CreatedAt)
+	openAIVideo.CompletedAt = firstNonZeroInt64(resTask.CompletedAt, task.FinishTime, task.UpdatedAt)
+	openAIVideo.ExpiresAt = resTask.ExpiresAt
+	openAIVideo.Seconds = resTask.Seconds
+	openAIVideo.Size = resTask.Size
+	openAIVideo.RemixedFromVideoID = resTask.RemixedFromVideoID
+
+	if resTask.Error != nil {
+		openAIVideo.Error = &dto.OpenAIVideoError{
+			Message: resTask.Error.Message,
+			Code:    resTask.Error.Code,
+		}
+	} else if task.Status == model.TaskStatusFailure && task.FailReason != "" {
+		openAIVideo.Error = &dto.OpenAIVideoError{
+			Message: task.FailReason,
+		}
+	}
+
+	videoURL := extractVideoURL(resTask)
+	if videoURL == "" && task.Status == model.TaskStatusSuccess {
+		videoURL = task.GetResultURL()
+		if videoURL == "" {
+			videoURL = taskcommon.BuildProxyURL(task.TaskID)
+		}
+	}
+	if videoURL != "" {
+		openAIVideo.SetMetadata("url", videoURL)
+	}
+
+	return common.Marshal(openAIVideo)
+}
+
+func extractVideoURL(resTask responseTask) string {
+	for _, url := range []string{
+		resTask.URL,
+		resTask.ResultURL,
+		resTask.OutputURL,
+		resTask.VideoURL,
+		stringValue(resTask.Metadata, "url"),
+		stringValue(resTask.Metadata, "result_url"),
+		stringValue(resTask.Metadata, "output_url"),
+		stringValue(resTask.Metadata, "video_url"),
+	} {
+		if strings.TrimSpace(url) != "" {
+			return strings.TrimSpace(url)
+		}
+	}
+	return ""
+}
+
+func stringValue(values map[string]any, key string) string {
+	if values == nil {
+		return ""
+	}
+	value, _ := values[key].(string)
+	return value
+}
+
+func firstNonZeroInt64(values ...int64) int64 {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }

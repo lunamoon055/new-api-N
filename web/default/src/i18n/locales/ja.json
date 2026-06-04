@@ -4557,6 +4557,7 @@
     "History is saved in this browser.": "履歴はこのブラウザに保存されます。",
     "Resolution": "解像度",
     "Video duration": "長さ",
-    "Waiting for upstream result": "上流の結果を待っています"
+    "Waiting for upstream result": "上流の結果を待っています",
+    "Generation is taking longer than expected. You can refresh later or check the task log.": "生成が予想より長くかかっています。後で更新するか、タスクログを確認してください。"
   }
 }

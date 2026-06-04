@@ -4557,6 +4557,7 @@
     "History is saved in this browser.": "L'historique est enregistré dans ce navigateur.",
     "Resolution": "Résolution",
     "Video duration": "Durée",
-    "Waiting for upstream result": "En attente du résultat amont"
+    "Waiting for upstream result": "En attente du résultat amont",
+    "Generation is taking longer than expected. You can refresh later or check the task log.": "La génération prend plus de temps que prévu. Vous pouvez actualiser plus tard ou consulter le journal des tâches."
   }
 }

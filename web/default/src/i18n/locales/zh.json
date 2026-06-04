@@ -4557,6 +4557,7 @@
     "History is saved in this browser.": "历史记录已保存在当前浏览器。",
     "Resolution": "清晰度",
     "Video duration": "时长",
-    "Waiting for upstream result": "正在等待上游结果"
+    "Waiting for upstream result": "正在等待上游结果",
+    "Generation is taking longer than expected. You can refresh later or check the task log.": "生成时间已超过预估，结果还未返回。你可以稍后刷新状态，或到任务日志查看上游状态。"
   }
 }

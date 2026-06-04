@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import type { CreationMode, CreationResult } from './types'
 
 export type CreationResolution = '1080p' | '2k' | '4k'
-export type CreationDuration = '5' | '10' | '15'
+export type CreationDuration = '4' | '5' | '8' | '10' | '12' | '15'
 
 export type CreationVideoOptions = {
   resolution: CreationResolution
@@ -71,21 +71,59 @@ export const CREATION_DURATION_OPTIONS: Array<{
   { value: '15', label: '15s', seconds: '15', estimateSeconds: 210 },
 ]
 
+export const SORA2_CREATION_DURATION_OPTIONS: Array<{
+  value: CreationDuration
+  label: string
+  seconds: string
+  estimateSeconds: number
+}> = [
+  { value: '4', label: '4s', seconds: '4', estimateSeconds: 75 },
+  { value: '8', label: '8s', seconds: '8', estimateSeconds: 135 },
+  { value: '12', label: '12s', seconds: '12', estimateSeconds: 195 },
+]
+
 export const DEFAULT_CREATION_VIDEO_OPTIONS: CreationVideoOptions = {
   resolution: '1080p',
   duration: '5',
 }
 
-export function getCreationVideoRequestOptions(
-  options: CreationVideoOptions
-): CreationVideoRequestOptions {
+export function getCreationDurationOptions(modelId?: string) {
+  return modelId?.toLowerCase() === 'sora2'
+    ? SORA2_CREATION_DURATION_OPTIONS
+    : CREATION_DURATION_OPTIONS
+}
+
+export function normalizeCreationVideoOptions(
+  options: CreationVideoOptions,
+  modelId?: string
+): CreationVideoOptions {
   const resolution =
     CREATION_RESOLUTION_OPTIONS.find(
       (item) => item.value === options.resolution
     ) ?? CREATION_RESOLUTION_OPTIONS[0]
+  const durations = getCreationDurationOptions(modelId)
   const duration =
-    CREATION_DURATION_OPTIONS.find((item) => item.value === options.duration) ??
-    CREATION_DURATION_OPTIONS[0]
+    durations.find((item) => item.value === options.duration) ?? durations[0]
+
+  return {
+    resolution: resolution.value,
+    duration: duration.value,
+  }
+}
+
+export function getCreationVideoRequestOptions(
+  options: CreationVideoOptions,
+  modelId?: string
+): CreationVideoRequestOptions {
+  const normalizedOptions = normalizeCreationVideoOptions(options, modelId)
+  const resolution =
+    CREATION_RESOLUTION_OPTIONS.find(
+      (item) => item.value === normalizedOptions.resolution
+    ) ?? CREATION_RESOLUTION_OPTIONS[0]
+  const duration =
+    getCreationDurationOptions(modelId).find(
+      (item) => item.value === normalizedOptions.duration
+    ) ?? getCreationDurationOptions(modelId)[0]
 
   return {
     seconds: duration.seconds,
@@ -153,6 +191,18 @@ export function getCreationCountdownSeconds(
   return Math.max(
     0,
     Math.ceil((createdAt + estimateSeconds * 1000 - now) / 1000)
+  )
+}
+
+export function getCreationTimedOut(
+  createdAt: number | undefined,
+  estimateSeconds: number | undefined,
+  now = Date.now()
+) {
+  return (
+    !!createdAt &&
+    !!estimateSeconds &&
+    getCreationCountdownSeconds(createdAt, estimateSeconds, now) <= 0
   )
 }
 

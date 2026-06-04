@@ -62,14 +62,16 @@ import {
   submitCreationTask,
 } from './api'
 import {
-  CREATION_DURATION_OPTIONS,
   CREATION_RESOLUTION_OPTIONS,
   DEFAULT_CREATION_VIDEO_OPTIONS,
   formatCreationCountdown,
   getCreationCountdownSeconds,
+  getCreationDurationOptions,
   getCreationHistoryStorageKey,
+  getCreationTimedOut,
   getCreationVideoRequestOptions,
   loadCreationHistory,
+  normalizeCreationVideoOptions,
   saveCreationHistory,
   upsertCreationHistoryItem,
   type CreationDuration,
@@ -129,6 +131,10 @@ export function CreationCenter() {
       models.find((model) => model.id === selectedByMode[mode]) ?? models[0],
     [mode, models, selectedByMode]
   )
+  const durationOptions = useMemo(
+    () => getCreationDurationOptions(selectedModel?.id),
+    [selectedModel?.id]
+  )
   const modeCounts = useMemo(
     () =>
       MODES.reduce(
@@ -173,6 +179,20 @@ export function CreationCenter() {
     result?.taskId,
     result?.videoUrl,
   ])
+
+  useEffect(() => {
+    if (mode !== 'video') return
+    setVideoOptions((current) => {
+      const normalized = normalizeCreationVideoOptions(
+        current,
+        selectedModel?.id
+      )
+      return normalized.duration === current.duration &&
+        normalized.resolution === current.resolution
+        ? current
+        : normalized
+    })
+  }, [mode, selectedModel?.id])
 
   const persistHistoryItem = (item: CreationHistoryItem) => {
     if (typeof window === 'undefined') return
@@ -256,21 +276,25 @@ export function CreationCenter() {
     const createdAt = Date.now()
     const videoRequestOptions =
       mode === 'video'
-        ? getCreationVideoRequestOptions(videoOptions)
+        ? getCreationVideoRequestOptions(videoOptions, selectedModel.id)
+        : undefined
+    const normalizedVideoOptions =
+      mode === 'video'
+        ? normalizeCreationVideoOptions(videoOptions, selectedModel.id)
         : undefined
     try {
       const nextResult = await submitCreationTask({
         mode,
         model: selectedModel,
         prompt: trimmedPrompt,
-        videoOptions: mode === 'video' ? videoOptions : undefined,
+        videoOptions: normalizedVideoOptions,
       })
       const enrichedResult: CreationResult = {
         ...nextResult,
         createdAt,
-        duration: mode === 'video' ? videoOptions.duration : undefined,
+        duration: normalizedVideoOptions?.duration,
         estimateSeconds: videoRequestOptions?.estimateSeconds,
-        resolution: mode === 'video' ? videoOptions.resolution : undefined,
+        resolution: normalizedVideoOptions?.resolution,
       }
       setResult(enrichedResult)
       persistHistoryItem({
@@ -280,7 +304,7 @@ export function CreationCenter() {
         model: selectedModel.id,
         prompt: trimmedPrompt,
         result: enrichedResult,
-        videoOptions: mode === 'video' ? videoOptions : undefined,
+        videoOptions: normalizedVideoOptions,
       })
       if (nextResult.status === 'failed') {
         toast.error(nextResult.error || t('Creation task failed.'))
@@ -295,9 +319,9 @@ export function CreationCenter() {
         mode,
         model: selectedModel.id,
         createdAt,
-        duration: mode === 'video' ? videoOptions.duration : undefined,
+        duration: normalizedVideoOptions?.duration,
         estimateSeconds: videoRequestOptions?.estimateSeconds,
-        resolution: mode === 'video' ? videoOptions.resolution : undefined,
+        resolution: normalizedVideoOptions?.resolution,
         status: 'failed',
         error: message,
       }
@@ -309,7 +333,7 @@ export function CreationCenter() {
         model: selectedModel.id,
         prompt: trimmedPrompt,
         result: failedResult,
-        videoOptions: mode === 'video' ? videoOptions : undefined,
+        videoOptions: normalizedVideoOptions,
       })
       toast.error(message)
     } finally {
@@ -359,7 +383,7 @@ export function CreationCenter() {
     setPrompt(item.prompt)
     setResult(item.result)
     if (item.videoOptions) {
-      setVideoOptions(item.videoOptions)
+      setVideoOptions(normalizeCreationVideoOptions(item.videoOptions, item.model))
     }
     setView('preview')
   }
@@ -423,6 +447,7 @@ export function CreationCenter() {
               mode={mode}
               model={selectedModel}
               videoOptions={videoOptions}
+              durationOptions={durationOptions}
               submitting={submitting}
               sessionNumber={sessionNumber}
               onPromptChange={setPrompt}
@@ -815,6 +840,11 @@ function ResultPreview(props: {
     props.result.estimateSeconds,
     props.now
   )
+  const timedOut = getCreationTimedOut(
+    props.result.createdAt,
+    props.result.estimateSeconds,
+    props.now
+  )
 
   if (props.result.status === 'failed') {
     return (
@@ -880,13 +910,20 @@ function ResultPreview(props: {
           {props.result.model} · {statusLabel}
         </div>
         {!props.result.videoUrl && props.result.status !== 'completed' && (
-          <div className='text-primary inline-flex items-center justify-center gap-1.5'>
+          <div
+            className={cn(
+              'inline-flex items-center justify-center gap-1.5',
+              timedOut ? 'text-amber-600 dark:text-amber-400' : 'text-primary'
+            )}
+          >
             <Timer className='size-3.5' />
             {countdownSeconds > 0
               ? `${t('Estimated remaining')} ${formatCreationCountdown(
                   countdownSeconds
                 )}`
-              : t('Waiting for upstream result')}
+              : t(
+                  'Generation is taking longer than expected. You can refresh later or check the task log.'
+                )}
           </div>
         )}
         {(props.result.resolution || props.result.duration) && (
@@ -1100,6 +1137,7 @@ type ComposerProps = {
   mode: CreationMode
   model?: CreationModel
   videoOptions: CreationVideoOptions
+  durationOptions: ReturnType<typeof getCreationDurationOptions>
   submitting: boolean
   sessionNumber: number
   onPromptChange: (value: string) => void
@@ -1166,7 +1204,7 @@ function Composer(props: ComposerProps) {
           <ComposerOptionGroup
             label={t('Video duration')}
             value={props.videoOptions.duration}
-            options={CREATION_DURATION_OPTIONS}
+            options={props.durationOptions}
             onChange={(value) =>
               props.onVideoOptionsChange({
                 ...props.videoOptions,

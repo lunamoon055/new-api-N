@@ -20,6 +20,8 @@ import { describe, expect, it } from 'bun:test'
 import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
   formatCreationCountdown,
+  getCreationDurationOptions,
+  getCreationTimedOut,
   getCreationVideoRequestOptions,
   loadCreationHistory,
   saveCreationHistory,
@@ -51,8 +53,29 @@ describe('creation center session helpers', () => {
 
     expect(
       getCreationVideoRequestOptions(DEFAULT_CREATION_VIDEO_OPTIONS)
-        .estimateSeconds
+      .estimateSeconds
     ).toBeGreaterThan(0)
+  })
+
+  it('uses linksky sora2 duration options from the media API docs', () => {
+    expect(getCreationDurationOptions('sora2').map((item) => item.value)).toEqual(
+      ['4', '8', '12']
+    )
+    expect(
+      getCreationVideoRequestOptions(
+        { resolution: '1080p', duration: '8' },
+        'sora2'
+      )
+    ).toMatchObject({
+      seconds: '8',
+      size: '1920x1080',
+    })
+    expect(
+      getCreationVideoRequestOptions(
+        { resolution: '1080p', duration: '5' },
+        'sora2'
+      ).seconds
+    ).toBe('4')
   })
 
   it('keeps the latest history item first and updates duplicate tasks', () => {
@@ -121,5 +144,10 @@ describe('creation center session helpers', () => {
   it('formats countdown seconds for the workspace', () => {
     expect(formatCreationCountdown(65)).toBe('01:05')
     expect(formatCreationCountdown(0)).toBe('00:00')
+  })
+
+  it('detects when an async media task exceeds its estimate', () => {
+    expect(getCreationTimedOut(1_000, 90, 91_001)).toBe(true)
+    expect(getCreationTimedOut(1_000, 90, 45_000)).toBe(false)
   })
 })
