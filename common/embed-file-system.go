@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-contrib/static"
 )
@@ -51,17 +52,25 @@ type themeAwareFileSystem struct {
 }
 
 func (t *themeAwareFileSystem) Exists(prefix string, path string) bool {
-	if GetTheme() == "classic" {
-		return t.classicFS.Exists(prefix, path)
-	}
-	return t.defaultFS.Exists(prefix, path)
+	return t.fsForPath(path).Exists(prefix, path)
 }
 
 func (t *themeAwareFileSystem) Open(name string) (http.File, error) {
-	if GetTheme() == "classic" {
-		return t.classicFS.Open(name)
+	return t.fsForPath(name).Open(name)
+}
+
+func (t *themeAwareFileSystem) fsForPath(path string) static.ServeFileSystem {
+	normalized := strings.TrimPrefix(path, "/")
+	switch {
+	case strings.HasPrefix(normalized, "static/"):
+		return t.defaultFS
+	case strings.HasPrefix(normalized, "assets/"):
+		return t.classicFS
+	case GetTheme() == "classic":
+		return t.classicFS
+	default:
+		return t.defaultFS
 	}
-	return t.defaultFS.Open(name)
 }
 
 func NewThemeAwareFS(defaultFS, classicFS static.ServeFileSystem) static.ServeFileSystem {
