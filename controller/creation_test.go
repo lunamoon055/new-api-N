@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -93,7 +94,7 @@ func TestBuildCreationModelCatalogUsesManualCategories(t *testing.T) {
 	}, nil, "", map[string]string{
 		"ko3":       creationModeImage,
 		"video-2.0": creationModeVideo,
-	})
+	}, 1)
 
 	require.Equal(t, []string{"chat-model"}, creationModelIDs(catalog.Modes[0].Models))
 	require.Equal(t, []string{"ko3"}, creationModelIDs(catalog.Modes[1].Models))
@@ -125,6 +126,49 @@ func TestBuildCreationModelCatalogFiltersRequestedModeAndRedactsPricing(t *testi
 	require.NotContains(t, string(payload), "model_ratio")
 	require.NotContains(t, string(payload), "billing_expr")
 	require.NotContains(t, string(payload), "enable_groups")
+}
+
+func TestBuildCreationModelCatalogAddsCostSummary(t *testing.T) {
+	catalog := buildCreationModelCatalog([]model.Pricing{
+		{
+			ModelName:              "chat-model",
+			ModelRatio:             1.5,
+			CompletionRatio:        2,
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAIResponse},
+		},
+		{
+			ModelName:              "image-model",
+			QuotaType:              1,
+			ModelPrice:             0.2,
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeImageGeneration},
+		},
+		{
+			ModelName:              "video-model",
+			BillingMode:            billing_setting.BillingModeTieredExpr,
+			BillingExpr:            `tier("base", p * 2 + c * 8)`,
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAIVideo},
+		},
+	}, nil, "", 1.25)
+
+	chatCost := catalog.Modes[0].Models[0].Cost
+	require.NotNil(t, chatCost)
+	require.Equal(t, creationCostModePerToken, chatCost.BillingMode)
+	require.Equal(t, 3.75, chatCost.InputPricePerMillion)
+	require.Equal(t, 7.5, chatCost.OutputPricePerMillion)
+
+	imageCost := catalog.Modes[1].Models[0].Cost
+	require.NotNil(t, imageCost)
+	require.Equal(t, creationCostModePerRequest, imageCost.BillingMode)
+	require.Equal(t, 0.25, imageCost.RequestPrice)
+	require.Equal(t, 125000, imageCost.RequestQuota)
+
+	videoCost := catalog.Modes[2].Models[0].Cost
+	require.NotNil(t, videoCost)
+	require.Equal(t, creationCostModeDynamic, videoCost.BillingMode)
+
+	payload, err := common.Marshal(catalog)
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), "billing_expr")
 }
 
 func TestGetCreationModelsRejectsUnknownModeBeforeLoadingCatalog(t *testing.T) {

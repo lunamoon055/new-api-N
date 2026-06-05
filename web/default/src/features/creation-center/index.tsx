@@ -43,6 +43,8 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { formatCurrencyFromUSD } from '@/lib/currency'
+import { formatQuota } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -85,8 +87,10 @@ import {
   type CreationVideoOptions,
 } from './session'
 import type {
+  CreationAsset,
   CreationMode,
   CreationModel,
+  CreationModelCost,
   CreationModelCategories,
   CreationModelGroup,
   CreationResult,
@@ -94,6 +98,8 @@ import type {
 } from './types'
 
 const MODES: CreationMode[] = ['chat', 'image', 'video']
+const MAX_TEXT_ASSET_CHARS = 8000
+const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024
 
 export function CreationCenter() {
   const { t } = useTranslation()
@@ -107,7 +113,7 @@ export function CreationCenter() {
   >({})
   const [view, setView] = useState<CreationView>('preview')
   const [prompt, setPrompt] = useState('')
-  const [assets, setAssets] = useState<string[]>([])
+  const [assets, setAssets] = useState<CreationAsset[]>([])
   const [uploadOpen, setUploadOpen] = useState(false)
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [sessionNumber, setSessionNumber] = useState(1)
@@ -276,21 +282,27 @@ export function CreationCenter() {
 
   const startNewSession = () => {
     setPrompt('')
+    setAssets([])
     setView('preview')
     setResult(undefined)
     setSessionNumber((current) => current + 1)
     toast.success(t('A new creation session is ready.'))
   }
 
-  const addFiles = (files: FileList | null) => {
+  const addFiles = async (files: FileList | null) => {
     if (!files?.length) return
-    setAssets((current) => [
-      ...current,
-      ...Array.from(files, (file) => file.name),
-    ])
+    const nextAssets = await Promise.all(Array.from(files, readCreationAsset))
+    setAssets((current) => [...current, ...nextAssets])
     setUploadOpen(false)
     setView('assets')
     toast.success(t('Assets added to the current session.'))
+  }
+
+  const removeAsset = (index: number) => {
+    setAssets((current) =>
+      current.filter((_, itemIndex) => itemIndex !== index)
+    )
+    toast.success(t('Asset removed.'))
   }
 
   const submit = async () => {
@@ -324,6 +336,7 @@ export function CreationCenter() {
         mode,
         model: selectedModel,
         prompt: trimmedPrompt,
+        assets,
         videoOptions: normalizedVideoOptions,
       })
       const enrichedResult: CreationResult = {
@@ -340,6 +353,7 @@ export function CreationCenter() {
         mode,
         model: selectedModel.id,
         prompt: trimmedPrompt,
+        assets: getCreationAssetSnapshots(assets),
         result: enrichedResult,
         videoOptions: normalizedVideoOptions,
       })
@@ -369,6 +383,7 @@ export function CreationCenter() {
         mode,
         model: selectedModel.id,
         prompt: trimmedPrompt,
+        assets: getCreationAssetSnapshots(assets),
         result: failedResult,
         videoOptions: normalizedVideoOptions,
       })
@@ -418,6 +433,7 @@ export function CreationCenter() {
       [item.mode]: item.model,
     }))
     setPrompt(item.prompt)
+    setAssets(normalizeStoredCreationAssets(item.assets))
     setResult(item.result)
     if (item.videoOptions) {
       setVideoOptions(
@@ -478,6 +494,7 @@ export function CreationCenter() {
                 onSelectHistory={selectHistoryItem}
                 onClearHistory={clearHistory}
                 onRefreshTask={refreshVideoTask}
+                onRemoveAsset={removeAsset}
               />
             </div>
 
@@ -494,6 +511,7 @@ export function CreationCenter() {
               onPromptChange={setPrompt}
               onVideoOptionsChange={setVideoOptions}
               onUpload={() => setUploadOpen(true)}
+              onRemoveAsset={removeAsset}
               onSubmit={submit}
             />
           </section>
@@ -690,12 +708,149 @@ function ModeButton(props: {
   )
 }
 
+function formatCreationModelCost(
+  cost: CreationModelCost | undefined,
+  t: (key: string) => string
+) {
+  if (!cost) return t('Pricing pending')
+  const groupSuffix =
+    cost.group_ratio && cost.group_ratio !== 1
+      ? ` · ${t('Group')} x${formatCostNumber(cost.group_ratio)}`
+      : ''
+
+  switch (cost.billing_mode) {
+    case 'dynamic':
+      return `${t('Dynamic pricing')}${groupSuffix}`
+    case 'per_request': {
+      const requestPrice = formatCurrencyFromUSD(cost.request_price, {
+        digitsLarge: 4,
+        digitsSmall: 6,
+        abbreviate: false,
+      })
+      const requestQuota = cost.request_quota
+        ? ` · ${formatQuota(cost.request_quota)}`
+        : ''
+      return `${requestPrice} ${t('per request')}${requestQuota}${groupSuffix}`
+    }
+    case 'per_token': {
+      const inputPrice = formatCurrencyFromUSD(cost.input_price_per_million, {
+        digitsLarge: 4,
+        digitsSmall: 6,
+        abbreviate: false,
+      })
+      const outputPrice = formatCurrencyFromUSD(cost.output_price_per_million, {
+        digitsLarge: 4,
+        digitsSmall: 6,
+        abbreviate: false,
+      })
+      return `${t('Input')} ${inputPrice}/1M · ${t('Output')} ${outputPrice}/1M${groupSuffix}`
+    }
+  }
+}
+
+function formatCostNumber(value: number) {
+  return Number.parseFloat(value.toFixed(6)).toString()
+}
+
+async function readCreationAsset(file: File): Promise<CreationAsset> {
+  const asset: CreationAsset = {
+    id: createCreationAssetId(file),
+    name: file.name,
+    type: file.type,
+    size: file.size,
+  }
+
+  if (file.type.startsWith('image/') && file.size <= MAX_INLINE_IMAGE_BYTES) {
+    asset.dataUrl = await readFileAsDataUrl(file)
+    return asset
+  }
+
+  if (isReadableTextAsset(file)) {
+    asset.text = await readFileAsText(file.slice(0, MAX_TEXT_ASSET_CHARS))
+  }
+
+  return asset
+}
+
+function getCreationAssetSnapshots(assets: CreationAsset[]): CreationAsset[] {
+  return assets.map((asset) => ({
+    id: asset.id,
+    name: asset.name,
+    type: asset.type,
+    size: asset.size,
+    text: asset.text?.slice(0, 2000),
+  }))
+}
+
+function normalizeStoredCreationAssets(assets: unknown): CreationAsset[] {
+  if (!Array.isArray(assets)) return []
+  return assets.flatMap((asset, index) => {
+    if (typeof asset === 'string') {
+      return [
+        {
+          id: `legacy-${index}-${asset}`,
+          name: asset,
+          type: '',
+          size: 0,
+        },
+      ]
+    }
+    if (!asset || typeof asset !== 'object') return []
+    const item = asset as Partial<CreationAsset>
+    if (!item.name) return []
+    return [
+      {
+        id: item.id || `history-${index}-${item.name}`,
+        name: item.name,
+        type: item.type || '',
+        size: item.size || 0,
+        text: item.text,
+      },
+    ]
+  })
+}
+
+function createCreationAssetId(file: File) {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `${file.name}-${file.size}-${file.lastModified}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`
+}
+
+function isReadableTextAsset(file: File) {
+  return (
+    file.type.startsWith('text/') ||
+    /\.(csv|json|md|txt|tsv|yaml|yml)$/i.test(file.name)
+  )
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.addEventListener('load', () => resolve(String(reader.result || '')))
+    reader.addEventListener('error', () => reject(reader.error))
+    reader.readAsDataURL(file)
+  })
+}
+
+function readFileAsText(file: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.addEventListener('load', () => resolve(String(reader.result || '')))
+    reader.addEventListener('error', () => reject(reader.error))
+    reader.readAsText(file)
+  })
+}
+
 function ModelButton(props: {
   model: CreationModel
   active: boolean
   onClick: () => void
 }) {
   const { t } = useTranslation()
+  const costLabel = formatCreationModelCost(props.model.cost, t)
   const tagLabels: Record<string, string> = {
     advanced: t('Advanced'),
     chat: t('Chat'),
@@ -739,6 +894,9 @@ function ModelButton(props: {
           </span>
         </span>
       </div>
+      <span className='text-primary mt-2 block truncate text-[11px] font-medium'>
+        {t('Consumption')}: {costLabel}
+      </span>
       {!!visibleTags.length && (
         <span className='mt-2 flex flex-wrap gap-1'>
           {visibleTags.slice(0, 2).map((tag) => (
@@ -777,6 +935,9 @@ function SidebarNotice(props: { children: React.ReactNode }) {
 function ModelHero(props: { mode: CreationMode; model?: CreationModel }) {
   const { t } = useTranslation()
   const title = props.model?.id || t('Select a model')
+  const costLabel = props.model
+    ? formatCreationModelCost(props.model.cost, t)
+    : undefined
   const fallback =
     props.mode === 'chat'
       ? t('Choose a configured chat model for writing, coding, and analysis.')
@@ -801,6 +962,13 @@ function ModelHero(props: { mode: CreationMode; model?: CreationModel }) {
         <p className='text-muted-foreground mt-3 text-sm leading-6'>
           {props.model?.description || fallback}
         </p>
+        {costLabel && (
+          <div className='text-primary bg-primary/10 mx-auto mt-4 inline-flex max-w-full items-center rounded-full px-3 py-1 text-xs font-medium'>
+            <span className='truncate'>
+              {t('Consumption')}: {costLabel}
+            </span>
+          </div>
+        )}
       </div>
     </section>
   )
@@ -810,7 +978,7 @@ type PreviewProps = {
   mode: CreationMode
   model?: CreationModel
   view: CreationView
-  assets: string[]
+  assets: CreationAsset[]
   historyItems: CreationHistoryItem[]
   result?: CreationResult
   now: number
@@ -820,6 +988,7 @@ type PreviewProps = {
   onSelectHistory: (item: CreationHistoryItem) => void
   onClearHistory: () => void
   onRefreshTask: () => void
+  onRemoveAsset: (index: number) => void
 }
 
 function CreationPreview(props: PreviewProps) {
@@ -849,7 +1018,10 @@ function CreationPreview(props: PreviewProps) {
 
       <div className='flex min-h-0 flex-1 items-center justify-center p-4'>
         {props.view === 'assets' ? (
-          <AssetPreview assets={props.assets} />
+          <AssetPreview
+            assets={props.assets}
+            onRemoveAsset={props.onRemoveAsset}
+          />
         ) : props.view === 'history' ? (
           <HistoryPreview
             items={props.historyItems}
@@ -1105,7 +1277,10 @@ function EmptyPreview(props: { mode: CreationMode; model?: CreationModel }) {
   )
 }
 
-function AssetPreview(props: { assets: string[] }) {
+function AssetPreview(props: {
+  assets: CreationAsset[]
+  onRemoveAsset: (index: number) => void
+}) {
   const { t } = useTranslation()
 
   if (!props.assets.length) {
@@ -1120,11 +1295,21 @@ function AssetPreview(props: { assets: string[] }) {
     <div className='grid w-full gap-2 sm:grid-cols-2'>
       {props.assets.map((asset, index) => (
         <div
-          key={`${asset}-${index}`}
+          key={asset.id}
           className='bg-muted/40 flex min-w-0 items-center gap-3 rounded-lg border p-3'
         >
           <FileImage className='text-primary size-4 shrink-0' />
-          <span className='truncate text-xs'>{asset}</span>
+          <span className='min-w-0 flex-1 truncate text-xs'>{asset.name}</span>
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon-xs'
+            className='ml-auto shrink-0'
+            aria-label={`${t('Remove asset')}: ${asset.name}`}
+            onClick={() => props.onRemoveAsset(index)}
+          >
+            <Trash2 className='size-3.5' />
+          </Button>
         </div>
       ))}
     </div>
@@ -1198,7 +1383,7 @@ function HistoryPreview(props: {
 
 type ComposerProps = {
   prompt: string
-  assets: string[]
+  assets: CreationAsset[]
   authenticated: boolean
   mode: CreationMode
   model?: CreationModel
@@ -1209,11 +1394,13 @@ type ComposerProps = {
   onPromptChange: (value: string) => void
   onVideoOptionsChange: (options: CreationVideoOptions) => void
   onUpload: () => void
+  onRemoveAsset: (index: number) => void
   onSubmit: () => void
 }
 
 function Composer(props: ComposerProps) {
   const { t } = useTranslation()
+  const canSubmit = !!props.prompt.trim() && !!props.model && !props.submitting
 
   return (
     <section className='bg-card rounded-lg border p-3'>
@@ -1232,11 +1419,39 @@ function Composer(props: ComposerProps) {
             value={props.prompt}
             maxLength={5000}
             onChange={(event) => props.onPromptChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (
+                event.key !== 'Enter' ||
+                event.shiftKey ||
+                event.nativeEvent.isComposing
+              ) {
+                return
+              }
+              event.preventDefault()
+              if (canSubmit) props.onSubmit()
+            }}
             placeholder={t(
               'Describe the task you want the selected model to complete...'
             )}
             className='min-h-20 resize-none border-0 px-0 py-1 shadow-none focus-visible:ring-0'
           />
+          {!!props.assets.length && (
+            <div className='mt-2 flex flex-wrap gap-1.5'>
+              {props.assets.map((asset, index) => (
+                <button
+                  key={asset.id}
+                  type='button'
+                  onClick={() => props.onRemoveAsset(index)}
+                  className='bg-muted text-muted-foreground hover:bg-muted/80 inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors'
+                  aria-label={`${t('Remove asset')}: ${asset.name}`}
+                >
+                  <FileImage className='size-3 shrink-0' />
+                  <span className='truncate'>{asset.name}</span>
+                  <Trash2 className='size-3 shrink-0' />
+                </button>
+              ))}
+            </div>
+          )}
           <div className='text-muted-foreground text-right text-[11px]'>
             {props.prompt.length}/5000
           </div>
@@ -1245,7 +1460,7 @@ function Composer(props: ComposerProps) {
           size='icon-lg'
           aria-label={t('Submit')}
           onClick={props.onSubmit}
-          disabled={!props.prompt.trim() || !props.model || props.submitting}
+          disabled={!canSubmit}
         >
           {props.submitting ? (
             <RefreshCw className='size-4 animate-spin' />
@@ -1290,6 +1505,7 @@ function Composer(props: ComposerProps) {
           {t('Session')} #{props.sessionNumber} · {props.assets.length}{' '}
           {t('assets')}
         </span>
+        <span>{t('Press Enter to send, Shift+Enter for newline.')}</span>
       </div>
     </section>
   )
@@ -1365,25 +1581,16 @@ type ModelCategoryDialogProps = {
 
 function ModelCategoryDialog(props: ModelCategoryDialogProps) {
   const { t } = useTranslation()
-  const [draft, setDraft] = useState<CreationModelCategories>({})
-
-  useEffect(() => {
-    if (!props.open) return
-    setDraft(
-      Object.fromEntries(
-        props.models.map((model) => [model.id, model.mode])
-      ) as CreationModelCategories
-    )
-  }, [props.models, props.open])
-
-  const updateCategory = (modelId: string, mode: CreationMode) => {
-    setDraft((current) => ({ ...current, [modelId]: mode }))
-  }
-
-  const save = () => {
+  const save = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
     const categories = props.models.reduce<CreationModelCategories>(
       (next, model) => {
-        next[model.id] = draft[model.id] ?? model.mode
+        const value = formData.get(model.id)
+        next[model.id] =
+          typeof value === 'string' && MODES.includes(value as CreationMode)
+            ? (value as CreationMode)
+            : model.mode
         return next
       },
       {}
@@ -1394,87 +1601,85 @@ function ModelCategoryDialog(props: ModelCategoryDialogProps) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className='max-w-3xl'>
-        <DialogHeader>
-          <DialogTitle>{t('Creation model category management')}</DialogTitle>
-          <DialogDescription>
-            {t(
-              'Manually assign visible creation models to chat, image, or video filters.'
-            )}
-          </DialogDescription>
-        </DialogHeader>
+        <form onSubmit={save}>
+          <DialogHeader>
+            <DialogTitle>{t('Creation model category management')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'Manually assign visible creation models to chat, image, or video filters.'
+              )}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className='rounded-lg border'>
-          <div className='bg-muted/40 grid grid-cols-[minmax(0,1fr)_8.5rem] gap-3 border-b px-3 py-2 text-xs font-medium'>
-            <span>{t('Model')}</span>
-            <span>{t('Category')}</span>
-          </div>
-          <div className='max-h-[min(28rem,60svh)] overflow-auto'>
-            {props.models.length === 0 ? (
-              <div className='text-muted-foreground px-3 py-8 text-center text-sm'>
-                {t('No creation models available.')}
-              </div>
-            ) : (
-              <div className='divide-y'>
-                {props.models.map((model) => (
-                  <div
-                    key={model.id}
-                    className='grid grid-cols-[minmax(0,1fr)_8.5rem] items-center gap-3 px-3 py-3'
-                  >
-                    <div className='min-w-0'>
-                      <div className='truncate text-sm font-medium'>
-                        {model.id}
-                      </div>
-                      <div className='text-muted-foreground mt-1 line-clamp-1 text-xs'>
-                        {model.description || t('Ready for creation tasks.')}
-                      </div>
-                    </div>
-                    <NativeSelect
-                      size='sm'
-                      className='w-full'
-                      aria-label={t('Category')}
-                      value={draft[model.id] ?? model.mode}
-                      disabled={props.saving}
-                      onChange={(event) =>
-                        updateCategory(
-                          model.id,
-                          event.target.value as CreationMode
-                        )
-                      }
+          <div className='mt-4 rounded-lg border'>
+            <div className='bg-muted/40 grid grid-cols-[minmax(0,1fr)_8.5rem] gap-3 border-b px-3 py-2 text-xs font-medium'>
+              <span>{t('Model')}</span>
+              <span>{t('Category')}</span>
+            </div>
+            <div className='max-h-[min(28rem,60svh)] overflow-auto'>
+              {props.models.length === 0 ? (
+                <div className='text-muted-foreground px-3 py-8 text-center text-sm'>
+                  {t('No creation models available.')}
+                </div>
+              ) : (
+                <div className='divide-y'>
+                  {props.models.map((model) => (
+                    <div
+                      key={model.id}
+                      className='grid grid-cols-[minmax(0,1fr)_8.5rem] items-center gap-3 px-3 py-3'
                     >
-                      {MODES.map((item) => (
-                        <NativeSelectOption key={item} value={item}>
-                          {getCreationModeLabel(item, t)}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </div>
-                ))}
-              </div>
-            )}
+                      <div className='min-w-0'>
+                        <div className='truncate text-sm font-medium'>
+                          {model.id}
+                        </div>
+                        <div className='text-muted-foreground mt-1 line-clamp-1 text-xs'>
+                          {model.description || t('Ready for creation tasks.')}
+                        </div>
+                      </div>
+                      <NativeSelect
+                        size='sm'
+                        className='w-full'
+                        aria-label={t('Category')}
+                        name={model.id}
+                        defaultValue={model.mode}
+                        disabled={props.saving}
+                      >
+                        {MODES.map((item) => (
+                          <NativeSelectOption key={item} value={item}>
+                            {getCreationModeLabel(item, t)}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
-        <DialogFooter className='sm:justify-between'>
-          <Button
-            variant='outline'
-            onClick={props.onReset}
-            disabled={props.saving}
-          >
-            <RotateCcw className='size-4' />
-            {t('Reset to auto')}
-          </Button>
-          <Button
-            onClick={save}
-            disabled={props.saving || props.models.length === 0}
-          >
-            {props.saving ? (
-              <RefreshCw className='size-4 animate-spin' />
-            ) : (
-              <Settings2 className='size-4' />
-            )}
-            {t('Save categories')}
-          </Button>
-        </DialogFooter>
+          <DialogFooter className='mt-4 sm:justify-between'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={props.onReset}
+              disabled={props.saving}
+            >
+              <RotateCcw className='size-4' />
+              {t('Reset to auto')}
+            </Button>
+            <Button
+              type='submit'
+              disabled={props.saving || props.models.length === 0}
+            >
+              {props.saving ? (
+                <RefreshCw className='size-4 animate-spin' />
+              ) : (
+                <Settings2 className='size-4' />
+              )}
+              {t('Save categories')}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )

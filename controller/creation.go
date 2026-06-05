@@ -12,6 +12,8 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
@@ -22,6 +24,10 @@ const (
 	creationModeVideo = "video"
 
 	creationModelCategoriesOptionKey = "CreationModelCategories"
+
+	creationCostModeDynamic    = "dynamic"
+	creationCostModePerRequest = "per_request"
+	creationCostModePerToken   = "per_token"
 )
 
 var creationModeOrder = []string{
@@ -79,8 +85,8 @@ func GetCreationModels(c *gin.Context) {
 		return
 	}
 
-	pricing, _, _ := getPricingForRequest(c)
-	common.ApiSuccess(c, buildCreationModelCatalog(pricing, model.GetVendors(), mode))
+	pricing, group, _ := getPricingForRequest(c)
+	common.ApiSuccess(c, buildCreationModelCatalog(pricing, model.GetVendors(), mode, getCreationCatalogGroupRatio(group)))
 }
 
 func CreationRelayImage(c *gin.Context) {
@@ -150,12 +156,17 @@ func normalizeCreationMode(mode string) (string, bool) {
 	}
 }
 
-func buildCreationModelCatalog(pricing []model.Pricing, vendors []model.PricingVendor, requestedMode string) dto.CreationModelCatalog {
+func buildCreationModelCatalog(pricing []model.Pricing, vendors []model.PricingVendor, requestedMode string, groupRatio ...float64) dto.CreationModelCatalog {
+	costGroupRatio := 1.0
+	if len(groupRatio) > 0 && groupRatio[0] >= 0 {
+		costGroupRatio = groupRatio[0]
+	}
 	return buildCreationModelCatalogWithCategories(
 		pricing,
 		vendors,
 		requestedMode,
 		getCreationModelCategories(),
+		costGroupRatio,
 	)
 }
 
@@ -164,6 +175,7 @@ func buildCreationModelCatalogWithCategories(
 	vendors []model.PricingVendor,
 	requestedMode string,
 	manualCategories map[string]string,
+	groupRatio float64,
 ) dto.CreationModelCatalog {
 	modelsByMode := make(map[string][]dto.CreationModel, len(creationModeOrder))
 	usedVendorIDs := make(map[int]struct{})
@@ -193,6 +205,7 @@ func buildCreationModelCatalogWithCategories(
 			Icon:                   item.Icon,
 			Tags:                   mergeCreationModelTags(splitCreationModelTags(item.Tags), metadataTags),
 			VendorID:               item.VendorID,
+			Cost:                   buildCreationModelCost(item, groupRatio),
 			SupportedEndpointTypes: item.SupportedEndpointTypes,
 		})
 		if item.VendorID != 0 {
@@ -241,6 +254,46 @@ func buildCreationModelCatalogWithCategories(
 	return dto.CreationModelCatalog{
 		Modes:   groups,
 		Vendors: catalogVendors,
+	}
+}
+
+func getCreationCatalogGroupRatio(userGroup string) float64 {
+	userGroup = strings.TrimSpace(userGroup)
+	if userGroup == "" {
+		return 1
+	}
+	if ratio, ok := ratio_setting.GetGroupGroupRatio(userGroup, userGroup); ok {
+		return ratio
+	}
+	return ratio_setting.GetGroupRatio(userGroup)
+}
+
+func buildCreationModelCost(item model.Pricing, groupRatio float64) *dto.CreationModelCost {
+	if groupRatio < 0 {
+		groupRatio = 1
+	}
+	if item.BillingMode == billing_setting.BillingModeTieredExpr && strings.TrimSpace(item.BillingExpr) != "" {
+		return &dto.CreationModelCost{
+			BillingMode: creationCostModeDynamic,
+			GroupRatio:  groupRatio,
+		}
+	}
+	if item.QuotaType == 1 {
+		requestPrice := item.ModelPrice * groupRatio
+		return &dto.CreationModelCost{
+			BillingMode:  creationCostModePerRequest,
+			RequestPrice: requestPrice,
+			RequestQuota: int(item.ModelPrice * common.QuotaPerUnit * groupRatio),
+			GroupRatio:   groupRatio,
+		}
+	}
+
+	inputPrice := item.ModelRatio * 2 * groupRatio
+	return &dto.CreationModelCost{
+		BillingMode:           creationCostModePerToken,
+		InputPricePerMillion:  inputPrice,
+		OutputPricePerMillion: inputPrice * item.CompletionRatio,
+		GroupRatio:            groupRatio,
 	}
 }
 

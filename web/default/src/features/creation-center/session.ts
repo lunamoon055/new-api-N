@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { CreationMode, CreationResult } from './types'
+import type { CreationAsset, CreationMode, CreationResult } from './types'
 
 export type CreationResolution = '1080p' | '2k' | '4k'
 export type CreationDuration = '4' | '5' | '8' | '10' | '12' | '15'
@@ -38,6 +38,7 @@ export type CreationHistoryItem = {
   mode: CreationMode
   model: string
   prompt: string
+  assets?: CreationAsset[]
   result: CreationResult
   videoOptions?: CreationVideoOptions
 }
@@ -213,6 +214,27 @@ export function formatCreationCountdown(seconds: number) {
   return `${minutes.toString().padStart(2, '0')}:${rest
     .toString()
     .padStart(2, '0')}`
+}
+
+export function composeCreationPrompt(prompt: string, assets: CreationAsset[]) {
+  const trimmedPrompt = prompt.trim()
+  const cleanAssets = assets.filter((asset) => asset.name.trim())
+  if (!cleanAssets.length) return trimmedPrompt
+
+  return [
+    trimmedPrompt,
+    '',
+    '参考素材 / Reference assets:',
+    ...cleanAssets.flatMap((asset, index) => {
+      const lines = [
+        `${index + 1}. ${asset.name}${asset.type ? ` (${asset.type})` : ''}`,
+      ]
+      if (asset.text) {
+        lines.push(asset.text.slice(0, 2000))
+      }
+      return lines
+    }),
+  ].join('\n')
 }
 
 function isCreationHistoryItem(value: unknown): value is CreationHistoryItem {

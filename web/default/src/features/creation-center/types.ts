@@ -24,7 +24,17 @@ export type CreationModel = {
   icon?: string
   tags?: string[]
   vendor_id?: number
+  cost?: CreationModelCost
   supported_endpoint_types: string[]
+}
+
+export type CreationModelCost = {
+  billing_mode: 'per_token' | 'per_request' | 'dynamic'
+  input_price_per_million?: number
+  output_price_per_million?: number
+  request_price?: number
+  request_quota?: number
+  group_ratio?: number
 }
 
 export type CreationModelGroup = {
@@ -45,6 +55,15 @@ export type CreationModelCatalog = {
 }
 
 export type CreationModelCategories = Partial<Record<string, CreationMode>>
+
+export type CreationAsset = {
+  id: string
+  name: string
+  type: string
+  size: number
+  text?: string
+  dataUrl?: string
+}
 
 export type CreationCatalogResponse = {
   success: boolean

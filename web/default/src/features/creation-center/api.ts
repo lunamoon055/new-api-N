@@ -19,10 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
+  composeCreationPrompt,
   getCreationVideoRequestOptions,
   type CreationVideoOptions,
 } from './session'
 import type {
+  CreationAsset,
   CreationCatalogResponse,
   CreationModelCategories,
   CreationMode,
@@ -59,14 +61,24 @@ export async function submitCreationTask(params: {
   mode: CreationMode
   model: CreationModel
   prompt: string
+  assets?: CreationAsset[]
   videoOptions?: CreationVideoOptions
 }): Promise<CreationResult> {
+  const promptWithAssets = composeCreationPrompt(
+    params.prompt,
+    params.assets ?? []
+  )
   if (params.mode === 'chat') {
     const response = await api.post(
       '/pg/chat/completions',
       {
         model: params.model.id,
-        messages: [{ role: 'user', content: params.prompt }],
+        messages: [
+          {
+            role: 'user',
+            content: buildChatContent(promptWithAssets, params.assets ?? []),
+          },
+        ],
         stream: false,
       },
       { skipErrorHandler: true } as Record<string, unknown>
@@ -79,7 +91,7 @@ export async function submitCreationTask(params: {
       '/api/creation/images/generations',
       {
         model: params.model.id,
-        prompt: params.prompt,
+        prompt: promptWithAssets,
         n: 1,
       },
       { skipErrorHandler: true } as Record<string, unknown>
@@ -95,13 +107,28 @@ export async function submitCreationTask(params: {
     '/api/creation/video/async-generations',
     {
       model: params.model.id,
-      prompt: params.prompt,
+      prompt: promptWithAssets,
       seconds: videoOptions.seconds,
       size: videoOptions.size,
     },
     { skipErrorHandler: true } as Record<string, unknown>
   )
   return parseVideoResult(response.data, params.model.id)
+}
+
+function buildChatContent(prompt: string, assets: CreationAsset[]) {
+  const imageAssets = assets.filter(
+    (asset) => asset.type.startsWith('image/') && asset.dataUrl
+  )
+  if (!imageAssets.length) return prompt
+
+  return [
+    { type: 'text', text: prompt },
+    ...imageAssets.map((asset) => ({
+      type: 'image_url',
+      image_url: { url: asset.dataUrl },
+    })),
+  ]
 }
 
 export async function getCreationVideoTask(params: {
