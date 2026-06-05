@@ -153,14 +153,18 @@ func TestBuildCreationModelCatalogAddsCostSummary(t *testing.T) {
 	chatCost := catalog.Modes[0].Models[0].Cost
 	require.NotNil(t, chatCost)
 	require.Equal(t, creationCostModePerToken, chatCost.BillingMode)
-	require.Equal(t, 3.75, chatCost.InputPricePerMillion)
-	require.Equal(t, 7.5, chatCost.OutputPricePerMillion)
+	require.NotNil(t, chatCost.InputPricePerMillion)
+	require.NotNil(t, chatCost.OutputPricePerMillion)
+	require.Equal(t, 3.75, *chatCost.InputPricePerMillion)
+	require.Equal(t, 7.5, *chatCost.OutputPricePerMillion)
 
 	imageCost := catalog.Modes[1].Models[0].Cost
 	require.NotNil(t, imageCost)
 	require.Equal(t, creationCostModePerRequest, imageCost.BillingMode)
-	require.Equal(t, 0.25, imageCost.RequestPrice)
-	require.Equal(t, 125000, imageCost.RequestQuota)
+	require.NotNil(t, imageCost.RequestPrice)
+	require.NotNil(t, imageCost.RequestQuota)
+	require.Equal(t, 0.25, *imageCost.RequestPrice)
+	require.Equal(t, 125000, *imageCost.RequestQuota)
 
 	videoCost := catalog.Modes[2].Models[0].Cost
 	require.NotNil(t, videoCost)
@@ -169,6 +173,27 @@ func TestBuildCreationModelCatalogAddsCostSummary(t *testing.T) {
 	payload, err := common.Marshal(catalog)
 	require.NoError(t, err)
 	require.NotContains(t, string(payload), "billing_expr")
+}
+
+func TestBuildCreationModelCatalogKeepsExplicitZeroCostFields(t *testing.T) {
+	catalog := buildCreationModelCatalog([]model.Pricing{
+		{
+			ModelName:              "zero-token-model",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAIResponse},
+		},
+		{
+			ModelName:              "zero-request-model",
+			QuotaType:              1,
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeImageGeneration},
+		},
+	}, nil, "")
+
+	payload, err := common.Marshal(catalog)
+	require.NoError(t, err)
+	require.Contains(t, string(payload), `"input_price_per_million":0`)
+	require.Contains(t, string(payload), `"output_price_per_million":0`)
+	require.Contains(t, string(payload), `"request_price":0`)
+	require.Contains(t, string(payload), `"request_quota":0`)
 }
 
 func TestGetCreationModelsRejectsUnknownModeBeforeLoadingCatalog(t *testing.T) {

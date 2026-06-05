@@ -280,19 +280,21 @@ func buildCreationModelCost(item model.Pricing, groupRatio float64) *dto.Creatio
 	}
 	if item.QuotaType == 1 {
 		requestPrice := item.ModelPrice * groupRatio
+		requestQuota := int(item.ModelPrice * common.QuotaPerUnit * groupRatio)
 		return &dto.CreationModelCost{
 			BillingMode:  creationCostModePerRequest,
-			RequestPrice: requestPrice,
-			RequestQuota: int(item.ModelPrice * common.QuotaPerUnit * groupRatio),
+			RequestPrice: &requestPrice,
+			RequestQuota: &requestQuota,
 			GroupRatio:   groupRatio,
 		}
 	}
 
 	inputPrice := item.ModelRatio * 2 * groupRatio
+	outputPrice := inputPrice * item.CompletionRatio
 	return &dto.CreationModelCost{
 		BillingMode:           creationCostModePerToken,
-		InputPricePerMillion:  inputPrice,
-		OutputPricePerMillion: inputPrice * item.CompletionRatio,
+		InputPricePerMillion:  &inputPrice,
+		OutputPricePerMillion: &outputPrice,
 		GroupRatio:            groupRatio,
 	}
 }
