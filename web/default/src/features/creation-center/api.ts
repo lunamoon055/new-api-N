@@ -24,16 +24,34 @@ import {
 } from './session'
 import type {
   CreationCatalogResponse,
+  CreationModelCategories,
   CreationMode,
   CreationModel,
   CreationResult,
   CreationResultStatus,
 } from './types'
 
+const CREATION_MODEL_CATEGORIES_OPTION_KEY = 'CreationModelCategories'
+
+type UpdateOptionResponse = {
+  success: boolean
+  message: string
+}
+
 export async function getCreationCatalog(): Promise<CreationCatalogResponse> {
   const response = await api.get<CreationCatalogResponse>(
     '/api/creation/models'
   )
+  return response.data
+}
+
+export async function saveCreationModelCategories(
+  categories: CreationModelCategories
+): Promise<UpdateOptionResponse> {
+  const response = await api.put<UpdateOptionResponse>('/api/option/', {
+    key: CREATION_MODEL_CATEGORIES_OPTION_KEY,
+    value: JSON.stringify(categories),
+  })
   return response.data
 }
 

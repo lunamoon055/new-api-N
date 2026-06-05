@@ -76,6 +76,32 @@ func TestBuildCreationModelCatalogOverridesMediaModelsByName(t *testing.T) {
 	require.Contains(t, catalog.Modes[2].Models[1].Tags, "video")
 }
 
+func TestBuildCreationModelCatalogUsesManualCategories(t *testing.T) {
+	catalog := buildCreationModelCatalogWithCategories([]model.Pricing{
+		{
+			ModelName:              "ko3",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
+		{
+			ModelName:              "video-2.0",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
+		{
+			ModelName:              "chat-model",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
+	}, nil, "", map[string]string{
+		"ko3":       creationModeImage,
+		"video-2.0": creationModeVideo,
+	})
+
+	require.Equal(t, []string{"chat-model"}, creationModelIDs(catalog.Modes[0].Models))
+	require.Equal(t, []string{"ko3"}, creationModelIDs(catalog.Modes[1].Models))
+	require.Equal(t, []string{"video-2.0"}, creationModelIDs(catalog.Modes[2].Models))
+	require.Contains(t, catalog.Modes[1].Models[0].Tags, creationModeImage)
+	require.Contains(t, catalog.Modes[2].Models[0].Tags, creationModeVideo)
+}
+
 func TestBuildCreationModelCatalogFiltersRequestedModeAndRedactsPricing(t *testing.T) {
 	catalog := buildCreationModelCatalog([]model.Pricing{
 		{
@@ -118,6 +144,16 @@ func TestNormalizeCreationModeTrimsAndNormalizesCase(t *testing.T) {
 
 	require.True(t, ok)
 	require.Equal(t, creationModeImage, mode)
+}
+
+func TestParseCreationModelCategoriesNormalizesAndValidates(t *testing.T) {
+	categories, err := parseCreationModelCategories(`{" KO3 ":" IMAGE "}`)
+
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"ko3": creationModeImage}, categories)
+
+	_, err = parseCreationModelCategories(`{"ko3":"audio"}`)
+	require.Error(t, err)
 }
 
 func TestSplitCreationModelTagsOmitsBlankTags(t *testing.T) {

@@ -20,6 +20,8 @@ const (
 	creationModeChat  = "chat"
 	creationModeImage = "image"
 	creationModeVideo = "video"
+
+	creationModelCategoriesOptionKey = "CreationModelCategories"
 )
 
 var creationModeOrder = []string{
@@ -149,15 +151,37 @@ func normalizeCreationMode(mode string) (string, bool) {
 }
 
 func buildCreationModelCatalog(pricing []model.Pricing, vendors []model.PricingVendor, requestedMode string) dto.CreationModelCatalog {
+	return buildCreationModelCatalogWithCategories(
+		pricing,
+		vendors,
+		requestedMode,
+		getCreationModelCategories(),
+	)
+}
+
+func buildCreationModelCatalogWithCategories(
+	pricing []model.Pricing,
+	vendors []model.PricingVendor,
+	requestedMode string,
+	manualCategories map[string]string,
+) dto.CreationModelCatalog {
 	modelsByMode := make(map[string][]dto.CreationModel, len(creationModeOrder))
 	usedVendorIDs := make(map[int]struct{})
 
 	for _, item := range pricing {
-		mode, ok := getCreationModelMode(item.ModelName, item.SupportedEndpointTypes)
+		mode, hasManualMode := getManualCreationModelMode(item.ModelName, manualCategories)
+		ok := hasManualMode
+		if !hasManualMode {
+			mode, ok = getCreationModelMode(item.ModelName, item.SupportedEndpointTypes)
+		}
 		if !ok || (requestedMode != "" && mode != requestedMode) {
 			continue
 		}
 		metadata := getCreationModelMetadata(item.ModelName)
+		metadataTags := metadata.Tags
+		if hasManualMode {
+			metadataTags = []string{mode}
+		}
 		description := strings.TrimSpace(item.Description)
 		if description == "" {
 			description = metadata.Description
@@ -167,7 +191,7 @@ func buildCreationModelCatalog(pricing []model.Pricing, vendors []model.PricingV
 			ID:                     item.ModelName,
 			Description:            description,
 			Icon:                   item.Icon,
-			Tags:                   mergeCreationModelTags(splitCreationModelTags(item.Tags), metadata.Tags),
+			Tags:                   mergeCreationModelTags(splitCreationModelTags(item.Tags), metadataTags),
 			VendorID:               item.VendorID,
 			SupportedEndpointTypes: item.SupportedEndpointTypes,
 		})
@@ -218,6 +242,56 @@ func buildCreationModelCatalog(pricing []model.Pricing, vendors []model.PricingV
 		Modes:   groups,
 		Vendors: catalogVendors,
 	}
+}
+
+func getCreationModelCategories() map[string]string {
+	common.OptionMapRWMutex.RLock()
+	raw := common.OptionMap[creationModelCategoriesOptionKey]
+	common.OptionMapRWMutex.RUnlock()
+	categories, _ := parseCreationModelCategories(raw)
+	return categories
+}
+
+func getManualCreationModelMode(modelName string, categories map[string]string) (string, bool) {
+	if len(categories) == 0 {
+		return "", false
+	}
+	mode, ok := categories[strings.ToLower(strings.TrimSpace(modelName))]
+	if !ok {
+		return "", false
+	}
+	return mode, true
+}
+
+func validateCreationModelCategories(raw string) error {
+	_, err := parseCreationModelCategories(raw)
+	return err
+}
+
+func parseCreationModelCategories(raw string) (map[string]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	var parsed map[string]string
+	if err := common.UnmarshalJsonStr(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("创作中心模型分类必须是 JSON 对象")
+	}
+
+	categories := make(map[string]string, len(parsed))
+	for modelName, mode := range parsed {
+		modelName = strings.ToLower(strings.TrimSpace(modelName))
+		mode, ok := normalizeCreationMode(mode)
+		if modelName == "" {
+			return nil, fmt.Errorf("创作中心模型分类包含空模型名")
+		}
+		if !ok || mode == "" {
+			return nil, fmt.Errorf("模型 %s 的分类必须是 chat、image 或 video", modelName)
+		}
+		categories[modelName] = mode
+	}
+	return categories, nil
 }
 
 func getCreationModelMode(modelName string, endpoints []constant.EndpointType) (string, bool) {

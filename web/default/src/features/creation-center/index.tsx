@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowRight,
@@ -31,7 +31,9 @@ import {
   MessageSquare,
   Plus,
   RefreshCw,
+  RotateCcw,
   Send,
+  Settings2,
   Sparkles,
   Timer,
   Trash2,
@@ -41,6 +43,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -52,6 +55,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { PublicLayout } from '@/components/layout'
@@ -59,6 +63,7 @@ import {
   getCreationCatalog,
   getCreationErrorMessage,
   getCreationVideoTask,
+  saveCreationModelCategories,
   submitCreationTask,
 } from './api'
 import {
@@ -82,6 +87,8 @@ import {
 import type {
   CreationMode,
   CreationModel,
+  CreationModelCategories,
+  CreationModelGroup,
   CreationResult,
   CreationView,
 } from './types'
@@ -91,7 +98,9 @@ const MODES: CreationMode[] = ['chat', 'image', 'video']
 export function CreationCenter() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { auth } = useAuthStore()
+  const isSuperAdmin = auth.user?.role === ROLE.SUPER_ADMIN
   const [mode, setMode] = useState<CreationMode>('chat')
   const [selectedByMode, setSelectedByMode] = useState<
     Partial<Record<CreationMode, string>>
@@ -100,6 +109,7 @@ export function CreationCenter() {
   const [prompt, setPrompt] = useState('')
   const [assets, setAssets] = useState<string[]>([])
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [categoryOpen, setCategoryOpen] = useState(false)
   const [sessionNumber, setSessionNumber] = useState(1)
   const [result, setResult] = useState<CreationResult>()
   const [historyItems, setHistoryItems] = useState<CreationHistoryItem[]>([])
@@ -126,6 +136,10 @@ export function CreationCenter() {
         ?.models ?? [],
     [catalogQuery.data?.data?.modes, mode]
   )
+  const categoryModels = useMemo(
+    () => getCreationCategoryRows(catalogQuery.data?.data?.modes ?? []),
+    [catalogQuery.data?.data?.modes]
+  )
   const selectedModel = useMemo(
     () =>
       models.find((model) => model.id === selectedByMode[mode]) ?? models[0],
@@ -148,6 +162,29 @@ export function CreationCenter() {
       ),
     [catalogQuery.data?.data?.modes]
   )
+  const saveCategoryMutation = useMutation({
+    mutationFn: (variables: {
+      categories: CreationModelCategories
+      reset?: boolean
+    }) => saveCreationModelCategories(variables.categories),
+    onSuccess: async (response, variables) => {
+      if (!response.success) {
+        toast.error(response.message || t('Unable to save categories.'))
+        return
+      }
+      toast.success(
+        variables.reset
+          ? t('Automatic categories restored.')
+          : t('Categories saved.')
+      )
+      setCategoryOpen(false)
+      setSelectedByMode({})
+      await queryClient.invalidateQueries({ queryKey: ['creation-models'] })
+    },
+    onError: () => {
+      toast.error(t('Unable to save categories.'))
+    },
+  })
 
   useEffect(() => {
     if (!models.length || selectedByMode[mode]) return
@@ -383,7 +420,9 @@ export function CreationCenter() {
     setPrompt(item.prompt)
     setResult(item.result)
     if (item.videoOptions) {
-      setVideoOptions(normalizeCreationVideoOptions(item.videoOptions, item.model))
+      setVideoOptions(
+        normalizeCreationVideoOptions(item.videoOptions, item.model)
+      )
     }
     setView('preview')
   }
@@ -407,6 +446,7 @@ export function CreationCenter() {
             modeCounts={modeCounts}
             loading={catalogQuery.isLoading}
             error={catalogQuery.isError}
+            canManageCategories={isSuperAdmin}
             onModeChange={selectMode}
             onModelChange={(model) => {
               setSelectedByMode((current) => ({
@@ -418,6 +458,7 @@ export function CreationCenter() {
             onHistory={() => setView('history')}
             onNewSession={startNewSession}
             onUpload={() => setUploadOpen(true)}
+            onManageCategories={() => setCategoryOpen(true)}
           />
 
           <section className='flex min-w-0 flex-col gap-4 p-3 md:p-5'>
@@ -464,6 +505,16 @@ export function CreationCenter() {
         onOpenChange={setUploadOpen}
         onFilesSelected={addFiles}
       />
+      <ModelCategoryDialog
+        open={categoryOpen}
+        models={categoryModels}
+        saving={saveCategoryMutation.isPending}
+        onOpenChange={setCategoryOpen}
+        onSave={(categories) => saveCategoryMutation.mutate({ categories })}
+        onReset={() =>
+          saveCategoryMutation.mutate({ categories: {}, reset: true })
+        }
+      />
     </PublicLayout>
   )
 }
@@ -475,11 +526,13 @@ type SidebarProps = {
   modeCounts: Record<CreationMode, number>
   loading: boolean
   error: boolean
+  canManageCategories: boolean
   onModeChange: (mode: CreationMode) => void
   onModelChange: (model: CreationModel) => void
   onHistory: () => void
   onNewSession: () => void
   onUpload: () => void
+  onManageCategories: () => void
 }
 
 function CreationSidebar(props: SidebarProps) {
@@ -540,8 +593,21 @@ function CreationSidebar(props: SidebarProps) {
         </button>
 
         <div>
-          <div className='text-muted-foreground mb-2 text-xs font-medium'>
-            {t('Available models')}
+          <div className='mb-2 flex items-center justify-between gap-2'>
+            <div className='text-muted-foreground text-xs font-medium'>
+              {t('Available models')}
+            </div>
+            {props.canManageCategories && (
+              <Button
+                variant='ghost'
+                size='xs'
+                className='h-6 px-1.5 text-[11px]'
+                onClick={props.onManageCategories}
+              >
+                <Settings2 className='size-3.5' />
+                {t('Manage categories')}
+              </Button>
+            )}
           </div>
           <div className='space-y-2'>
             {props.loading ? (
@@ -1258,6 +1324,159 @@ function ComposerOptionGroup(props: {
         ))}
       </div>
     </div>
+  )
+}
+
+type CreationCategoryRow = CreationModel & {
+  mode: CreationMode
+}
+
+function getCreationCategoryRows(groups: CreationModelGroup[]) {
+  const rows = new Map<string, CreationCategoryRow>()
+  for (const group of groups) {
+    for (const model of group.models) {
+      const key = model.id.toLowerCase()
+      if (rows.has(key)) continue
+      rows.set(key, { ...model, mode: group.mode })
+    }
+  }
+  return [...rows.values()].sort((a, b) => a.id.localeCompare(b.id))
+}
+
+function getCreationModeLabel(mode: CreationMode, t: (key: string) => string) {
+  switch (mode) {
+    case 'chat':
+      return t('Chat')
+    case 'image':
+      return t('Image')
+    case 'video':
+      return t('Video')
+  }
+}
+
+type ModelCategoryDialogProps = {
+  open: boolean
+  models: CreationCategoryRow[]
+  saving: boolean
+  onOpenChange: (open: boolean) => void
+  onSave: (categories: CreationModelCategories) => void
+  onReset: () => void
+}
+
+function ModelCategoryDialog(props: ModelCategoryDialogProps) {
+  const { t } = useTranslation()
+  const [draft, setDraft] = useState<CreationModelCategories>({})
+
+  useEffect(() => {
+    if (!props.open) return
+    setDraft(
+      Object.fromEntries(
+        props.models.map((model) => [model.id, model.mode])
+      ) as CreationModelCategories
+    )
+  }, [props.models, props.open])
+
+  const updateCategory = (modelId: string, mode: CreationMode) => {
+    setDraft((current) => ({ ...current, [modelId]: mode }))
+  }
+
+  const save = () => {
+    const categories = props.models.reduce<CreationModelCategories>(
+      (next, model) => {
+        next[model.id] = draft[model.id] ?? model.mode
+        return next
+      },
+      {}
+    )
+    props.onSave(categories)
+  }
+
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className='max-w-3xl'>
+        <DialogHeader>
+          <DialogTitle>{t('Creation model category management')}</DialogTitle>
+          <DialogDescription>
+            {t(
+              'Manually assign visible creation models to chat, image, or video filters.'
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className='rounded-lg border'>
+          <div className='bg-muted/40 grid grid-cols-[minmax(0,1fr)_8.5rem] gap-3 border-b px-3 py-2 text-xs font-medium'>
+            <span>{t('Model')}</span>
+            <span>{t('Category')}</span>
+          </div>
+          <div className='max-h-[min(28rem,60svh)] overflow-auto'>
+            {props.models.length === 0 ? (
+              <div className='text-muted-foreground px-3 py-8 text-center text-sm'>
+                {t('No creation models available.')}
+              </div>
+            ) : (
+              <div className='divide-y'>
+                {props.models.map((model) => (
+                  <div
+                    key={model.id}
+                    className='grid grid-cols-[minmax(0,1fr)_8.5rem] items-center gap-3 px-3 py-3'
+                  >
+                    <div className='min-w-0'>
+                      <div className='truncate text-sm font-medium'>
+                        {model.id}
+                      </div>
+                      <div className='text-muted-foreground mt-1 line-clamp-1 text-xs'>
+                        {model.description || t('Ready for creation tasks.')}
+                      </div>
+                    </div>
+                    <NativeSelect
+                      size='sm'
+                      className='w-full'
+                      aria-label={t('Category')}
+                      value={draft[model.id] ?? model.mode}
+                      disabled={props.saving}
+                      onChange={(event) =>
+                        updateCategory(
+                          model.id,
+                          event.target.value as CreationMode
+                        )
+                      }
+                    >
+                      {MODES.map((item) => (
+                        <NativeSelectOption key={item} value={item}>
+                          {getCreationModeLabel(item, t)}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className='sm:justify-between'>
+          <Button
+            variant='outline'
+            onClick={props.onReset}
+            disabled={props.saving}
+          >
+            <RotateCcw className='size-4' />
+            {t('Reset to auto')}
+          </Button>
+          <Button
+            onClick={save}
+            disabled={props.saving || props.models.length === 0}
+          >
+            {props.saving ? (
+              <RefreshCw className='size-4 animate-spin' />
+            ) : (
+              <Settings2 className='size-4' />
+            )}
+            {t('Save categories')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

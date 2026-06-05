@@ -44,6 +44,8 @@ export type CreationModelCatalog = {
   vendors: CreationVendor[]
 }
 
+export type CreationModelCategories = Partial<Record<string, CreationMode>>
+
 export type CreationCatalogResponse = {
   success: boolean
   message?: string
