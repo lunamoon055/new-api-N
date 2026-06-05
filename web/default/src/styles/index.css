@@ -540,68 +540,6 @@ For commercial licensing, please contact support@quantumnous.com
   contain-intrinsic-size: 0 80px;
 }
 
-/* Grainient-inspired home hero background */
-.ghlink-grainient-hero {
-  isolation: isolate;
-  background:
-    linear-gradient(115deg, #f1cdef 0%, #ffffff 38%, #f8e4f6 64%, #ffffff 100%);
-  color: #0f172a;
-}
-
-.ghlink-grainient-hero::before {
-  content: '';
-  position: absolute;
-  inset: -34%;
-  z-index: -2;
-  background:
-    conic-gradient(
-      from 118deg at 48% 44%,
-      rgba(241, 205, 239, 0.98),
-      rgba(255, 255, 255, 0.96) 18%,
-      rgba(218, 237, 255, 0.5) 31%,
-      rgba(241, 205, 239, 0.86) 48%,
-      rgba(255, 255, 255, 0.98) 68%,
-      rgba(232, 213, 246, 0.68) 84%,
-      rgba(241, 205, 239, 0.98)
-    );
-  filter: blur(34px) saturate(1.18);
-  transform: rotate(-8deg) scale(1.08);
-  animation: ghlink-grainient-flow 18s ease-in-out infinite alternate;
-}
-
-.ghlink-grainient-hero::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image:
-    repeating-radial-gradient(
-      circle at 18% 22%,
-      rgba(15, 23, 42, 0.08) 0 1px,
-      transparent 1px 3px
-    ),
-    repeating-linear-gradient(
-      115deg,
-      rgba(255, 255, 255, 0.28) 0 1px,
-      transparent 1px 3px
-    );
-  background-size:
-    180px 180px,
-    120px 120px;
-  mix-blend-mode: multiply;
-  opacity: 0.18;
-}
-
-@keyframes ghlink-grainient-flow {
-  from {
-    transform: rotate(-8deg) scale(1.08) translate3d(-2%, -1%, 0);
-  }
-  to {
-    transform: rotate(7deg) scale(1.16) translate3d(2%, 1%, 0);
-  }
-}
-
 /* ── Hero terminal demo animations ── */
 @keyframes terminal-demo-blink {
   0%,
@@ -639,7 +577,6 @@ For commercial licensing, please contact support@quantumnous.com
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ghlink-grainient-hero::before,
   .terminal-demo-blink,
   .terminal-demo-spin,
   .terminal-demo-pulse {

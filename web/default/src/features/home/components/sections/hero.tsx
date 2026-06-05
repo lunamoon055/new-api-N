@@ -16,60 +16,49 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Link } from '@tanstack/react-router'
-import { ArrowRight } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { Button } from '@/components/ui/button'
+import { Grainient } from '../grainient'
 
-interface HeroProps {
-  className?: string
-  isAuthenticated?: boolean
-}
-
-export function Hero(props: HeroProps) {
-  const { t } = useTranslation()
-
+export function Hero() {
   return (
-    <section className='ghlink-grainient-hero relative z-10 flex min-h-svh flex-col items-center justify-center overflow-hidden px-6 pt-28 pb-16 md:pt-32 md:pb-20'>
-      <div className='relative z-10 flex max-w-5xl flex-col items-center text-center'>
+    <section className='relative z-10 flex min-h-svh flex-col items-center justify-center overflow-hidden bg-[#5227ff] px-6 pt-24 pb-16 md:pt-28 md:pb-20'>
+      <div className='absolute inset-0 z-0'>
+        <Grainient
+          color1='#f1cdef'
+          color2='#5227FF'
+          color3='#ffffff'
+          timeSpeed={0.25}
+          colorBalance={0}
+          warpStrength={1}
+          warpFrequency={5}
+          warpSpeed={2}
+          warpAmplitude={50}
+          blendAngle={0}
+          blendSoftness={0.05}
+          rotationAmount={500}
+          noiseScale={2}
+          grainAmount={0.1}
+          grainScale={2}
+          grainAnimated={false}
+          contrast={1.5}
+          gamma={1}
+          saturation={1}
+          centerX={0}
+          centerY={0}
+          zoom={0.9}
+        />
+      </div>
+      <div className='absolute inset-0 z-10 bg-slate-950/20' />
+
+      <div className='relative z-20 flex max-w-4xl flex-col items-center text-center'>
         <h1
-          className='landing-animate-fade-up text-[clamp(3rem,9vw,7.5rem)] leading-[0.94] font-semibold tracking-normal text-slate-950'
+          className='landing-animate-fade-up text-[clamp(2.25rem,6vw,5.25rem)] leading-[1.03] font-semibold tracking-normal text-white drop-shadow-[0_18px_40px_rgba(15,23,42,0.35)]'
           style={{ animationDelay: '0ms' }}
         >
           <span className='block'>欢迎使用GHLINK API</span>
-          <span className='mt-4 block text-slate-900/85'>激发你的想象</span>
+          <span className='mt-3 block text-[clamp(1.75rem,4.6vw,4.25rem)] font-medium text-white/95 md:mt-4'>
+            尽情发挥你的想象力
+          </span>
         </h1>
-        <div
-          className='landing-animate-fade-up mt-10 flex flex-wrap items-center justify-center gap-3 opacity-0'
-          style={{ animationDelay: '120ms' }}
-        >
-          {props.isAuthenticated ? (
-            <Button
-              className='group h-11 rounded-full px-6 shadow-[0_14px_45px_-22px_rgba(15,23,42,0.8)]'
-              render={<Link to='/dashboard' />}
-            >
-              {t('Go to Dashboard')}
-              <ArrowRight className='ml-1 size-3.5 transition-transform duration-200 group-hover:translate-x-0.5' />
-            </Button>
-          ) : (
-            <>
-              <Button
-                className='group h-11 rounded-full px-6 shadow-[0_14px_45px_-22px_rgba(15,23,42,0.8)]'
-                render={<Link to='/sign-up' />}
-              >
-                {t('Get Started')}
-                <ArrowRight className='ml-1 size-3.5 transition-transform duration-200 group-hover:translate-x-0.5' />
-              </Button>
-              <Button
-                variant='outline'
-                className='h-11 rounded-full border-white/70 bg-white/55 px-6 text-slate-900 shadow-[0_14px_45px_-24px_rgba(15,23,42,0.75)] backdrop-blur-xl hover:bg-white/80'
-                render={<Link to='/pricing' />}
-              >
-                {t('View Pricing')}
-              </Button>
-            </>
-          )}
-        </div>
       </div>
     </section>
   )
