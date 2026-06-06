@@ -24,6 +24,7 @@ import {
   Bot,
   Clock3,
   FileImage,
+  FileText,
   FolderUp,
   History,
   Image,
@@ -66,6 +67,7 @@ import {
   getCreationErrorMessage,
   getCreationVideoTask,
   saveCreationModelCategories,
+  saveCreationModelDescriptions,
   submitCreationTask,
 } from './api'
 import {
@@ -92,6 +94,7 @@ import type {
   CreationModel,
   CreationModelCost,
   CreationModelCategories,
+  CreationModelDescriptions,
   CreationModelGroup,
   CreationResult,
   CreationView,
@@ -116,6 +119,7 @@ export function CreationCenter() {
   const [assets, setAssets] = useState<CreationAsset[]>([])
   const [uploadOpen, setUploadOpen] = useState(false)
   const [categoryOpen, setCategoryOpen] = useState(false)
+  const [descriptionOpen, setDescriptionOpen] = useState(false)
   const [sessionNumber, setSessionNumber] = useState(1)
   const [result, setResult] = useState<CreationResult>()
   const [historyItems, setHistoryItems] = useState<CreationHistoryItem[]>([])
@@ -189,6 +193,28 @@ export function CreationCenter() {
     },
     onError: () => {
       toast.error(t('Unable to save categories.'))
+    },
+  })
+  const saveDescriptionMutation = useMutation({
+    mutationFn: (variables: {
+      descriptions: CreationModelDescriptions
+      reset?: boolean
+    }) => saveCreationModelDescriptions(variables.descriptions),
+    onSuccess: async (response, variables) => {
+      if (!response.success) {
+        toast.error(response.message || t('Unable to save descriptions.'))
+        return
+      }
+      toast.success(
+        variables.reset
+          ? t('Automatic descriptions restored.')
+          : t('Descriptions saved.')
+      )
+      setDescriptionOpen(false)
+      await queryClient.invalidateQueries({ queryKey: ['creation-models'] })
+    },
+    onError: () => {
+      toast.error(t('Unable to save descriptions.'))
     },
   })
 
@@ -463,6 +489,7 @@ export function CreationCenter() {
             loading={catalogQuery.isLoading}
             error={catalogQuery.isError}
             canManageCategories={isSuperAdmin}
+            canManageDescriptions={isSuperAdmin}
             onModeChange={selectMode}
             onModelChange={(model) => {
               setSelectedByMode((current) => ({
@@ -475,6 +502,7 @@ export function CreationCenter() {
             onNewSession={startNewSession}
             onUpload={() => setUploadOpen(true)}
             onManageCategories={() => setCategoryOpen(true)}
+            onManageDescriptions={() => setDescriptionOpen(true)}
           />
 
           <section className='flex min-w-0 flex-col gap-4 p-3 md:p-5'>
@@ -533,6 +561,18 @@ export function CreationCenter() {
           saveCategoryMutation.mutate({ categories: {}, reset: true })
         }
       />
+      <ModelDescriptionDialog
+        open={descriptionOpen}
+        models={categoryModels}
+        saving={saveDescriptionMutation.isPending}
+        onOpenChange={setDescriptionOpen}
+        onSave={(descriptions) =>
+          saveDescriptionMutation.mutate({ descriptions })
+        }
+        onReset={() =>
+          saveDescriptionMutation.mutate({ descriptions: {}, reset: true })
+        }
+      />
     </PublicLayout>
   )
 }
@@ -545,12 +585,14 @@ type SidebarProps = {
   loading: boolean
   error: boolean
   canManageCategories: boolean
+  canManageDescriptions: boolean
   onModeChange: (mode: CreationMode) => void
   onModelChange: (model: CreationModel) => void
   onHistory: () => void
   onNewSession: () => void
   onUpload: () => void
   onManageCategories: () => void
+  onManageDescriptions: () => void
 }
 
 function CreationSidebar(props: SidebarProps) {
@@ -615,16 +657,31 @@ function CreationSidebar(props: SidebarProps) {
             <div className='text-muted-foreground text-xs font-medium'>
               {t('Available models')}
             </div>
-            {props.canManageCategories && (
-              <Button
-                variant='ghost'
-                size='xs'
-                className='h-6 px-1.5 text-[11px]'
-                onClick={props.onManageCategories}
-              >
-                <Settings2 className='size-3.5' />
-                {t('Manage categories')}
-              </Button>
+            {(props.canManageCategories || props.canManageDescriptions) && (
+              <div className='flex flex-wrap justify-end gap-1'>
+                {props.canManageCategories && (
+                  <Button
+                    variant='ghost'
+                    size='xs'
+                    className='h-6 px-1.5 text-[11px]'
+                    onClick={props.onManageCategories}
+                  >
+                    <Settings2 className='size-3.5' />
+                    {t('Manage categories')}
+                  </Button>
+                )}
+                {props.canManageDescriptions && (
+                  <Button
+                    variant='ghost'
+                    size='xs'
+                    className='h-6 px-1.5 text-[11px]'
+                    onClick={props.onManageDescriptions}
+                  >
+                    <FileText className='size-3.5' />
+                    {t('Manage descriptions')}
+                  </Button>
+                )}
+              </div>
             )}
           </div>
           <div className='space-y-2'>
@@ -1677,6 +1734,125 @@ function ModelCategoryDialog(props: ModelCategoryDialogProps) {
                 <Settings2 className='size-4' />
               )}
               {t('Save categories')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+type ModelDescriptionDialogProps = {
+  open: boolean
+  models: CreationCategoryRow[]
+  saving: boolean
+  onOpenChange: (open: boolean) => void
+  onSave: (descriptions: CreationModelDescriptions) => void
+  onReset: () => void
+}
+
+function ModelDescriptionDialog(props: ModelDescriptionDialogProps) {
+  const { t } = useTranslation()
+  const save = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    const descriptions = props.models.reduce<CreationModelDescriptions>(
+      (next, model) => {
+        const value = formData.get(model.id)
+        const description = typeof value === 'string' ? value.trim() : ''
+        if (description) {
+          next[model.id] = description
+        }
+        return next
+      },
+      {}
+    )
+    props.onSave(descriptions)
+  }
+
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className='max-w-4xl'>
+        <form onSubmit={save}>
+          <DialogHeader>
+            <DialogTitle>
+              {t('Creation model description management')}
+            </DialogTitle>
+            <DialogDescription>
+              {t(
+                'Manually write descriptions for visible creation models. Blank fields keep automatic descriptions.'
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='mt-4 rounded-lg border'>
+            <div className='bg-muted/40 grid grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] gap-3 border-b px-3 py-2 text-xs font-medium'>
+              <span>{t('Model')}</span>
+              <span>{t('Description')}</span>
+            </div>
+            <div className='max-h-[min(30rem,60svh)] overflow-auto'>
+              {props.models.length === 0 ? (
+                <div className='text-muted-foreground px-3 py-8 text-center text-sm'>
+                  {t('No creation models available.')}
+                </div>
+              ) : (
+                <div className='divide-y'>
+                  {props.models.map((model) => (
+                    <div
+                      key={model.id}
+                      className='grid grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] gap-3 px-3 py-3'
+                    >
+                      <div className='min-w-0'>
+                        <div className='truncate text-sm font-medium'>
+                          {model.id}
+                        </div>
+                        <div className='text-muted-foreground mt-1 flex flex-wrap gap-1 text-xs'>
+                          <Badge variant='secondary'>
+                            {getCreationModeLabel(model.mode, t)}
+                          </Badge>
+                          {model.manual_description && (
+                            <Badge variant='outline'>
+                              {t('Manual description')}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <Textarea
+                        name={model.id}
+                        defaultValue={model.manual_description ?? ''}
+                        placeholder={
+                          model.description || t('No description yet.')
+                        }
+                        rows={3}
+                        disabled={props.saving}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className='mt-4 sm:justify-between'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={props.onReset}
+              disabled={props.saving}
+            >
+              <RotateCcw className='size-4' />
+              {t('Reset to auto')}
+            </Button>
+            <Button
+              type='submit'
+              disabled={props.saving || props.models.length === 0}
+            >
+              {props.saving ? (
+                <RefreshCw className='size-4 animate-spin' />
+              ) : (
+                <FileText className='size-4' />
+              )}
+              {t('Save descriptions')}
             </Button>
           </DialogFooter>
         </form>

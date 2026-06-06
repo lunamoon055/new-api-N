@@ -94,13 +94,33 @@ func TestBuildCreationModelCatalogUsesManualCategories(t *testing.T) {
 	}, nil, "", map[string]string{
 		"ko3":       creationModeImage,
 		"video-2.0": creationModeVideo,
-	}, 1)
+	}, nil, 1)
 
 	require.Equal(t, []string{"chat-model"}, creationModelIDs(catalog.Modes[0].Models))
 	require.Equal(t, []string{"ko3"}, creationModelIDs(catalog.Modes[1].Models))
 	require.Equal(t, []string{"video-2.0"}, creationModelIDs(catalog.Modes[2].Models))
 	require.Contains(t, catalog.Modes[1].Models[0].Tags, creationModeImage)
 	require.Contains(t, catalog.Modes[2].Models[0].Tags, creationModeVideo)
+}
+
+func TestBuildCreationModelCatalogUsesManualDescriptions(t *testing.T) {
+	catalog := buildCreationModelCatalogWithCategories([]model.Pricing{
+		{
+			ModelName:              "gpt-5.4",
+			Description:            "pricing description",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
+		{
+			ModelName:              "custom-image",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeImageGeneration},
+		},
+	}, nil, "", nil, map[string]string{
+		"gpt-5.4":      "manual chat description",
+		"custom-image": "manual image description",
+	}, 1)
+
+	require.Equal(t, "manual chat description", catalog.Modes[0].Models[0].Description)
+	require.Equal(t, "manual image description", catalog.Modes[1].Models[0].Description)
 }
 
 func TestBuildCreationModelCatalogFiltersRequestedModeAndRedactsPricing(t *testing.T) {
@@ -222,6 +242,16 @@ func TestParseCreationModelCategoriesNormalizesAndValidates(t *testing.T) {
 	require.Equal(t, map[string]string{"ko3": creationModeImage}, categories)
 
 	_, err = parseCreationModelCategories(`{"ko3":"audio"}`)
+	require.Error(t, err)
+}
+
+func TestParseCreationModelDescriptionsNormalizesAndValidates(t *testing.T) {
+	descriptions, err := parseCreationModelDescriptions(`{" KO3 ":"  image model  ","blank":" "}`)
+
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"ko3": "image model"}, descriptions)
+
+	_, err = parseCreationModelDescriptions(`[]`)
 	require.Error(t, err)
 }
 

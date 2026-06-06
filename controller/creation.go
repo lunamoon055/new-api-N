@@ -23,7 +23,8 @@ const (
 	creationModeImage = "image"
 	creationModeVideo = "video"
 
-	creationModelCategoriesOptionKey = "CreationModelCategories"
+	creationModelCategoriesOptionKey   = "CreationModelCategories"
+	creationModelDescriptionsOptionKey = "CreationModelDescriptions"
 
 	creationCostModeDynamic    = "dynamic"
 	creationCostModePerRequest = "per_request"
@@ -166,6 +167,7 @@ func buildCreationModelCatalog(pricing []model.Pricing, vendors []model.PricingV
 		vendors,
 		requestedMode,
 		getCreationModelCategories(),
+		getCreationModelDescriptions(),
 		costGroupRatio,
 	)
 }
@@ -175,6 +177,7 @@ func buildCreationModelCatalogWithCategories(
 	vendors []model.PricingVendor,
 	requestedMode string,
 	manualCategories map[string]string,
+	manualDescriptions map[string]string,
 	groupRatio float64,
 ) dto.CreationModelCatalog {
 	modelsByMode := make(map[string][]dto.CreationModel, len(creationModeOrder))
@@ -194,7 +197,11 @@ func buildCreationModelCatalogWithCategories(
 		if hasManualMode {
 			metadataTags = []string{mode}
 		}
+		manualDescription, hasManualDescription := getManualCreationModelDescription(item.ModelName, manualDescriptions)
 		description := strings.TrimSpace(item.Description)
+		if hasManualDescription {
+			description = manualDescription
+		}
 		if description == "" {
 			description = metadata.Description
 		}
@@ -202,6 +209,7 @@ func buildCreationModelCatalogWithCategories(
 		modelsByMode[mode] = append(modelsByMode[mode], dto.CreationModel{
 			ID:                     item.ModelName,
 			Description:            description,
+			ManualDescription:      manualDescription,
 			Icon:                   item.Icon,
 			Tags:                   mergeCreationModelTags(splitCreationModelTags(item.Tags), metadataTags),
 			VendorID:               item.VendorID,
@@ -307,6 +315,14 @@ func getCreationModelCategories() map[string]string {
 	return categories
 }
 
+func getCreationModelDescriptions() map[string]string {
+	common.OptionMapRWMutex.RLock()
+	raw := common.OptionMap[creationModelDescriptionsOptionKey]
+	common.OptionMapRWMutex.RUnlock()
+	descriptions, _ := parseCreationModelDescriptions(raw)
+	return descriptions
+}
+
 func getManualCreationModelMode(modelName string, categories map[string]string) (string, bool) {
 	if len(categories) == 0 {
 		return "", false
@@ -316,6 +332,17 @@ func getManualCreationModelMode(modelName string, categories map[string]string) 
 		return "", false
 	}
 	return mode, true
+}
+
+func getManualCreationModelDescription(modelName string, descriptions map[string]string) (string, bool) {
+	if len(descriptions) == 0 {
+		return "", false
+	}
+	description, ok := descriptions[strings.ToLower(strings.TrimSpace(modelName))]
+	if !ok {
+		return "", false
+	}
+	return description, true
 }
 
 func validateCreationModelCategories(raw string) error {
@@ -347,6 +374,37 @@ func parseCreationModelCategories(raw string) (map[string]string, error) {
 		categories[modelName] = mode
 	}
 	return categories, nil
+}
+
+func validateCreationModelDescriptions(raw string) error {
+	_, err := parseCreationModelDescriptions(raw)
+	return err
+}
+
+func parseCreationModelDescriptions(raw string) (map[string]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	var parsed map[string]string
+	if err := common.UnmarshalJsonStr(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("创作中心模型描述必须是 JSON 对象")
+	}
+
+	descriptions := make(map[string]string, len(parsed))
+	for modelName, description := range parsed {
+		modelName = strings.ToLower(strings.TrimSpace(modelName))
+		description = strings.TrimSpace(description)
+		if modelName == "" {
+			return nil, fmt.Errorf("创作中心模型描述包含空模型名")
+		}
+		if description == "" {
+			continue
+		}
+		descriptions[modelName] = description
+	}
+	return descriptions, nil
 }
 
 func getCreationModelMode(modelName string, endpoints []constant.EndpointType) (string, bool) {

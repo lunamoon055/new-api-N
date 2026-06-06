@@ -21,6 +21,7 @@ export type CreationMode = 'chat' | 'image' | 'video'
 export type CreationModel = {
   id: string
   description?: string
+  manual_description?: string
   icon?: string
   tags?: string[]
   vendor_id?: number
@@ -55,6 +56,8 @@ export type CreationModelCatalog = {
 }
 
 export type CreationModelCategories = Partial<Record<string, CreationMode>>
+
+export type CreationModelDescriptions = Partial<Record<string, string>>
 
 export type CreationAsset = {
   id: string

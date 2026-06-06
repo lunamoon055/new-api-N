@@ -5,6 +5,7 @@ import "github.com/QuantumNous/new-api/constant"
 type CreationModel struct {
 	ID                     string                  `json:"id"`
 	Description            string                  `json:"description,omitempty"`
+	ManualDescription      string                  `json:"manual_description,omitempty"`
 	Icon                   string                  `json:"icon,omitempty"`
 	Tags                   []string                `json:"tags,omitempty"`
 	VendorID               int                     `json:"vendor_id,omitempty"`
