@@ -16,15 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
-import { sendChatCompletion } from '../api'
+import { sendChatCompletion, sendPlaygroundMediaGeneration } from '../api'
 import { MESSAGE_STATUS, ERROR_MESSAGES } from '../constants'
 import {
   buildChatCompletionPayload,
+  getPlaygroundMediaEndpoint,
   updateAssistantMessageWithError,
   updateLastAssistantMessage,
   processStreamingContent,
+  updateCurrentVersionContent,
   finalizeMessage,
 } from '../lib'
 import type { Message, PlaygroundConfig, ParameterEnabled } from '../types'
@@ -45,6 +47,7 @@ export function useChatHandler({
   onMessageUpdate,
 }: UseChatHandlerOptions) {
   const { sendStreamRequest, stopStream, isStreaming } = useStreamRequest()
+  const [isMediaGenerating, setIsMediaGenerating] = useState(false)
 
   // Handle stream update
   const handleStreamUpdate = useCallback(
@@ -174,16 +177,65 @@ export function useChatHandler({
     [config, parameterEnabled, onMessageUpdate, handleStreamError]
   )
 
+  // Send media request for image/video models exposed in the playground.
+  const sendMediaGeneration = useCallback(
+    async (messages: Message[]) => {
+      setIsMediaGenerating(true)
+      try {
+        const content = await sendPlaygroundMediaGeneration(
+          config.model,
+          messages
+        )
+        onMessageUpdate((prev) =>
+          updateLastAssistantMessage(prev, (message) => ({
+            ...finalizeMessage(updateCurrentVersionContent(message, content)),
+            status: MESSAGE_STATUS.COMPLETE,
+          }))
+        )
+      } catch (error: unknown) {
+        const err = error as {
+          response?: {
+            data?: {
+              message?: string
+              error?: { message?: string; code?: string }
+            }
+          }
+          message?: string
+        }
+        handleStreamError(
+          err?.response?.data?.error?.message ||
+            err?.response?.data?.message ||
+            err?.message ||
+            ERROR_MESSAGES.API_REQUEST_ERROR,
+          err?.response?.data?.error?.code || undefined
+        )
+      } finally {
+        setIsMediaGenerating(false)
+      }
+    },
+    [config.model, onMessageUpdate, handleStreamError]
+  )
+
   // Send chat request (stream or non-stream based on config)
   const sendChat = useCallback(
     (messages: Message[]) => {
+      if (getPlaygroundMediaEndpoint(config.model)) {
+        sendMediaGeneration(messages)
+        return
+      }
       if (config.stream) {
         sendStreamingChat(messages)
       } else {
         sendNonStreamingChat(messages)
       }
     },
-    [config.stream, sendStreamingChat, sendNonStreamingChat]
+    [
+      config.model,
+      config.stream,
+      sendMediaGeneration,
+      sendStreamingChat,
+      sendNonStreamingChat,
+    ]
   )
 
   // Stop generation
@@ -202,6 +254,6 @@ export function useChatHandler({
   return {
     sendChat,
     stopGeneration,
-    isGenerating: isStreaming,
+    isGenerating: isStreaming || isMediaGenerating,
   }
 }

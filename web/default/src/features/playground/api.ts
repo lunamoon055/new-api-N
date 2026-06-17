@@ -18,9 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 import { API_ENDPOINTS } from './constants'
+import {
+  buildPlaygroundMediaRequest,
+  formatPlaygroundMediaResult,
+  getPlaygroundMediaEndpoint,
+} from './lib/media-routing'
 import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
+  Message,
   ModelOption,
   GroupOption,
 } from './types'
@@ -35,6 +41,25 @@ export async function sendChatCompletion(
     skipErrorHandler: true,
   } as Record<string, unknown>)
   return res.data
+}
+
+/**
+ * Send image/video generation request for media-only playground models.
+ */
+export async function sendPlaygroundMediaGeneration(
+  model: string,
+  messages: Message[]
+): Promise<string> {
+  const endpoint = getPlaygroundMediaEndpoint(model)
+  const payload = buildPlaygroundMediaRequest(model, messages)
+  if (!endpoint || !payload) {
+    throw new Error('Current model does not support media generation')
+  }
+
+  const res = await api.post(endpoint, payload, {
+    skipErrorHandler: true,
+  } as Record<string, unknown>)
+  return formatPlaygroundMediaResult(res.data, model)
 }
 
 /**
