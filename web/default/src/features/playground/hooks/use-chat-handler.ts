@@ -182,13 +182,24 @@ export function useChatHandler({
     async (messages: Message[]) => {
       setIsMediaGenerating(true)
       try {
-        const content = await sendPlaygroundMediaGeneration(
+        const result = await sendPlaygroundMediaGeneration(
           config.model,
           messages
         )
         onMessageUpdate((prev) =>
           updateLastAssistantMessage(prev, (message) => ({
-            ...finalizeMessage(updateCurrentVersionContent(message, content)),
+            ...finalizeMessage(
+              updateCurrentVersionContent(message, result.content)
+            ),
+            media: result.mediaUrl
+              ? {
+                  type: result.mode,
+                  url: result.mediaUrl,
+                  taskId: result.taskId,
+                  status: result.status,
+                  title: config.model,
+                }
+              : undefined,
             status: MESSAGE_STATUS.COMPLETE,
           }))
         )

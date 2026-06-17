@@ -174,6 +174,10 @@ export function PlaygroundChat({
                                 (message.from === MESSAGE_ROLES.USER ||
                                   !message.isReasoningStreaming) &&
                                 !!version.content
+                              const showMediaPreview =
+                                isAssistant &&
+                                !message.isReasoningStreaming &&
+                                !!message.media?.url
 
                               // Extract visible content (remove <think> tags for assistant messages)
                               const displayContent = isAssistant
@@ -248,16 +252,24 @@ export function PlaygroundChat({
                                       {actions}
                                     </>
                                   ) : (
-                                    showMessageContent && (
+                                    (showMessageContent ||
+                                      showMediaPreview) && (
                                       <>
-                                        <MessageContent
-                                          variant='flat'
-                                          className={cn(
-                                            getMessageContentStyles()
-                                          )}
-                                        >
-                                          <Response>{displayContent}</Response>
-                                        </MessageContent>
+                                        {showMessageContent && (
+                                          <MessageContent
+                                            variant='flat'
+                                            className={cn(
+                                              getMessageContentStyles()
+                                            )}
+                                          >
+                                            <Response>{displayContent}</Response>
+                                          </MessageContent>
+                                        )}
+                                        {message.media && (
+                                          <PlaygroundMediaPreview
+                                            media={message.media}
+                                          />
+                                        )}
                                         {actions}
                                       </>
                                     )
@@ -287,5 +299,36 @@ export function PlaygroundChat({
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>
+  )
+}
+
+function PlaygroundMediaPreview({
+  media,
+}: {
+  media: NonNullable<MessageType['media']>
+}) {
+  if (media.type === 'image') {
+    return (
+      <div className='mt-3 overflow-hidden rounded-lg border bg-black/5 dark:bg-white/5'>
+        <img
+          src={media.url}
+          alt={media.title || 'Generated image'}
+          className='max-h-[70vh] w-full object-contain'
+          loading='lazy'
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className='mt-3 overflow-hidden rounded-lg border bg-black'>
+      <video
+        controls
+        playsInline
+        preload='metadata'
+        src={media.url}
+        className='max-h-[70vh] w-full bg-black object-contain'
+      />
+    </div>
   )
 }

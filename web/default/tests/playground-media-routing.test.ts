@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { describe, expect, it } from 'bun:test'
 import {
   buildPlaygroundMediaRequest,
+  parsePlaygroundMediaResult,
   getPlaygroundModelMode,
   getPlaygroundMediaEndpoint,
 } from '../src/features/playground/lib/media-routing'
@@ -87,5 +88,26 @@ describe('playground media routing', () => {
       prompt: 'make a short API website video',
       n: 1,
     })
+  })
+
+  it('extracts completed video previews from async task responses', () => {
+    const result = parsePlaygroundMediaResult(
+      {
+        data: {
+          task_id: 'task_video_123',
+          status: 'completed',
+          result_url: 'https://example.com/video.mp4',
+        },
+      },
+      'video-2.0'
+    )
+
+    expect(result).toMatchObject({
+      mode: 'video',
+      taskId: 'task_video_123',
+      status: 'completed',
+      mediaUrl: '/v1/videos/task_video_123/content',
+    })
+    expect(result.content).toContain('视频生成完成')
   })
 })

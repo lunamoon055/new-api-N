@@ -30,6 +30,7 @@ export interface Message {
   key: string
   from: MessageRole
   versions: MessageVersion[]
+  media?: MessageMedia
   sources?: { href: string; title: string }[]
   reasoning?: {
     content: string
@@ -40,6 +41,14 @@ export interface Message {
   isContentComplete?: boolean
   status?: MessageStatus
   errorCode?: string | null
+}
+
+export interface MessageMedia {
+  type: 'image' | 'video'
+  url: string
+  title?: string
+  taskId?: string
+  status?: string
 }
 
 // API payload types

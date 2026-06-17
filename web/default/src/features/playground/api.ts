@@ -20,8 +20,10 @@ import { api } from '@/lib/api'
 import { API_ENDPOINTS } from './constants'
 import {
   buildPlaygroundMediaRequest,
-  formatPlaygroundMediaResult,
   getPlaygroundMediaEndpoint,
+  getPlaygroundModelMode,
+  parsePlaygroundMediaResult,
+  type PlaygroundMediaResult,
 } from './lib/media-routing'
 import type {
   ChatCompletionRequest,
@@ -49,7 +51,7 @@ export async function sendChatCompletion(
 export async function sendPlaygroundMediaGeneration(
   model: string,
   messages: Message[]
-): Promise<string> {
+): Promise<PlaygroundMediaResult> {
   const endpoint = getPlaygroundMediaEndpoint(model)
   const payload = buildPlaygroundMediaRequest(model, messages)
   if (!endpoint || !payload) {
@@ -59,7 +61,58 @@ export async function sendPlaygroundMediaGeneration(
   const res = await api.post(endpoint, payload, {
     skipErrorHandler: true,
   } as Record<string, unknown>)
-  return formatPlaygroundMediaResult(res.data, model)
+  const initialResult = parsePlaygroundMediaResult(res.data, model)
+
+  if (
+    getPlaygroundModelMode(model) !== 'video' ||
+    !initialResult.taskId ||
+    initialResult.mediaUrl
+  ) {
+    return initialResult
+  }
+
+  return pollPlaygroundVideoTask(model, initialResult)
+}
+
+async function pollPlaygroundVideoTask(
+  model: string,
+  initialResult: PlaygroundMediaResult
+): Promise<PlaygroundMediaResult> {
+  const taskId = initialResult.taskId
+  if (!taskId) return initialResult
+
+  let latestResult = initialResult
+  for (let attempt = 0; attempt < 45; attempt += 1) {
+    await delay(4000)
+    const response = await api.get(
+      `/api/creation/video/async-generations/${encodeURIComponent(taskId)}`,
+      { skipErrorHandler: true, disableDuplicate: true } as Record<
+        string,
+        unknown
+      >
+    )
+    latestResult = parsePlaygroundMediaResult(response.data, model)
+    if (latestResult.mediaUrl || isTerminalVideoStatus(latestResult.status)) {
+      return latestResult
+    }
+  }
+
+  return latestResult
+}
+
+function isTerminalVideoStatus(status: string | undefined) {
+  switch (status?.toLowerCase()) {
+    case 'failed':
+    case 'cancelled':
+    case 'canceled':
+      return true
+    default:
+      return false
+  }
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 /**

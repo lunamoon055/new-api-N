@@ -42,6 +42,14 @@ export type PlaygroundMediaRequest =
   | PlaygroundImageRequest
   | PlaygroundVideoRequest
 
+export type PlaygroundMediaResult = {
+  mode: Exclude<PlaygroundMediaMode, 'chat'>
+  content: string
+  taskId?: string
+  status?: string
+  mediaUrl?: string
+}
+
 const VIDEO_MODEL_NAMES = new Set([
   'video-2.0',
   'video-2.0-fast',
@@ -122,6 +130,13 @@ export function formatPlaygroundMediaResult(
   raw: unknown,
   model: string
 ): string {
+  return parsePlaygroundMediaResult(raw, model).content
+}
+
+export function parsePlaygroundMediaResult(
+  raw: unknown,
+  model: string
+): PlaygroundMediaResult {
   const error = extractErrorMessage(raw)
   if (error) {
     throw new Error(error)
@@ -129,15 +144,19 @@ export function formatPlaygroundMediaResult(
 
   const mode = getPlaygroundModelMode(model)
   if (mode === 'image') {
-    return formatImageResult(raw, model)
+    return parseImageResult(raw, model)
   }
   if (mode === 'video') {
-    return formatVideoResult(raw, model)
+    return parseVideoResult(raw, model)
   }
-  return ''
+  throw new Error('Current model does not support media generation')
 }
 
-function formatImageResult(raw: unknown, model: string) {
+export function buildPlaygroundVideoProxyUrl(taskId: string) {
+  return `/v1/videos/${encodeURIComponent(taskId)}/content`
+}
+
+function parseImageResult(raw: unknown, model: string): PlaygroundMediaResult {
   const data = asRecord(raw)
   const firstImage = Array.isArray(data.data) ? asRecord(data.data[0]) : {}
   const b64 = getString(firstImage, 'b64_json')
@@ -151,15 +170,20 @@ function formatImageResult(raw: unknown, model: string) {
   if (id) lines.push(`结果 ID：${id}`)
   if (revisedPrompt) lines.push(`优化提示词：${revisedPrompt}`)
   if (imageUrl) {
-    lines.push('', `![${model} 生成图](${imageUrl})`)
+    lines.push('图片预览已生成。')
   } else {
     lines.push('接口已返回结果，但暂未解析到图片地址。')
   }
 
-  return lines.join('\n')
+  return {
+    mode: 'image',
+    content: lines.join('\n'),
+    taskId: id,
+    mediaUrl: imageUrl,
+  }
 }
 
-function formatVideoResult(raw: unknown, model: string) {
+function parseVideoResult(raw: unknown, model: string): PlaygroundMediaResult {
   const data = asRecord(raw)
   const envelopeData = asRecord(data.data)
   const source = Object.keys(envelopeData).length ? envelopeData : data
@@ -170,7 +194,7 @@ function formatVideoResult(raw: unknown, model: string) {
     getString(source, 'id') ||
     getString(data, 'id')
   const status = getString(source, 'status') || getString(data, 'status')
-  const videoUrl =
+  const resultVideoUrl =
     getString(source, 'url') ||
     getString(source, 'result_url') ||
     getString(source, 'output_url') ||
@@ -179,17 +203,36 @@ function formatVideoResult(raw: unknown, model: string) {
     getString(metadata, 'result_url') ||
     getString(metadata, 'output_url') ||
     getString(metadata, 'video_url')
+  const videoUrl = taskId ? buildPlaygroundVideoProxyUrl(taskId) : resultVideoUrl
 
-  const lines = [`视频任务已提交。`, `模型：${model}`]
+  const completed = isCompletedVideoStatus(status) && !!videoUrl
+  const lines = [completed ? `视频生成完成。` : `视频任务已提交。`, `模型：${model}`]
   if (taskId) lines.push(`任务 ID：${taskId}`)
   if (status) lines.push(`当前状态：${status}`)
-  if (videoUrl) {
-    lines.push(`视频地址：${videoUrl}`)
+  if (completed) {
+    lines.push('视频预览已生成。')
   } else {
     lines.push('生成完成后，可在任务日志中查看结果。')
   }
 
-  return lines.join('\n')
+  return {
+    mode: 'video',
+    content: lines.join('\n'),
+    taskId,
+    status,
+    mediaUrl: completed ? videoUrl : undefined,
+  }
+}
+
+function isCompletedVideoStatus(status: string | undefined) {
+  switch (status?.toLowerCase()) {
+    case 'completed':
+    case 'succeeded':
+    case 'success':
+      return true
+    default:
+      return false
+  }
 }
 
 function getLatestUserPrompt(messages: Message[]) {
