@@ -39,7 +39,16 @@ const assistantMessage = (content: string): Message => ({
 
 describe('playground media routing', () => {
   it('routes linksky video models away from chat completions', () => {
-    for (const model of ['video-2.0', 'video-2.0-fast', 'sora2', 'ko3']) {
+    for (const model of [
+      'video-2.0',
+      'video-2.0-fast',
+      'sora2',
+      'ko3',
+      'veo31',
+      'veo31-fast',
+      'veo31-ref',
+      'grok-imagine-video',
+    ]) {
       expect(getPlaygroundModelMode(model)).toBe('video')
       expect(getPlaygroundMediaEndpoint(model)).toBe(
         '/api/creation/video/async-generations'

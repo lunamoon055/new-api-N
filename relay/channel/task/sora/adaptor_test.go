@@ -17,6 +17,10 @@ func TestModelListIncludesLinkskySora2(t *testing.T) {
 	require.Contains(t, ModelList, "video-2.0")
 	require.Contains(t, ModelList, "video-2.0-fast")
 	require.Contains(t, ModelList, "ko3")
+	require.Contains(t, ModelList, "veo31")
+	require.Contains(t, ModelList, "veo31-fast")
+	require.Contains(t, ModelList, "veo31-ref")
+	require.Contains(t, ModelList, "grok-imagine-video")
 }
 
 func TestBuildRequestURLUsesAsyncGenerationsForLinkskyDocPath(t *testing.T) {
@@ -74,7 +78,15 @@ func TestFetchTaskUsesAsyncGenerationsForKlingV3(t *testing.T) {
 }
 
 func TestFetchTaskUsesAsyncGenerationsForLinkskyVideoModels(t *testing.T) {
-	for _, modelName := range []string{"video-2.0", "video-2.0-fast", "ko3"} {
+	for _, modelName := range []string{
+		"video-2.0",
+		"video-2.0-fast",
+		"ko3",
+		"veo31",
+		"veo31-fast",
+		"veo31-ref",
+		"grok-imagine-video",
+	} {
 		t.Run(modelName, func(t *testing.T) {
 			var gotPath string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

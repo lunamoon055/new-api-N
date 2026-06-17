@@ -8,6 +8,10 @@ var ModelList = []string{
 	"video-2.0-fast",
 	"ko3",
 	"kling-v3",
+	"veo31",
+	"veo31-fast",
+	"veo31-ref",
+	"grok-imagine-video",
 }
 
 var ChannelName = "sora"

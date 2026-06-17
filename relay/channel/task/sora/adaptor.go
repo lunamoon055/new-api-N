@@ -75,7 +75,8 @@ type TaskAdaptor struct {
 
 func isAsyncGenerationsModel(modelName string) bool {
 	switch strings.ToLower(strings.TrimSpace(modelName)) {
-	case "sora2", "kling-v3", "video-2.0", "video-2.0-fast", "ko3":
+	case "sora2", "kling-v3", "video-2.0", "video-2.0-fast", "ko3",
+		"veo31", "veo31-fast", "veo31-ref", "grok-imagine-video":
 		return true
 	default:
 		return false

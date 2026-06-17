@@ -8,7 +8,17 @@ import (
 )
 
 func TestIsAsyncGenerationsVideoTaskIncludesLinkskyModels(t *testing.T) {
-	for _, modelName := range []string{"sora2", "kling-v3", "video-2.0", "video-2.0-fast", "ko3"} {
+	for _, modelName := range []string{
+		"sora2",
+		"kling-v3",
+		"video-2.0",
+		"video-2.0-fast",
+		"ko3",
+		"veo31",
+		"veo31-fast",
+		"veo31-ref",
+		"grok-imagine-video",
+	} {
 		t.Run(modelName, func(t *testing.T) {
 			task := &model.Task{
 				Properties: model.Properties{
