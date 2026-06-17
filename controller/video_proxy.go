@@ -194,7 +194,7 @@ func isAsyncGenerationsVideoTask(task *model.Task) bool {
 		task.Properties.OriginModelName,
 	} {
 		switch strings.ToLower(strings.TrimSpace(modelName)) {
-		case "sora2", "kling-v3":
+		case "sora2", "kling-v3", "video-2.0", "video-2.0-fast", "ko3":
 			return true
 		}
 	}

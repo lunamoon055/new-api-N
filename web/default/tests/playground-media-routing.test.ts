@@ -90,7 +90,7 @@ describe('playground media routing', () => {
     })
   })
 
-  it('extracts completed video previews from async task responses', () => {
+  it('uses direct completed video urls when async task responses include one', () => {
     const result = parsePlaygroundMediaResult(
       {
         data: {
@@ -106,8 +106,43 @@ describe('playground media routing', () => {
       mode: 'video',
       taskId: 'task_video_123',
       status: 'completed',
-      mediaUrl: '/v1/videos/task_video_123/content',
+      mediaUrl: 'https://example.com/video.mp4',
     })
     expect(result.content).toContain('视频生成完成')
+  })
+
+  it('falls back to the authenticated video proxy when completed tasks have no direct url', () => {
+    const result = parsePlaygroundMediaResult(
+      {
+        data: {
+          task_id: 'task_video_123',
+          status: 'completed',
+        },
+      },
+      'video-2.0'
+    )
+
+    expect(result).toMatchObject({
+      mode: 'video',
+      taskId: 'task_video_123',
+      status: 'completed',
+      mediaUrl: '/v1/videos/task_video_123/content',
+    })
+  })
+
+  it('uses the authenticated video proxy for upstream api content urls', () => {
+    const result = parsePlaygroundMediaResult(
+      {
+        data: {
+          task_id: 'task_video_123',
+          status: 'completed',
+          result_url:
+            'https://api.example.com/v1/video/async-generations/upstream_123/content',
+        },
+      },
+      'video-2.0'
+    )
+
+    expect(result.mediaUrl).toBe('/v1/videos/task_video_123/content')
   })
 })

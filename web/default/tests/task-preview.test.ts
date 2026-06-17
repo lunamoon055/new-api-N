@@ -35,11 +35,32 @@ function createTaskLog(overrides: Partial<TaskLog>): TaskLog {
 }
 
 describe('task log video preview helpers', () => {
-  it('uses the authenticated video proxy for successful video tasks', () => {
+  it('uses a direct result url for successful video tasks when one is available', () => {
     expect(
       getTaskLogVideoPreviewUrl(
         createTaskLog({
           result_url: 'https://example.com/upstream-video.mp4',
+        })
+      )
+    ).toBe('https://example.com/upstream-video.mp4')
+  })
+
+  it('uses the authenticated video proxy when successful video tasks only have a task id', () => {
+    expect(
+      getTaskLogVideoPreviewUrl(
+        createTaskLog({
+          result_url: '',
+        })
+      )
+    ).toBe('/v1/videos/task_video_123/content')
+  })
+
+  it('uses the authenticated video proxy for upstream api content urls', () => {
+    expect(
+      getTaskLogVideoPreviewUrl(
+        createTaskLog({
+          result_url:
+            'https://api.example.com/v1/video/async-generations/upstream_123/content',
         })
       )
     ).toBe('/v1/videos/task_video_123/content')

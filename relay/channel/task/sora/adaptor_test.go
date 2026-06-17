@@ -14,6 +14,9 @@ import (
 
 func TestModelListIncludesLinkskySora2(t *testing.T) {
 	require.Contains(t, ModelList, "sora2")
+	require.Contains(t, ModelList, "video-2.0")
+	require.Contains(t, ModelList, "video-2.0-fast")
+	require.Contains(t, ModelList, "ko3")
 }
 
 func TestBuildRequestURLUsesAsyncGenerationsForLinkskyDocPath(t *testing.T) {
@@ -68,6 +71,31 @@ func TestFetchTaskUsesAsyncGenerationsForKlingV3(t *testing.T) {
 	require.NotNil(t, resp)
 	_ = resp.Body.Close()
 	require.Equal(t, "/v1/video/async-generations/task_upstream", gotPath)
+}
+
+func TestFetchTaskUsesAsyncGenerationsForLinkskyVideoModels(t *testing.T) {
+	for _, modelName := range []string{"video-2.0", "video-2.0-fast", "ko3"} {
+		t.Run(modelName, func(t *testing.T) {
+			var gotPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"id":"task_upstream","status":"completed"}`))
+			}))
+			t.Cleanup(server.Close)
+
+			adaptor := &TaskAdaptor{}
+			resp, err := adaptor.FetchTask(server.URL, "sk-test", map[string]any{
+				"task_id": "task_upstream",
+				"model":   modelName,
+			}, "")
+
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			_ = resp.Body.Close()
+			require.Equal(t, "/v1/video/async-generations/task_upstream", gotPath)
+		})
+	}
 }
 
 func TestParseTaskResultTreatsRunningAsInProgress(t *testing.T) {

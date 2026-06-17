@@ -38,18 +38,33 @@ export function getTaskLogVideoPreviewUrl(
     return null
   }
 
-  if (log.task_id) {
-    return `/v1/videos/${encodeURIComponent(log.task_id)}/content`
+  const resultUrl = normalizePreviewUrl(log.result_url)
+  if (resultUrl && !isVideoApiContentUrl(resultUrl)) {
+    return resultUrl
   }
 
-  return normalizePreviewUrl(log.result_url)
+  return log.task_id
+    ? `/v1/videos/${encodeURIComponent(log.task_id)}/content`
+    : resultUrl
 }
 
 function normalizePreviewUrl(url: string | undefined) {
   const trimmed = url?.trim()
   if (!trimmed) return null
-  if (trimmed.startsWith('http') || trimmed.startsWith('data:')) {
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('/')
+  ) {
     return trimmed
   }
   return null
+}
+
+function isVideoApiContentUrl(url: string) {
+  return (
+    url.includes('/v1/videos/') ||
+    url.includes('/v1/video/async-generations/')
+  )
 }

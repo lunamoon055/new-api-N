@@ -156,6 +156,28 @@ export function buildPlaygroundVideoProxyUrl(taskId: string) {
   return `/v1/videos/${encodeURIComponent(taskId)}/content`
 }
 
+function normalizePreviewUrl(url: string | undefined) {
+  const trimmed = url?.trim()
+  if (!trimmed) return undefined
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('/')
+  ) {
+    return trimmed
+  }
+  return undefined
+}
+
+function isVideoApiContentUrl(url: string | undefined) {
+  if (!url) return false
+  return (
+    url.includes('/v1/videos/') ||
+    url.includes('/v1/video/async-generations/')
+  )
+}
+
 function parseImageResult(raw: unknown, model: string): PlaygroundMediaResult {
   const data = asRecord(raw)
   const firstImage = Array.isArray(data.data) ? asRecord(data.data[0]) : {}
@@ -203,7 +225,13 @@ function parseVideoResult(raw: unknown, model: string): PlaygroundMediaResult {
     getString(metadata, 'result_url') ||
     getString(metadata, 'output_url') ||
     getString(metadata, 'video_url')
-  const videoUrl = taskId ? buildPlaygroundVideoProxyUrl(taskId) : resultVideoUrl
+  const normalizedResultUrl = normalizePreviewUrl(resultVideoUrl)
+  const videoUrl =
+    normalizedResultUrl && !isVideoApiContentUrl(normalizedResultUrl)
+      ? normalizedResultUrl
+      : taskId
+        ? buildPlaygroundVideoProxyUrl(taskId)
+        : normalizedResultUrl
 
   const completed = isCompletedVideoStatus(status) && !!videoUrl
   const lines = [completed ? `视频生成完成。` : `视频任务已提交。`, `模型：${model}`]
