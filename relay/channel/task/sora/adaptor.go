@@ -110,7 +110,14 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if getTaskAction(info) == constant.TaskActionRemix {
 		return validateRemixRequest(c)
 	}
-	return relaycommon.ValidateMultipartDirect(c, info)
+	if taskErr := relaycommon.ValidateMultipartDirect(c, info); taskErr != nil {
+		return taskErr
+	}
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+	}
+	return validateVideo2JSONRequest(c, req.Model)
 }
 
 // EstimateBilling 根据用户请求的 seconds 和 size 计算 OtherRatios。
