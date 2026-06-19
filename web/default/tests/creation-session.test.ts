@@ -19,11 +19,17 @@ For commercial licensing, please contact support@quantumnous.com
 import { describe, expect, it } from 'bun:test'
 import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
+  EMPTY_CREATION_VIDEO_REFERENCES,
   formatCreationCountdown,
   getCreationDurationOptions,
+  getCreationResolutionOptions,
   getCreationTimedOut,
+  getCreationVideoCapabilities,
+  getCreationVideoOptionsError,
+  getCreationVideoReferenceError,
   getCreationVideoRequestOptions,
   loadCreationHistory,
+  normalizeCreationVideoReferences,
   saveCreationHistory,
   upsertCreationHistoryItem,
   type CreationHistoryStorage,
@@ -88,6 +94,116 @@ describe('creation center session helpers', () => {
         'sora-2'
       ).seconds
     ).toBe('4')
+  })
+
+  it('uses documented Video2 capabilities and payload fields', () => {
+    expect(
+      getCreationDurationOptions('video-2.0').map((item) => item.value)
+    ).toEqual(Array.from({ length: 12 }, (_, index) => String(index + 4)))
+    expect(getCreationResolutionOptions('video-2.0')).toEqual([
+      {
+        value: '720p',
+        label: '720p',
+        size: '720x1280',
+        estimateMultiplier: 1,
+      },
+    ])
+    expect(getCreationVideoCapabilities('video-2.0')?.aspectRatios).toEqual([
+      '9:16',
+      '16:9',
+      '1:1',
+    ])
+    expect(
+      getCreationVideoRequestOptions(
+        { resolution: '720p', duration: '15', aspectRatio: '1:1' },
+        'video-2.0'
+      )
+    ).toMatchObject({
+      duration: 15,
+      aspect_ratio: '1:1',
+      resolution: '720p',
+      async: true,
+    })
+  })
+
+  it('normalizes references per Video2 model', () => {
+    const references = {
+      imageUrls: ['https://cdn.example/a.png'],
+      startImageUrl: 'https://cdn.example/start.png',
+      endImageUrl: 'https://cdn.example/end.png',
+      videoUrls: ['https://cdn.example/a.mp4'],
+      audioUrl: 'https://cdn.example/a.mp3',
+    }
+
+    expect(normalizeCreationVideoReferences(references, 'video-2.0')).toEqual({
+      ...EMPTY_CREATION_VIDEO_REFERENCES,
+      imageUrls: ['https://cdn.example/a.png'],
+    })
+    expect(
+      normalizeCreationVideoReferences(references, 'video-2.0-fast')
+    ).toEqual(references)
+  })
+
+  it('validates Video2 option bounds and remote references', () => {
+    expect(
+      getCreationVideoOptionsError(
+        { resolution: '720p', duration: '16', aspectRatio: '9:16' },
+        'video-2.0'
+      )
+    ).toBe('Duration must be between 4 and 15 seconds.')
+    expect(
+      getCreationVideoReferenceError('video-2.0-fast', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        audioUrl: 'file:///tmp/a.mp3',
+      })
+    ).toBe('Reference URL must use HTTP or HTTPS.')
+    expect(
+      getCreationVideoReferenceError('video-2.0', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        imageUrls: Array.from(
+          { length: 5 },
+          (_, index) => `https://cdn.example/${index}.png`
+        ),
+      })
+    ).toBe('Video2 accepts at most 4 image references.')
+  })
+
+  it('maps Video2 Fast references to documented singular and array fields', () => {
+    expect(
+      getCreationVideoRequestOptions(
+        { resolution: '720p', duration: '8', aspectRatio: '16:9' },
+        'video-2.0-fast',
+        {
+          imageUrls: [
+            'https://cdn.example/a.png',
+            'https://cdn.example/b.png',
+          ],
+          startImageUrl: 'https://cdn.example/start.png',
+          endImageUrl: 'https://cdn.example/end.png',
+          videoUrls: [
+            'https://cdn.example/a.mp4',
+            'https://cdn.example/b.mp4',
+          ],
+          audioUrl: 'https://cdn.example/a.mp3',
+        }
+      )
+    ).toMatchObject({
+      duration: 8,
+      aspect_ratio: '16:9',
+      resolution: '720p',
+      async: true,
+      image_urls: [
+        'https://cdn.example/a.png',
+        'https://cdn.example/b.png',
+      ],
+      start_image_url: 'https://cdn.example/start.png',
+      end_image_url: 'https://cdn.example/end.png',
+      video_reference: [
+        { url: 'https://cdn.example/a.mp4' },
+        { url: 'https://cdn.example/b.mp4' },
+      ],
+      audio_url: 'https://cdn.example/a.mp3',
+    })
   })
 
   it('keeps the latest history item first and updates duplicate tasks', () => {

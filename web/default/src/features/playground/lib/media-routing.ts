@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
   getCreationVideoRequestOptions,
+  type CreationVideoRequestOptions,
 } from '../../creation-center/session'
 import { API_ENDPOINTS, MESSAGE_ROLES } from '../constants'
 import type { Message } from '../types'
@@ -31,12 +32,14 @@ export type PlaygroundImageRequest = {
   n: number
 }
 
+type WithoutEstimate<T> = T extends { estimateSeconds: number }
+  ? Omit<T, 'estimateSeconds'>
+  : never
+
 export type PlaygroundVideoRequest = {
   model: string
   prompt: string
-  seconds: string
-  size: string
-}
+} & WithoutEstimate<CreationVideoRequestOptions>
 
 export type PlaygroundMediaRequest =
   | PlaygroundImageRequest
@@ -118,11 +121,11 @@ export function buildPlaygroundMediaRequest(
     DEFAULT_CREATION_VIDEO_OPTIONS,
     model
   )
+  const { estimateSeconds: _estimateSeconds, ...videoPayload } = videoOptions
   return {
     model,
     prompt,
-    seconds: videoOptions.seconds,
-    size: videoOptions.size,
+    ...videoPayload,
   }
 }
 

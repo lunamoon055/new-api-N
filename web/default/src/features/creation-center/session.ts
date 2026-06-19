@@ -16,21 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { CreationVideoOptions } from './video-options'
 import type { CreationAsset, CreationMode, CreationResult } from './types'
 
-export type CreationResolution = '1080p' | '2k' | '4k'
-export type CreationDuration = '4' | '5' | '8' | '10' | '12' | '15'
-
-export type CreationVideoOptions = {
-  resolution: CreationResolution
-  duration: CreationDuration
-}
-
-export type CreationVideoRequestOptions = {
-  seconds: string
-  size: string
-  estimateSeconds: number
-}
+export * from './video-options'
 
 export type CreationHistoryItem = {
   id: string
@@ -49,99 +38,6 @@ export type CreationHistoryStorage = Pick<
 >
 
 export const CREATION_HISTORY_LIMIT = 20
-
-export const CREATION_RESOLUTION_OPTIONS: Array<{
-  value: CreationResolution
-  label: string
-  size: string
-  estimateMultiplier: number
-}> = [
-  { value: '1080p', label: '1080', size: '1920x1080', estimateMultiplier: 1 },
-  { value: '2k', label: '2K', size: '2560x1440', estimateMultiplier: 1.35 },
-  { value: '4k', label: '4K', size: '3840x2160', estimateMultiplier: 1.75 },
-]
-
-export const CREATION_DURATION_OPTIONS: Array<{
-  value: CreationDuration
-  label: string
-  seconds: string
-  estimateSeconds: number
-}> = [
-  { value: '5', label: '5s', seconds: '5', estimateSeconds: 90 },
-  { value: '10', label: '10s', seconds: '10', estimateSeconds: 150 },
-  { value: '15', label: '15s', seconds: '15', estimateSeconds: 210 },
-]
-
-export const SORA2_CREATION_DURATION_OPTIONS: Array<{
-  value: CreationDuration
-  label: string
-  seconds: string
-  estimateSeconds: number
-}> = [
-  { value: '4', label: '4s', seconds: '4', estimateSeconds: 75 },
-  { value: '8', label: '8s', seconds: '8', estimateSeconds: 135 },
-  { value: '12', label: '12s', seconds: '12', estimateSeconds: 195 },
-]
-
-export const DEFAULT_CREATION_VIDEO_OPTIONS: CreationVideoOptions = {
-  resolution: '1080p',
-  duration: '5',
-}
-
-const SORA2_VIDEO_SIZE = '720x1280'
-
-function isSora2Model(modelId?: string) {
-  const normalized = modelId?.trim().toLowerCase()
-  return normalized === 'sora2' || normalized === 'sora-2'
-}
-
-export function getCreationDurationOptions(modelId?: string) {
-  return isSora2Model(modelId)
-    ? SORA2_CREATION_DURATION_OPTIONS
-    : CREATION_DURATION_OPTIONS
-}
-
-export function normalizeCreationVideoOptions(
-  options: CreationVideoOptions,
-  modelId?: string
-): CreationVideoOptions {
-  const resolution =
-    CREATION_RESOLUTION_OPTIONS.find(
-      (item) => item.value === options.resolution
-    ) ?? CREATION_RESOLUTION_OPTIONS[0]
-  const durations = getCreationDurationOptions(modelId)
-  const duration =
-    durations.find((item) => item.value === options.duration) ?? durations[0]
-
-  return {
-    resolution: resolution.value,
-    duration: duration.value,
-  }
-}
-
-export function getCreationVideoRequestOptions(
-  options: CreationVideoOptions,
-  modelId?: string
-): CreationVideoRequestOptions {
-  const normalizedOptions = normalizeCreationVideoOptions(options, modelId)
-  const resolution =
-    CREATION_RESOLUTION_OPTIONS.find(
-      (item) => item.value === normalizedOptions.resolution
-    ) ?? CREATION_RESOLUTION_OPTIONS[0]
-  const duration =
-    getCreationDurationOptions(modelId).find(
-      (item) => item.value === normalizedOptions.duration
-    ) ?? getCreationDurationOptions(modelId)[0]
-
-  return {
-    seconds: duration.seconds,
-    size: isSora2Model(modelId) ? SORA2_VIDEO_SIZE : resolution.size,
-    estimateSeconds: Math.ceil(
-      duration.estimateSeconds *
-        (isSora2Model(modelId) ? 1 : resolution.estimateMultiplier)
-    ),
-  }
-}
 
 export function getCreationHistoryStorageKey(userId?: number | null) {
   return `creation-center-history:${userId ?? 'guest'}`

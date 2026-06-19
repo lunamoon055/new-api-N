@@ -21,6 +21,7 @@ import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
   composeCreationPrompt,
   getCreationVideoRequestOptions,
+  type CreationVideoReferences,
   type CreationVideoOptions,
 } from './session'
 import type {
@@ -75,6 +76,7 @@ export async function submitCreationTask(params: {
   prompt: string
   assets?: CreationAsset[]
   videoOptions?: CreationVideoOptions
+  videoReferences?: CreationVideoReferences
 }): Promise<CreationResult> {
   const promptWithAssets = composeCreationPrompt(
     params.prompt,
@@ -113,15 +115,16 @@ export async function submitCreationTask(params: {
 
   const videoOptions = getCreationVideoRequestOptions(
     params.videoOptions ?? DEFAULT_CREATION_VIDEO_OPTIONS,
-    params.model.id
+    params.model.id,
+    params.videoReferences
   )
+  const { estimateSeconds: _estimateSeconds, ...videoPayload } = videoOptions
   const response = await api.post(
     '/api/creation/video/async-generations',
     {
       model: params.model.id,
       prompt: promptWithAssets,
-      seconds: videoOptions.seconds,
-      size: videoOptions.size,
+      ...videoPayload,
     },
     { skipErrorHandler: true } as Record<string, unknown>
   )

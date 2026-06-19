@@ -82,8 +82,10 @@ describe('playground media routing', () => {
     expect(buildPlaygroundMediaRequest('video-2.0', messages)).toEqual({
       model: 'video-2.0',
       prompt: 'make a short API website video',
-      seconds: '5',
-      size: '1920x1080',
+      duration: 4,
+      aspect_ratio: '9:16',
+      resolution: '720p',
+      async: true,
     })
 
     expect(buildPlaygroundMediaRequest('sora2', messages)).toEqual({
@@ -98,6 +100,13 @@ describe('playground media routing', () => {
       prompt: 'make a short API website video',
       seconds: '4',
       size: '720x1280',
+    })
+
+    expect(buildPlaygroundMediaRequest('kling-v3', messages)).toEqual({
+      model: 'kling-v3',
+      prompt: 'make a short API website video',
+      seconds: '5',
+      size: '1920x1080',
     })
 
     expect(buildPlaygroundMediaRequest('gpt-image2', messages)).toEqual({
