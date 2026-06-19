@@ -79,6 +79,7 @@ const createModelPricingSchema = (t: (key: string) => string) =>
     imageRatio: z.string().optional(),
     audioRatio: z.string().optional(),
     audioCompletionRatio: z.string().optional(),
+    videoBillingMode: z.enum(['dynamic', 'fixed']).optional(),
   })
 
 type ModelPricingFormValues = z.infer<
@@ -86,6 +87,7 @@ type ModelPricingFormValues = z.infer<
 >
 
 type PricingMode = 'per-token' | 'per-request' | 'tiered_expr'
+type VideoBillingMode = 'dynamic' | 'fixed'
 type LaneKey =
   | 'completion'
   | 'cache'
@@ -107,6 +109,7 @@ export type ModelRatioData = {
   billingMode?: PricingMode
   billingExpr?: string
   requestRuleExpr?: string
+  videoBillingMode?: VideoBillingMode
 }
 
 type ModelPricingSheetProps = {
@@ -211,6 +214,10 @@ function hasValue(value: unknown): boolean {
   )
 }
 
+function normalizeVideoBillingMode(value: unknown): VideoBillingMode {
+  return value === 'fixed' ? 'fixed' : 'dynamic'
+}
+
 function toNumberOrNull(value: unknown): number | null {
   if (!hasValue(value) && value !== 0) return null
   const num = Number(value)
@@ -287,6 +294,7 @@ function buildPreviewRows(
   mode: PricingMode,
   billingExpr: string,
   requestRuleExpr: string,
+  videoBillingMode: VideoBillingMode,
   promptPrice: string,
   lanePrices: Record<LaneKey, string>,
   laneEnabled: Record<LaneKey, boolean>,
@@ -311,6 +319,11 @@ function buildPreviewRows(
         key: 'price',
         label: 'ModelPrice',
         value: values.price || t('Empty'),
+      },
+      {
+        key: 'videoBillingMode',
+        label: 'billing_setting.video_billing_mode',
+        value: videoBillingMode,
       },
     ]
   }
@@ -439,6 +452,7 @@ export function ModelPricingEditorPanel({
       imageRatio: '',
       audioRatio: '',
       audioCompletionRatio: '',
+      videoBillingMode: 'dynamic',
     },
   })
 
@@ -456,6 +470,7 @@ export function ModelPricingEditorPanel({
         imageRatio: editData.imageRatio || '',
         audioRatio: editData.audioRatio || '',
         audioCompletionRatio: editData.audioCompletionRatio || '',
+        videoBillingMode: normalizeVideoBillingMode(editData.videoBillingMode),
       })
       setPricingMode(
         editData.billingMode === 'tiered_expr'
@@ -477,6 +492,7 @@ export function ModelPricingEditorPanel({
         imageRatio: '',
         audioRatio: '',
         audioCompletionRatio: '',
+        videoBillingMode: 'dynamic',
       })
       setPricingMode('per-token')
       setBillingExpr('')
@@ -610,6 +626,9 @@ export function ModelPricingEditorPanel({
   }
 
   const watchedValues = form.watch()
+  const currentVideoBillingMode = normalizeVideoBillingMode(
+    watchedValues.videoBillingMode
+  )
   const previewRows = useMemo(
     () =>
       buildPreviewRows(
@@ -617,6 +636,7 @@ export function ModelPricingEditorPanel({
         pricingMode,
         billingExpr,
         requestRuleExpr,
+        currentVideoBillingMode,
         promptPrice,
         lanePrices,
         laneEnabled,
@@ -630,6 +650,7 @@ export function ModelPricingEditorPanel({
       promptPrice,
       requestRuleExpr,
       t,
+      currentVideoBillingMode,
       watchedValues,
     ]
   )
@@ -715,6 +736,10 @@ export function ModelPricingEditorPanel({
       imageRatio: values.imageRatio || '',
       audioRatio: values.audioRatio || '',
       audioCompletionRatio: values.audioCompletionRatio || '',
+      videoBillingMode:
+        pricingMode === 'per-request'
+          ? normalizeVideoBillingMode(values.videoBillingMode)
+          : 'dynamic',
     }
 
     if (pricingMode === 'tiered_expr') {
@@ -884,6 +909,48 @@ export function ModelPricingEditorPanel({
                         <FormMessage />
                       </FormItem>
                     )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='videoBillingMode'
+                    render={({ field }) => {
+                      const value = normalizeVideoBillingMode(field.value)
+                      return (
+                        <FormItem>
+                          <FormLabel>{t('Video billing mode')}</FormLabel>
+                          <FormControl>
+                            <Tabs
+                              value={value}
+                              onValueChange={(nextValue) =>
+                                field.onChange(
+                                  normalizeVideoBillingMode(nextValue)
+                                )
+                              }
+                            >
+                              <TabsList className='grid w-full grid-cols-2'>
+                                <TabsTrigger value='dynamic'>
+                                  {t('By duration/spec')}
+                                </TabsTrigger>
+                                <TabsTrigger value='fixed'>
+                                  {t('Fixed per request')}
+                                </TabsTrigger>
+                              </TabsList>
+                            </Tabs>
+                          </FormControl>
+                          <FormDescription>
+                            {value === 'fixed'
+                              ? t(
+                                  'Only charge the fixed price and do not apply seconds or resolution multipliers.'
+                                )
+                              : t(
+                                  'Continue applying seconds, size, or other media multipliers returned by the API.'
+                                )}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )
+                    }}
                   />
                 </TabsContent>
 

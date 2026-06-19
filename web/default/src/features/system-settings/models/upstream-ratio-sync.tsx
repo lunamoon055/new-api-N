@@ -71,6 +71,7 @@ type UpstreamRatioSyncProps = {
     AudioCompletionRatio: string
     'billing_setting.billing_mode': string
     'billing_setting.billing_expr': string
+    'billing_setting.video_billing_mode': string
   }
 }
 
@@ -350,6 +351,9 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
       'billing_setting.billing_expr': parseJsonRecord<string>(
         modelRatios['billing_setting.billing_expr']
       ),
+      'billing_setting.video_billing_mode': parseJsonRecord<string>(
+        modelRatios['billing_setting.video_billing_mode']
+      ),
     }
   }, [modelRatios])
 
@@ -389,6 +393,9 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         },
         'billing_setting.billing_expr': {
           ...currentRatios['billing_setting.billing_expr'],
+        },
+        'billing_setting.video_billing_mode': {
+          ...currentRatios['billing_setting.video_billing_mode'],
         },
       }
 
