@@ -46,6 +46,7 @@ type ModelFormValues = {
   ExposeRatioEnabled: boolean
   BillingMode: string
   BillingExpr: string
+  VideoBillingMode: string
 }
 
 type ModelRatioFormProps = {
@@ -112,10 +113,12 @@ export const ModelRatioForm = memo(function ModelRatioForm({
               audioCompletionRatio={form.watch('AudioCompletionRatio')}
               billingMode={form.watch('BillingMode')}
               billingExpr={form.watch('BillingExpr')}
+              videoBillingMode={form.watch('VideoBillingMode')}
               onChange={(field, value) => {
                 const fieldMap: Record<string, keyof ModelFormValues> = {
                   'billing_setting.billing_mode': 'BillingMode',
                   'billing_setting.billing_expr': 'BillingExpr',
+                  'billing_setting.video_billing_mode': 'VideoBillingMode',
                 }
                 const formField =
                   fieldMap[field] || (field as keyof ModelFormValues)
