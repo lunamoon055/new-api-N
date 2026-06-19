@@ -252,13 +252,13 @@ function cleanURLs(values: string[]) {
 }
 
 export function normalizeCreationVideoReferences(
-  references: CreationVideoReferences,
+  references?: Partial<CreationVideoReferences>,
   modelId?: string
 ): CreationVideoReferences {
   const capability = getCreationVideoCapabilities(modelId)
   if (!capability) return emptyCreationVideoReferences()
 
-  const imageUrls = cleanURLs(references.imageUrls)
+  const imageUrls = cleanURLs(references?.imageUrls ?? [])
   if (capability.referenceMode === 'images') {
     return {
       ...emptyCreationVideoReferences(),
@@ -268,10 +268,10 @@ export function normalizeCreationVideoReferences(
 
   return {
     imageUrls,
-    startImageUrl: references.startImageUrl.trim(),
-    endImageUrl: references.endImageUrl.trim(),
-    videoUrls: cleanURLs(references.videoUrls),
-    audioUrl: references.audioUrl.trim(),
+    startImageUrl: references?.startImageUrl?.trim() ?? '',
+    endImageUrl: references?.endImageUrl?.trim() ?? '',
+    videoUrls: cleanURLs(references?.videoUrls ?? []),
+    audioUrl: references?.audioUrl?.trim() ?? '',
   }
 }
 
@@ -324,9 +324,8 @@ export function getCreationVideoRequestOptions(
   const normalizedOptions = normalizeCreationVideoOptions(options, modelId)
   const durationOptions = getCreationDurationOptions(modelId)
   const duration =
-    durationOptions.find(
-      (item) => item.value === normalizedOptions.duration
-    ) ?? durationOptions[0]
+    durationOptions.find((item) => item.value === normalizedOptions.duration) ??
+    durationOptions[0]
   const capability = getCreationVideoCapabilities(modelId)
 
   if (!capability) {

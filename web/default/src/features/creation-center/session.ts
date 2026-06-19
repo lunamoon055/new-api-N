@@ -16,8 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { CreationVideoOptions } from './video-options'
 import type { CreationAsset, CreationMode, CreationResult } from './types'
+import type {
+  CreationVideoOptions,
+  CreationVideoReferences,
+} from './video-options'
 
 export * from './video-options'
 
@@ -30,6 +33,7 @@ export type CreationHistoryItem = {
   assets?: CreationAsset[]
   result: CreationResult
   videoOptions?: CreationVideoOptions
+  videoReferences?: CreationVideoReferences
 }
 
 export type CreationHistoryStorage = Pick<

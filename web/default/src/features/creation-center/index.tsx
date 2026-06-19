@@ -58,9 +58,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { PublicLayout } from '@/components/layout'
 import {
   getCreationCatalog,
@@ -71,22 +75,30 @@ import {
   submitCreationTask,
 } from './api'
 import {
-  CREATION_RESOLUTION_OPTIONS,
   DEFAULT_CREATION_VIDEO_OPTIONS,
+  EMPTY_CREATION_VIDEO_REFERENCES,
   formatCreationCountdown,
   getCreationCountdownSeconds,
   getCreationDurationOptions,
   getCreationHistoryStorageKey,
+  getCreationResolutionOptions,
   getCreationTimedOut,
+  getCreationVideoCapabilities,
+  getCreationVideoOptionsError,
+  getCreationVideoReferenceError,
   getCreationVideoRequestOptions,
   loadCreationHistory,
   normalizeCreationVideoOptions,
+  normalizeCreationVideoReferences,
   saveCreationHistory,
   upsertCreationHistoryItem,
+  type CreationAspectRatio,
   type CreationDuration,
   type CreationHistoryItem,
   type CreationResolution,
+  type CreationVideoCapability,
   type CreationVideoOptions,
+  type CreationVideoReferences,
 } from './session'
 import type {
   CreationAsset,
@@ -99,6 +111,7 @@ import type {
   CreationResult,
   CreationView,
 } from './types'
+import { VideoReferenceFields } from './video-reference-fields'
 
 const MODES: CreationMode[] = ['chat', 'image', 'video']
 const MAX_TEXT_ASSET_CHARS = 8000
@@ -126,6 +139,12 @@ export function CreationCenter() {
   const [videoOptions, setVideoOptions] = useState<CreationVideoOptions>(
     DEFAULT_CREATION_VIDEO_OPTIONS
   )
+  const [videoReferences, setVideoReferences] =
+    useState<CreationVideoReferences>({
+      ...EMPTY_CREATION_VIDEO_REFERENCES,
+      imageUrls: [],
+      videoUrls: [],
+    })
   const [previewNow, setPreviewNow] = useState(Date.now())
   const [submitting, setSubmitting] = useState(false)
   const [refreshingTask, setRefreshingTask] = useState(false)
@@ -157,6 +176,14 @@ export function CreationCenter() {
   )
   const durationOptions = useMemo(
     () => getCreationDurationOptions(selectedModel?.id),
+    [selectedModel?.id]
+  )
+  const resolutionOptions = useMemo(
+    () => getCreationResolutionOptions(selectedModel?.id),
+    [selectedModel?.id]
+  )
+  const videoCapabilities = useMemo(
+    () => getCreationVideoCapabilities(selectedModel?.id),
     [selectedModel?.id]
   )
   const modeCounts = useMemo(
@@ -257,7 +284,17 @@ export function CreationCenter() {
         selectedModel?.id
       )
       return normalized.duration === current.duration &&
-        normalized.resolution === current.resolution
+        normalized.resolution === current.resolution &&
+        normalized.aspectRatio === current.aspectRatio
+        ? current
+        : normalized
+    })
+    setVideoReferences((current) => {
+      const normalized = normalizeCreationVideoReferences(
+        current,
+        selectedModel?.id
+      )
+      return JSON.stringify(normalized) === JSON.stringify(current)
         ? current
         : normalized
     })
@@ -309,6 +346,11 @@ export function CreationCenter() {
   const startNewSession = () => {
     setPrompt('')
     setAssets([])
+    setVideoReferences({
+      ...EMPTY_CREATION_VIDEO_REFERENCES,
+      imageUrls: [],
+      videoUrls: [],
+    })
     setView('preview')
     setResult(undefined)
     setSessionNumber((current) => current + 1)
@@ -345,17 +387,43 @@ export function CreationCenter() {
       toast.error(t('Write a prompt before submitting.'))
       return
     }
+    if (mode === 'video') {
+      const optionError = getCreationVideoOptionsError(
+        videoOptions,
+        selectedModel.id
+      )
+      if (optionError) {
+        toast.error(t(optionError))
+        return
+      }
+      const referenceError = getCreationVideoReferenceError(
+        selectedModel.id,
+        videoReferences
+      )
+      if (referenceError) {
+        toast.error(t(referenceError))
+        return
+      }
+    }
 
     setSubmitting(true)
     setView('preview')
     const createdAt = Date.now()
     const videoRequestOptions =
       mode === 'video'
-        ? getCreationVideoRequestOptions(videoOptions, selectedModel.id)
+        ? getCreationVideoRequestOptions(
+            videoOptions,
+            selectedModel.id,
+            videoReferences
+          )
         : undefined
     const normalizedVideoOptions =
       mode === 'video'
         ? normalizeCreationVideoOptions(videoOptions, selectedModel.id)
+        : undefined
+    const normalizedVideoReferences =
+      mode === 'video'
+        ? normalizeCreationVideoReferences(videoReferences, selectedModel.id)
         : undefined
     try {
       const nextResult = await submitCreationTask({
@@ -364,6 +432,7 @@ export function CreationCenter() {
         prompt: trimmedPrompt,
         assets,
         videoOptions: normalizedVideoOptions,
+        videoReferences: normalizedVideoReferences,
       })
       const enrichedResult: CreationResult = {
         ...nextResult,
@@ -382,6 +451,7 @@ export function CreationCenter() {
         assets: getCreationAssetSnapshots(assets),
         result: enrichedResult,
         videoOptions: normalizedVideoOptions,
+        videoReferences: normalizedVideoReferences,
       })
       if (nextResult.status === 'failed') {
         toast.error(nextResult.error || t('Creation task failed.'))
@@ -412,6 +482,7 @@ export function CreationCenter() {
         assets: getCreationAssetSnapshots(assets),
         result: failedResult,
         videoOptions: normalizedVideoOptions,
+        videoReferences: normalizedVideoReferences,
       })
       toast.error(message)
     } finally {
@@ -460,6 +531,15 @@ export function CreationCenter() {
     }))
     setPrompt(item.prompt)
     setAssets(normalizeStoredCreationAssets(item.assets))
+    setVideoReferences(
+      item.videoReferences
+        ? normalizeCreationVideoReferences(item.videoReferences, item.model)
+        : {
+            ...EMPTY_CREATION_VIDEO_REFERENCES,
+            imageUrls: [],
+            videoUrls: [],
+          }
+    )
     setResult(item.result)
     if (item.videoOptions) {
       setVideoOptions(
@@ -533,11 +613,15 @@ export function CreationCenter() {
               mode={mode}
               model={selectedModel}
               videoOptions={videoOptions}
+              videoReferences={videoReferences}
+              videoCapabilities={videoCapabilities}
+              resolutionOptions={resolutionOptions}
               durationOptions={durationOptions}
               submitting={submitting}
               sessionNumber={sessionNumber}
               onPromptChange={setPrompt}
               onVideoOptionsChange={setVideoOptions}
+              onVideoReferencesChange={setVideoReferences}
               onUpload={() => setUploadOpen(true)}
               onRemoveAsset={removeAsset}
               onSubmit={submit}
@@ -1445,11 +1529,15 @@ type ComposerProps = {
   mode: CreationMode
   model?: CreationModel
   videoOptions: CreationVideoOptions
+  videoReferences: CreationVideoReferences
+  videoCapabilities?: CreationVideoCapability
+  resolutionOptions: ReturnType<typeof getCreationResolutionOptions>
   durationOptions: ReturnType<typeof getCreationDurationOptions>
   submitting: boolean
   sessionNumber: number
   onPromptChange: (value: string) => void
   onVideoOptionsChange: (options: CreationVideoOptions) => void
+  onVideoReferencesChange: (references: CreationVideoReferences) => void
   onUpload: () => void
   onRemoveAsset: (index: number) => void
   onSubmit: () => void
@@ -1527,30 +1615,83 @@ function Composer(props: ComposerProps) {
         </Button>
       </div>
       {props.mode === 'video' && (
-        <div className='border-border/70 mt-3 grid gap-3 border-t pt-3 sm:grid-cols-2'>
-          <ComposerOptionGroup
-            label={t('Resolution')}
-            value={props.videoOptions.resolution}
-            options={CREATION_RESOLUTION_OPTIONS}
-            onChange={(value) =>
-              props.onVideoOptionsChange({
-                ...props.videoOptions,
-                resolution: value as CreationResolution,
-              })
-            }
-          />
-          <ComposerOptionGroup
-            label={t('Video duration')}
-            value={props.videoOptions.duration}
-            options={props.durationOptions}
-            onChange={(value) =>
-              props.onVideoOptionsChange({
-                ...props.videoOptions,
-                duration: value as CreationDuration,
-              })
-            }
-          />
-        </div>
+        <>
+          <Separator className='my-3' />
+          <div
+            className={cn(
+              'grid gap-3',
+              props.videoCapabilities ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+            )}
+          >
+            {!!props.videoCapabilities?.aspectRatios.length && (
+              <ComposerOptionGroup
+                label={t('Aspect ratio')}
+                value={props.videoOptions.aspectRatio ?? '9:16'}
+                options={props.videoCapabilities.aspectRatios.map((value) => ({
+                  value,
+                  label: value,
+                }))}
+                onChange={(value) =>
+                  props.onVideoOptionsChange({
+                    ...props.videoOptions,
+                    aspectRatio: value as CreationAspectRatio,
+                  })
+                }
+              />
+            )}
+            <ComposerOptionGroup
+              label={t('Resolution')}
+              value={props.videoOptions.resolution}
+              options={props.resolutionOptions}
+              onChange={(value) =>
+                props.onVideoOptionsChange({
+                  ...props.videoOptions,
+                  resolution: value as CreationResolution,
+                })
+              }
+            />
+            {props.videoCapabilities ? (
+              <Field>
+                <FieldLabel htmlFor='creation-video-duration'>
+                  {t('Video duration')}
+                </FieldLabel>
+                <Input
+                  id='creation-video-duration'
+                  type='number'
+                  min={4}
+                  max={15}
+                  step={1}
+                  value={props.videoOptions.duration}
+                  onChange={(event) =>
+                    props.onVideoOptionsChange({
+                      ...props.videoOptions,
+                      duration: event.target.value,
+                    })
+                  }
+                />
+              </Field>
+            ) : (
+              <ComposerOptionGroup
+                label={t('Video duration')}
+                value={props.videoOptions.duration}
+                options={props.durationOptions}
+                onChange={(value) =>
+                  props.onVideoOptionsChange({
+                    ...props.videoOptions,
+                    duration: value as CreationDuration,
+                  })
+                }
+              />
+            )}
+            {props.videoCapabilities && (
+              <VideoReferenceFields
+                mode={props.videoCapabilities.referenceMode}
+                value={props.videoReferences}
+                onChange={props.onVideoReferencesChange}
+              />
+            )}
+          </div>
+        </>
       )}
       <div className='text-muted-foreground mt-3 flex flex-wrap items-center justify-end gap-2 rounded-lg border px-3 py-2 text-xs'>
         {!props.authenticated && (
@@ -1575,28 +1716,29 @@ function ComposerOptionGroup(props: {
   onChange: (value: string) => void
 }) {
   return (
-    <div className='flex min-w-0 items-center gap-2'>
-      <span className='text-muted-foreground w-14 shrink-0 text-xs font-medium'>
-        {props.label}
-      </span>
-      <div className='bg-muted/40 grid min-w-0 flex-1 grid-cols-3 gap-1 rounded-lg border p-1'>
+    <Field>
+      <FieldLabel>{props.label}</FieldLabel>
+      <ToggleGroup
+        value={[props.value]}
+        onValueChange={(values) => {
+          const value = values[0]
+          if (value) props.onChange(value)
+        }}
+        variant='outline'
+        spacing={1}
+        className='grid w-full auto-cols-fr grid-flow-col'
+      >
         {props.options.map((option) => (
-          <button
+          <ToggleGroupItem
             key={option.value}
-            type='button'
-            onClick={() => props.onChange(option.value)}
-            className={cn(
-              'h-8 rounded-md px-2 text-xs font-medium transition-colors',
-              props.value === option.value
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-background'
-            )}
+            value={option.value}
+            className='w-full min-w-0'
           >
             {option.label}
-          </button>
+          </ToggleGroupItem>
         ))}
-      </div>
-    </div>
+      </ToggleGroup>
+    </Field>
   )
 }
 
