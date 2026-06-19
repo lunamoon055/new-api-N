@@ -36,11 +36,13 @@ export type CreationVideoReferences = {
 }
 
 export type CreationVideoCapability = {
-  kind: 'video2'
+  kind: 'sora2' | 'video2'
   durations: string[]
   resolutions: CreationResolution[]
   aspectRatios: CreationAspectRatio[]
   referenceMode: 'images' | 'all'
+  showResolution: boolean
+  durationControl: 'menu' | 'select'
 }
 
 type ResolutionOption = {
@@ -60,6 +62,7 @@ type DurationOption = {
 type LegacyCreationVideoRequestOptions = {
   seconds: string
   size: string
+  aspect_ratio?: Extract<CreationAspectRatio, '9:16' | '16:9'>
   estimateSeconds: number
 }
 
@@ -109,6 +112,15 @@ export const SORA2_CREATION_DURATION_OPTIONS: DurationOption[] = [
   { value: '12', label: '12s', seconds: '12', estimateSeconds: 195 },
 ]
 
+const SORA2_CREATION_RESOLUTION_OPTIONS: ResolutionOption[] = [
+  {
+    value: '720p',
+    label: '720p',
+    size: '720x1280',
+    estimateMultiplier: 1,
+  },
+]
+
 const VIDEO2_DURATIONS = Array.from({ length: 12 }, (_, index) =>
   String(index + 4)
 )
@@ -122,13 +134,28 @@ const VIDEO2_DURATION_OPTIONS: DurationOption[] = VIDEO2_DURATIONS.map(
   })
 )
 
+const SORA2_VIDEO_CAPABILITY: CreationVideoCapability = {
+  kind: 'sora2',
+  durations: ['4', '8', '12'],
+  resolutions: ['720p'],
+  aspectRatios: ['9:16', '16:9'],
+  referenceMode: 'images',
+  showResolution: false,
+  durationControl: 'select',
+}
+
 const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
+  sora2: SORA2_VIDEO_CAPABILITY,
+  'sora-2': SORA2_VIDEO_CAPABILITY,
+  'sora-2-pro': SORA2_VIDEO_CAPABILITY,
   'video-2.0': {
     kind: 'video2',
     durations: VIDEO2_DURATIONS,
     resolutions: ['720p'],
     aspectRatios: ['9:16', '16:9', '1:1'],
     referenceMode: 'images',
+    showResolution: true,
+    durationControl: 'menu',
   },
   'video-2.0-fast': {
     kind: 'video2',
@@ -136,6 +163,8 @@ const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
     resolutions: ['720p'],
     aspectRatios: ['9:16', '16:9', '1:1'],
     referenceMode: 'all',
+    showResolution: true,
+    durationControl: 'menu',
   },
 }
 
@@ -152,19 +181,20 @@ export const EMPTY_CREATION_VIDEO_REFERENCES: CreationVideoReferences = {
   audioUrl: '',
 }
 
-const SORA2_VIDEO_SIZE = '720x1280'
+const SORA2_VIDEO_SIZES: Record<
+  Extract<CreationAspectRatio, '9:16' | '16:9'>,
+  string
+> = {
+  '9:16': '720x1280',
+  '16:9': '1280x720',
+}
 
 function normalizeModelId(modelId?: string) {
   return modelId?.trim().toLowerCase() ?? ''
 }
 
-function isSora2Model(modelId?: string) {
-  const normalized = normalizeModelId(modelId)
-  return normalized === 'sora2' || normalized === 'sora-2'
-}
-
 export function isVideo2Model(modelId?: string) {
-  return !!getCreationVideoCapabilities(modelId)
+  return getCreationVideoCapabilities(modelId)?.kind === 'video2'
 }
 
 export function getCreationVideoCapabilities(modelId?: string) {
@@ -172,18 +202,19 @@ export function getCreationVideoCapabilities(modelId?: string) {
 }
 
 export function getCreationResolutionOptions(modelId?: string) {
-  return getCreationVideoCapabilities(modelId)
-    ? VIDEO2_CREATION_RESOLUTION_OPTIONS
-    : CREATION_RESOLUTION_OPTIONS
+  const capability = getCreationVideoCapabilities(modelId)
+  if (capability?.kind === 'video2') return VIDEO2_CREATION_RESOLUTION_OPTIONS
+  if (capability?.kind === 'sora2') return SORA2_CREATION_RESOLUTION_OPTIONS
+  return CREATION_RESOLUTION_OPTIONS
 }
 
 export function getCreationDurationOptions(modelId?: string) {
-  if (getCreationVideoCapabilities(modelId)) {
+  const capability = getCreationVideoCapabilities(modelId)
+  if (capability?.kind === 'video2') {
     return VIDEO2_DURATION_OPTIONS
   }
-  return isSora2Model(modelId)
-    ? SORA2_CREATION_DURATION_OPTIONS
-    : CREATION_DURATION_OPTIONS
+  if (capability?.kind === 'sora2') return SORA2_CREATION_DURATION_OPTIONS
+  return CREATION_DURATION_OPTIONS
 }
 
 export function normalizeCreationVideoOptions(
@@ -200,10 +231,7 @@ export function normalizeCreationVideoOptions(
   const matchedDuration = durationOptions.find(
     (item) => item.value === options.duration
   )
-  const duration =
-    capability && !matchedResolution
-      ? durationOptions[0]
-      : (matchedDuration ?? durationOptions[0])
+  const duration = matchedDuration ?? durationOptions[0]
 
   if (!capability) {
     return {
@@ -231,7 +259,11 @@ export function getCreationVideoOptionsError(
 ) {
   if (!getCreationVideoCapabilities(modelId)) return undefined
   const duration = Number(options.duration)
-  if (!Number.isInteger(duration) || duration < 4 || duration > 15) {
+  const capability = getCreationVideoCapabilities(modelId)
+  if (
+    !Number.isInteger(duration) ||
+    !capability?.durations.includes(String(duration))
+  ) {
     return 'Duration must be between 4 and 15 seconds.'
   }
   return undefined
@@ -284,6 +316,10 @@ function isHTTPURL(value: string) {
   }
 }
 
+function isReferenceImage(value: string) {
+  return isHTTPURL(value) || /^data:image\/[a-z0-9.+-]+;base64,/i.test(value)
+}
+
 export function getCreationVideoReferenceError(
   modelId: string | undefined,
   references: CreationVideoReferences
@@ -303,13 +339,16 @@ export function getCreationVideoReferenceError(
     return 'Video2 accepts at most 3 video references.'
   }
 
-  const urls = [
+  const images = [
     ...normalized.imageUrls,
     normalized.startImageUrl,
     normalized.endImageUrl,
-    ...normalized.videoUrls,
-    normalized.audioUrl,
   ].filter(Boolean)
+  if (images.some((url) => !isReferenceImage(url))) {
+    return 'Reference images must be images or HTTP URLs.'
+  }
+
+  const urls = [...normalized.videoUrls, normalized.audioUrl].filter(Boolean)
   if (urls.some((url) => !isHTTPURL(url))) {
     return 'Reference URL must use HTTP or HTTPS.'
   }
@@ -336,11 +375,21 @@ export function getCreationVideoRequestOptions(
       ) ?? resolutionOptions[0]
     return {
       seconds: duration.seconds,
-      size: isSora2Model(modelId) ? SORA2_VIDEO_SIZE : resolution.size,
+      size: resolution.size,
       estimateSeconds: Math.ceil(
-        duration.estimateSeconds *
-          (isSora2Model(modelId) ? 1 : resolution.estimateMultiplier)
+        duration.estimateSeconds * resolution.estimateMultiplier
       ),
+    }
+  }
+
+  if (capability.kind === 'sora2') {
+    const aspectRatio =
+      normalizedOptions.aspectRatio === '16:9' ? '16:9' : '9:16'
+    return {
+      seconds: duration.seconds,
+      size: SORA2_VIDEO_SIZES[aspectRatio],
+      aspect_ratio: aspectRatio,
+      estimateSeconds: duration.estimateSeconds,
     }
   }
 

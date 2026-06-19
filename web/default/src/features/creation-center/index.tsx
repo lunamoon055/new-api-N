@@ -20,15 +20,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
-  ArrowRight,
   Bot,
+  Check,
   Clock3,
   FileImage,
   FileText,
-  FolderUp,
   History,
   Image,
-  Library,
   MessageSquare,
   Plus,
   RefreshCw,
@@ -38,7 +36,6 @@ import {
   Sparkles,
   Timer,
   Trash2,
-  Upload,
   Video,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -59,8 +56,20 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Field, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -114,8 +123,6 @@ import type {
 import { VideoReferenceFields } from './video-reference-fields'
 
 const MODES: CreationMode[] = ['chat', 'image', 'video']
-const MAX_TEXT_ASSET_CHARS = 8000
-const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024
 
 export function CreationCenter() {
   const { t } = useTranslation()
@@ -130,7 +137,6 @@ export function CreationCenter() {
   const [view, setView] = useState<CreationView>('preview')
   const [prompt, setPrompt] = useState('')
   const [assets, setAssets] = useState<CreationAsset[]>([])
-  const [uploadOpen, setUploadOpen] = useState(false)
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [descriptionOpen, setDescriptionOpen] = useState(false)
   const [sessionNumber, setSessionNumber] = useState(1)
@@ -357,13 +363,27 @@ export function CreationCenter() {
     toast.success(t('A new creation session is ready.'))
   }
 
-  const addFiles = async (files: FileList | null) => {
+  const addVideoReferenceImages = async (files: FileList | null) => {
     if (!files?.length) return
-    const nextAssets = await Promise.all(Array.from(files, readCreationAsset))
-    setAssets((current) => [...current, ...nextAssets])
-    setUploadOpen(false)
-    setView('assets')
-    toast.success(t('Assets added to the current session.'))
+    const urls = await Promise.all(
+      Array.from(files)
+        .filter((file) => file.type.startsWith('image/'))
+        .map(readFileAsDataUrl)
+    )
+    if (!urls.length) {
+      toast.error(t('Choose image files for reference images.'))
+      return
+    }
+    setVideoReferences((current) =>
+      normalizeCreationVideoReferences(
+        {
+          ...current,
+          imageUrls: [...current.imageUrls, ...urls],
+        },
+        selectedModel?.id
+      )
+    )
+    toast.success(t('Reference images added.'))
   }
 
   const removeAsset = (index: number) => {
@@ -371,6 +391,20 @@ export function CreationCenter() {
       current.filter((_, itemIndex) => itemIndex !== index)
     )
     toast.success(t('Asset removed.'))
+  }
+
+  const removeVideoReferenceImage = (index: number) => {
+    setVideoReferences((current) =>
+      normalizeCreationVideoReferences(
+        {
+          ...current,
+          imageUrls: current.imageUrls.filter(
+            (_, itemIndex) => itemIndex !== index
+          ),
+        },
+        selectedModel?.id
+      )
+    )
   }
 
   const submit = async () => {
@@ -580,7 +614,6 @@ export function CreationCenter() {
             }}
             onHistory={() => setView('history')}
             onNewSession={startNewSession}
-            onUpload={() => setUploadOpen(true)}
             onManageCategories={() => setCategoryOpen(true)}
             onManageDescriptions={() => setDescriptionOpen(true)}
           />
@@ -622,7 +655,8 @@ export function CreationCenter() {
               onPromptChange={setPrompt}
               onVideoOptionsChange={setVideoOptions}
               onVideoReferencesChange={setVideoReferences}
-              onUpload={() => setUploadOpen(true)}
+              onVideoReferenceImagesSelected={addVideoReferenceImages}
+              onRemoveVideoReferenceImage={removeVideoReferenceImage}
               onRemoveAsset={removeAsset}
               onSubmit={submit}
             />
@@ -630,11 +664,6 @@ export function CreationCenter() {
         </div>
       </main>
 
-      <UploadDialog
-        open={uploadOpen}
-        onOpenChange={setUploadOpen}
-        onFilesSelected={addFiles}
-      />
       <ModelCategoryDialog
         open={categoryOpen}
         models={categoryModels}
@@ -674,7 +703,6 @@ type SidebarProps = {
   onModelChange: (model: CreationModel) => void
   onHistory: () => void
   onNewSession: () => void
-  onUpload: () => void
   onManageCategories: () => void
   onManageDescriptions: () => void
 }
@@ -716,26 +744,7 @@ function CreationSidebar(props: SidebarProps) {
         </div>
       </div>
 
-      <div className='space-y-4 p-4'>
-        <button
-          type='button'
-          onClick={props.onUpload}
-          className='border-border bg-card hover:bg-muted flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors'
-        >
-          <span className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg'>
-            <FolderUp className='size-4' />
-          </span>
-          <span className='min-w-0 flex-1'>
-            <span className='block text-sm font-medium'>
-              {t('Asset library')}
-            </span>
-            <span className='text-muted-foreground mt-0.5 block text-xs leading-4'>
-              {t('Add reference files to the current session.')}
-            </span>
-          </span>
-          <ArrowRight className='text-muted-foreground size-4 shrink-0' />
-        </button>
-
+      <div className='p-4'>
         <div>
           <div className='mb-2 flex items-center justify-between gap-2'>
             <div className='text-muted-foreground text-xs font-medium'>
@@ -893,26 +902,6 @@ function formatCostNumber(value: number) {
   return Number.parseFloat(value.toFixed(6)).toString()
 }
 
-async function readCreationAsset(file: File): Promise<CreationAsset> {
-  const asset: CreationAsset = {
-    id: createCreationAssetId(file),
-    name: file.name,
-    type: file.type,
-    size: file.size,
-  }
-
-  if (file.type.startsWith('image/') && file.size <= MAX_INLINE_IMAGE_BYTES) {
-    asset.dataUrl = await readFileAsDataUrl(file)
-    return asset
-  }
-
-  if (isReadableTextAsset(file)) {
-    asset.text = await readFileAsText(file.slice(0, MAX_TEXT_ASSET_CHARS))
-  }
-
-  return asset
-}
-
 function getCreationAssetSnapshots(assets: CreationAsset[]): CreationAsset[] {
   return assets.map((asset) => ({
     id: asset.id,
@@ -951,37 +940,12 @@ function normalizeStoredCreationAssets(assets: unknown): CreationAsset[] {
   })
 }
 
-function createCreationAssetId(file: File) {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID()
-  }
-  return `${file.name}-${file.size}-${file.lastModified}-${Math.random()
-    .toString(36)
-    .slice(2, 8)}`
-}
-
-function isReadableTextAsset(file: File) {
-  return (
-    file.type.startsWith('text/') ||
-    /\.(csv|json|md|txt|tsv|yaml|yml)$/i.test(file.name)
-  )
-}
-
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.addEventListener('load', () => resolve(String(reader.result || '')))
     reader.addEventListener('error', () => reject(reader.error))
     reader.readAsDataURL(file)
-  })
-}
-
-function readFileAsText(file: Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.addEventListener('load', () => resolve(String(reader.result || '')))
-    reader.addEventListener('error', () => reject(reader.error))
-    reader.readAsText(file)
   })
 }
 
@@ -1410,7 +1374,7 @@ function EmptyPreview(props: { mode: CreationMode; model?: CreationModel }) {
       <p className='text-muted-foreground mt-2 text-xs leading-5'>
         {props.model
           ? t(
-              'Add assets if needed, write a prompt below, and sign in before submitting a real task.'
+              'Write a prompt below, add reference images for video if needed, and sign in before submitting a real task.'
             )
           : t('Select a configured model from the sidebar to begin.')}
       </p>
@@ -1538,7 +1502,8 @@ type ComposerProps = {
   onPromptChange: (value: string) => void
   onVideoOptionsChange: (options: CreationVideoOptions) => void
   onVideoReferencesChange: (references: CreationVideoReferences) => void
-  onUpload: () => void
+  onVideoReferenceImagesSelected: (files: FileList | null) => void
+  onRemoveVideoReferenceImage: (index: number) => void
   onRemoveAsset: (index: number) => void
   onSubmit: () => void
 }
@@ -1550,14 +1515,6 @@ function Composer(props: ComposerProps) {
   return (
     <section className='bg-card rounded-lg border p-3'>
       <div className='flex min-w-0 items-start gap-3'>
-        <Button
-          variant='outline'
-          className='h-20 w-20 shrink-0 flex-col gap-1 text-xs'
-          onClick={props.onUpload}
-        >
-          <Upload className='size-4' />
-          {t('Add assets')}
-        </Button>
         <div className='min-w-0 flex-1'>
           <Textarea
             aria-label={t('Prompt')}
@@ -1600,6 +1557,13 @@ function Composer(props: ComposerProps) {
           <div className='text-muted-foreground text-right text-[11px]'>
             {props.prompt.length}/5000
           </div>
+          {props.mode === 'video' && props.videoCapabilities && (
+            <VideoReferenceFields
+              value={props.videoReferences}
+              onImagesSelected={props.onVideoReferenceImagesSelected}
+              onRemoveImage={props.onRemoveVideoReferenceImage}
+            />
+          )}
         </div>
         <Button
           size='icon-lg'
@@ -1620,56 +1584,88 @@ function Composer(props: ComposerProps) {
           <div
             className={cn(
               'grid gap-3',
-              props.videoCapabilities ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+              props.videoCapabilities?.showResolution === false
+                ? 'sm:grid-cols-2'
+                : props.videoCapabilities
+                  ? 'sm:grid-cols-3'
+                  : 'sm:grid-cols-2'
             )}
           >
-            {!!props.videoCapabilities?.aspectRatios.length && (
+            {!!props.videoCapabilities?.aspectRatios.length &&
+              (props.videoCapabilities.kind === 'sora2' ? (
+                <ComposerSelectGroup
+                  label={t('Aspect ratio')}
+                  value={props.videoOptions.aspectRatio ?? '9:16'}
+                  options={props.videoCapabilities.aspectRatios.map(
+                    (value) => ({
+                      value,
+                      label: value,
+                    })
+                  )}
+                  onChange={(value) =>
+                    props.onVideoOptionsChange({
+                      ...props.videoOptions,
+                      aspectRatio: value as CreationAspectRatio,
+                    })
+                  }
+                />
+              ) : (
+                <ComposerOptionGroup
+                  label={t('Aspect ratio')}
+                  value={props.videoOptions.aspectRatio ?? '9:16'}
+                  options={props.videoCapabilities.aspectRatios.map(
+                    (value) => ({
+                      value,
+                      label: value,
+                    })
+                  )}
+                  onChange={(value) =>
+                    props.onVideoOptionsChange({
+                      ...props.videoOptions,
+                      aspectRatio: value as CreationAspectRatio,
+                    })
+                  }
+                />
+              ))}
+            {props.videoCapabilities?.showResolution !== false && (
               <ComposerOptionGroup
-                label={t('Aspect ratio')}
-                value={props.videoOptions.aspectRatio ?? '9:16'}
-                options={props.videoCapabilities.aspectRatios.map((value) => ({
-                  value,
-                  label: value,
-                }))}
+                label={t('Resolution')}
+                value={props.videoOptions.resolution}
+                options={props.resolutionOptions}
                 onChange={(value) =>
                   props.onVideoOptionsChange({
                     ...props.videoOptions,
-                    aspectRatio: value as CreationAspectRatio,
+                    resolution: value as CreationResolution,
                   })
                 }
               />
             )}
-            <ComposerOptionGroup
-              label={t('Resolution')}
-              value={props.videoOptions.resolution}
-              options={props.resolutionOptions}
-              onChange={(value) =>
-                props.onVideoOptionsChange({
-                  ...props.videoOptions,
-                  resolution: value as CreationResolution,
-                })
-              }
-            />
             {props.videoCapabilities ? (
-              <Field>
-                <FieldLabel htmlFor='creation-video-duration'>
-                  {t('Video duration')}
-                </FieldLabel>
-                <Input
-                  id='creation-video-duration'
-                  type='number'
-                  min={4}
-                  max={15}
-                  step={1}
+              props.videoCapabilities.durationControl === 'menu' ? (
+                <ComposerDurationMenu
+                  label={t('Video duration')}
                   value={props.videoOptions.duration}
-                  onChange={(event) =>
+                  options={props.durationOptions}
+                  onChange={(value) =>
                     props.onVideoOptionsChange({
                       ...props.videoOptions,
-                      duration: event.target.value,
+                      duration: value as CreationDuration,
                     })
                   }
                 />
-              </Field>
+              ) : (
+                <ComposerSelectGroup
+                  label={t('Video duration')}
+                  value={props.videoOptions.duration}
+                  options={props.durationOptions}
+                  onChange={(value) =>
+                    props.onVideoOptionsChange({
+                      ...props.videoOptions,
+                      duration: value as CreationDuration,
+                    })
+                  }
+                />
+              )
             ) : (
               <ComposerOptionGroup
                 label={t('Video duration')}
@@ -1681,13 +1677,6 @@ function Composer(props: ComposerProps) {
                     duration: value as CreationDuration,
                   })
                 }
-              />
-            )}
-            {props.videoCapabilities && (
-              <VideoReferenceFields
-                mode={props.videoCapabilities.referenceMode}
-                value={props.videoReferences}
-                onChange={props.onVideoReferencesChange}
               />
             )}
           </div>
@@ -1738,6 +1727,95 @@ function ComposerOptionGroup(props: {
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
+    </Field>
+  )
+}
+
+function ComposerSelectGroup(props: {
+  label: string
+  value: string
+  options: Array<{ value: string; label: string }>
+  onChange: (value: string) => void
+}) {
+  return (
+    <Field>
+      <FieldLabel>{props.label}</FieldLabel>
+      <Select
+        items={props.options}
+        value={props.value}
+        onValueChange={(value) => {
+          if (typeof value === 'string') props.onChange(value)
+        }}
+      >
+        <SelectTrigger className='w-full'>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {props.options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
+  )
+}
+
+function ComposerDurationMenu(props: {
+  label: string
+  value: string
+  options: Array<{ value: string; label: string }>
+  onChange: (value: string) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const selected = props.options.find((option) => option.value === props.value)
+
+  return (
+    <Field>
+      <FieldLabel>{props.label}</FieldLabel>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          render={
+            <Button
+              type='button'
+              variant='outline'
+              className='w-full justify-start'
+            />
+          }
+        >
+          <Clock3 />
+          {selected?.label ?? props.value}
+        </PopoverTrigger>
+        <PopoverContent align='start' className='w-40 gap-1 p-1'>
+          <div className='text-muted-foreground px-2 py-1.5 text-xs'>
+            {t('Select video duration')}
+          </div>
+          {props.options.map((option) => (
+            <button
+              key={option.value}
+              type='button'
+              onClick={() => {
+                props.onChange(option.value)
+                setOpen(false)
+              }}
+              className={cn(
+                'hover:bg-muted flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm transition-colors',
+                props.value === option.value && 'bg-muted'
+              )}
+            >
+              <Clock3 className='size-4' />
+              <span>{option.label}</span>
+              {props.value === option.value && (
+                <Check className='text-primary ml-auto size-4' />
+              )}
+            </button>
+          ))}
+        </PopoverContent>
+      </Popover>
     </Field>
   )
 }
@@ -1998,49 +2076,6 @@ function ModelDescriptionDialog(props: ModelDescriptionDialogProps) {
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-type UploadDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onFilesSelected: (files: FileList | null) => void
-}
-
-function UploadDialog(props: UploadDialogProps) {
-  const { t } = useTranslation()
-
-  return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t('Add assets')}</DialogTitle>
-          <DialogDescription>
-            {t(
-              'Choose local reference files for the current creation session.'
-            )}
-          </DialogDescription>
-        </DialogHeader>
-        <label className='border-border bg-muted/30 hover:bg-muted flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-5 py-10 text-center transition-colors'>
-          <Library className='text-primary size-7' />
-          <span className='text-sm font-medium'>{t('Choose files')}</span>
-          <span className='text-muted-foreground text-xs'>
-            {t('Files stay in this browser preview until upload is connected.')}
-          </span>
-          <input
-            type='file'
-            className='sr-only'
-            multiple
-            onChange={(event) => props.onFilesSelected(event.target.files)}
-          />
-        </label>
-        <DialogFooter>
-          <Button variant='outline' onClick={() => props.onOpenChange(false)}>
-            {t('Cancel')}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

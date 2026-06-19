@@ -44,6 +44,7 @@ describe('playground media routing', () => {
       'video-2.0-fast',
       'sora2',
       'sora-2',
+      'sora-2-pro',
       'ko3',
       'veo31',
       'veo31-fast',
@@ -82,7 +83,7 @@ describe('playground media routing', () => {
     expect(buildPlaygroundMediaRequest('video-2.0', messages)).toEqual({
       model: 'video-2.0',
       prompt: 'make a short API website video',
-      duration: 4,
+      duration: 5,
       aspect_ratio: '9:16',
       resolution: '720p',
       async: true,
@@ -93,6 +94,7 @@ describe('playground media routing', () => {
       prompt: 'make a short API website video',
       seconds: '4',
       size: '720x1280',
+      aspect_ratio: '9:16',
     })
 
     expect(buildPlaygroundMediaRequest('sora-2', messages)).toEqual({
@@ -100,6 +102,15 @@ describe('playground media routing', () => {
       prompt: 'make a short API website video',
       seconds: '4',
       size: '720x1280',
+      aspect_ratio: '9:16',
+    })
+
+    expect(buildPlaygroundMediaRequest('sora-2-pro', messages)).toEqual({
+      model: 'sora-2-pro',
+      prompt: 'make a short API website video',
+      seconds: '4',
+      size: '720x1280',
+      aspect_ratio: '9:16',
     })
 
     expect(buildPlaygroundMediaRequest('kling-v3', messages)).toEqual({

@@ -71,22 +71,41 @@ describe('creation center session helpers', () => {
       getCreationDurationOptions('sora-2').map((item) => item.value)
     ).toEqual(['4', '8', '12'])
     expect(
+      getCreationDurationOptions('sora-2-pro').map((item) => item.value)
+    ).toEqual(['4', '8', '12'])
+    expect(getCreationResolutionOptions('sora2')).toEqual([
+      {
+        value: '720p',
+        label: '720p',
+        size: '720x1280',
+        estimateMultiplier: 1,
+      },
+    ])
+    expect(getCreationVideoCapabilities('sora2')).toMatchObject({
+      kind: 'sora2',
+      aspectRatios: ['9:16', '16:9'],
+      showResolution: false,
+      durationControl: 'select',
+    })
+    expect(
       getCreationVideoRequestOptions(
-        { resolution: '1080p', duration: '8' },
+        { resolution: '1080p', duration: '8', aspectRatio: '16:9' },
         'sora2'
       )
     ).toMatchObject({
       seconds: '8',
-      size: '720x1280',
+      size: '1280x720',
+      aspect_ratio: '16:9',
     })
     expect(
       getCreationVideoRequestOptions(
-        { resolution: '1080p', duration: '8' },
-        'sora-2'
+        { resolution: '1080p', duration: '8', aspectRatio: '9:16' },
+        'sora-2-pro'
       )
     ).toMatchObject({
       seconds: '8',
       size: '720x1280',
+      aspect_ratio: '9:16',
     })
     expect(
       getCreationVideoRequestOptions(
@@ -157,6 +176,18 @@ describe('creation center session helpers', () => {
         audioUrl: 'file:///tmp/a.mp3',
       })
     ).toBe('Reference URL must use HTTP or HTTPS.')
+    expect(
+      getCreationVideoReferenceError('video-2.0', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        imageUrls: ['data:image/png;base64,AAAA'],
+      })
+    ).toBeUndefined()
+    expect(
+      getCreationVideoReferenceError('video-2.0', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        imageUrls: ['data:text/plain;base64,AAAA'],
+      })
+    ).toBe('Reference images must be images or HTTP URLs.')
     expect(
       getCreationVideoReferenceError('video-2.0', {
         ...EMPTY_CREATION_VIDEO_REFERENCES,

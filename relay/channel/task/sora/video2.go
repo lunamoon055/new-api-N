@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -33,6 +34,8 @@ type video2Request struct {
 	AudioURL       string            `json:"audio_url,omitempty"`
 	Async          *bool             `json:"async,omitempty"`
 }
+
+var video2ImageDataURLPattern = regexp.MustCompile(`(?i)^data:image/[a-z0-9.+-]+;base64,`)
 
 func isVideo2Model(modelName string) bool {
 	switch strings.ToLower(strings.TrimSpace(modelName)) {
@@ -92,8 +95,12 @@ func validateVideo2Request(req video2Request) error {
 	if countNonBlank(videoURLs) > 3 {
 		return fmt.Errorf("video references must not exceed 3")
 	}
+	for _, value := range imageURLs {
+		if err := validateVideo2ImageReference(value); err != nil {
+			return fmt.Errorf("image reference: %w", err)
+		}
+	}
 	for field, values := range map[string][]string{
-		"image reference": imageURLs,
 		"video reference": videoURLs,
 		"audio_url":       {req.AudioURL},
 	} {
@@ -105,6 +112,17 @@ func validateVideo2Request(req video2Request) error {
 	}
 
 	return nil
+}
+
+func validateVideo2ImageReference(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if video2ImageDataURLPattern.MatchString(value) {
+		return nil
+	}
+	return validateVideo2URL(value)
 }
 
 func countNonBlank(values []string) int {

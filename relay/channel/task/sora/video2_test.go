@@ -34,6 +34,11 @@ func TestValidateVideo2Request(t *testing.T) {
 	}
 	require.NoError(t, validateVideo2Request(valid))
 
+	withDataImage := valid
+	withDataImage.ImageURL = "data:image/png;base64,AAAA"
+	withDataImage.ImageURLs = nil
+	require.NoError(t, validateVideo2Request(withDataImage))
+
 	zero := 0
 	tests := []struct {
 		name     string
@@ -99,6 +104,13 @@ func TestValidateVideo2Request(t *testing.T) {
 				req.AudioURL = "file:///tmp/a.mp3"
 			},
 			contains: "audio_url",
+		},
+		{
+			name: "non image data reference",
+			mutate: func(req *video2Request) {
+				req.ImageURL = "data:text/plain;base64,AAAA"
+			},
+			contains: "image reference",
 		},
 		{
 			name: "blank prompt",
