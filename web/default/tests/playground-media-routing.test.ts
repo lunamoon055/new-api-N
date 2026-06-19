@@ -43,6 +43,7 @@ describe('playground media routing', () => {
       'video-2.0',
       'video-2.0-fast',
       'sora2',
+      'sora-2',
       'ko3',
       'veo31',
       'veo31-fast',
@@ -89,7 +90,14 @@ describe('playground media routing', () => {
       model: 'sora2',
       prompt: 'make a short API website video',
       seconds: '4',
-      size: '1920x1080',
+      size: '720x1280',
+    })
+
+    expect(buildPlaygroundMediaRequest('sora-2', messages)).toEqual({
+      model: 'sora-2',
+      prompt: 'make a short API website video',
+      seconds: '4',
+      size: '720x1280',
     })
 
     expect(buildPlaygroundMediaRequest('gpt-image2', messages)).toEqual({

@@ -10,6 +10,7 @@ import (
 func TestIsAsyncGenerationsVideoTaskIncludesLinkskyModels(t *testing.T) {
 	for _, modelName := range []string{
 		"sora2",
+		"sora-2",
 		"kling-v3",
 		"video-2.0",
 		"video-2.0-fast",

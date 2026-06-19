@@ -88,8 +88,15 @@ export const DEFAULT_CREATION_VIDEO_OPTIONS: CreationVideoOptions = {
   duration: '5',
 }
 
+const SORA2_VIDEO_SIZE = '720x1280'
+
+function isSora2Model(modelId?: string) {
+  const normalized = modelId?.trim().toLowerCase()
+  return normalized === 'sora2' || normalized === 'sora-2'
+}
+
 export function getCreationDurationOptions(modelId?: string) {
-  return modelId?.toLowerCase() === 'sora2'
+  return isSora2Model(modelId)
     ? SORA2_CREATION_DURATION_OPTIONS
     : CREATION_DURATION_OPTIONS
 }
@@ -128,9 +135,10 @@ export function getCreationVideoRequestOptions(
 
   return {
     seconds: duration.seconds,
-    size: resolution.size,
+    size: isSora2Model(modelId) ? SORA2_VIDEO_SIZE : resolution.size,
     estimateSeconds: Math.ceil(
-      duration.estimateSeconds * resolution.estimateMultiplier
+      duration.estimateSeconds *
+        (isSora2Model(modelId) ? 1 : resolution.estimateMultiplier)
     ),
   }
 }

@@ -62,18 +62,30 @@ describe('creation center session helpers', () => {
       ['4', '8', '12']
     )
     expect(
+      getCreationDurationOptions('sora-2').map((item) => item.value)
+    ).toEqual(['4', '8', '12'])
+    expect(
       getCreationVideoRequestOptions(
         { resolution: '1080p', duration: '8' },
         'sora2'
       )
     ).toMatchObject({
       seconds: '8',
-      size: '1920x1080',
+      size: '720x1280',
+    })
+    expect(
+      getCreationVideoRequestOptions(
+        { resolution: '1080p', duration: '8' },
+        'sora-2'
+      )
+    ).toMatchObject({
+      seconds: '8',
+      size: '720x1280',
     })
     expect(
       getCreationVideoRequestOptions(
         { resolution: '1080p', duration: '5' },
-        'sora2'
+        'sora-2'
       ).seconds
     ).toBe('4')
   })
