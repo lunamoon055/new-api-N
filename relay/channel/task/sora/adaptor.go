@@ -75,7 +75,7 @@ type TaskAdaptor struct {
 
 func isAsyncGenerationsModel(modelName string) bool {
 	switch strings.ToLower(strings.TrimSpace(modelName)) {
-	case "sora2", "kling-v3", "video-2.0", "video-2.0-fast", "ko3",
+	case "sora2", "sora-2", "kling-v3", "video-2.0", "video-2.0-fast", "ko3",
 		"veo31", "veo31-fast", "veo31-ref", "grok-imagine-video":
 		return true
 	default:
@@ -287,6 +287,10 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	if upstreamID == "" {
 		upstreamID = dResp.TaskID
 	}
+	rawPayload := responsePayloadMap(responseBody)
+	if upstreamID == "" {
+		upstreamID = extractTaskID(dResp, rawPayload)
+	}
 	if upstreamID == "" {
 		taskErr = service.TaskErrorWrapper(fmt.Errorf("task_id is empty"), "invalid_response", http.StatusInternalServerError)
 		return
@@ -295,6 +299,12 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	// 使用公开 task_xxxx ID 返回给客户端
 	dResp.ID = info.PublicTaskID
 	dResp.TaskID = info.PublicTaskID
+	if dResp.Status == "" {
+		dResp.Status = extractTaskStatus(dResp, rawPayload)
+	}
+	if dResp.Progress == 0 {
+		dResp.Progress = extractTaskProgress(dResp, rawPayload)
+	}
 	c.JSON(http.StatusOK, dResp)
 	return upstreamID, responseBody, nil
 }
@@ -343,26 +353,27 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	taskResult := relaycommon.TaskInfo{
 		Code: 0,
 	}
+	rawPayload := responsePayloadMap(respBody)
+	taskResult.TaskID = extractTaskIDForResult(resTask, rawPayload)
 
-	switch strings.ToLower(strings.TrimSpace(resTask.Status)) {
-	case "queued", "pending", "submitted":
+	switch normalizeTaskStatus(extractTaskStatus(resTask, rawPayload)) {
+	case "queued":
 		taskResult.Status = model.TaskStatusQueued
-	case "processing", "in_progress", "running":
+	case "in_progress":
 		taskResult.Status = model.TaskStatusInProgress
-	case "completed", "succeeded", "success", "done":
+	case "completed":
 		taskResult.Status = model.TaskStatusSuccess
-		taskResult.Url = extractVideoURL(resTask)
-	case "failed", "cancelled", "canceled":
+		taskResult.Url = extractVideoURLFromPayload(resTask, rawPayload)
+	case "failed":
 		taskResult.Status = model.TaskStatusFailure
-		if resTask.Error != nil {
-			taskResult.Reason = resTask.Error.Message
-		} else {
+		taskResult.Reason = extractTaskErrorReason(resTask, rawPayload)
+		if taskResult.Reason == "" {
 			taskResult.Reason = "task failed"
 		}
 	default:
 	}
-	if resTask.Progress > 0 && resTask.Progress < 100 {
-		taskResult.Progress = fmt.Sprintf("%d%%", resTask.Progress)
+	if progress := extractTaskProgress(resTask, rawPayload); progress > 0 && progress < 100 {
+		taskResult.Progress = fmt.Sprintf("%d%%", progress)
 	}
 
 	return &taskResult, nil
@@ -370,20 +381,25 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	resTask := responseTask{}
+	var rawPayload map[string]any
 	if len(task.Data) > 0 {
 		if err := common.Unmarshal(task.Data, &resTask); err != nil {
 			return nil, errors.Wrap(err, "unmarshal sora task data failed")
 		}
+		rawPayload = responsePayloadMap(task.Data)
 	}
 
 	openAIVideo := dto.NewOpenAIVideo()
 	openAIVideo.ID = task.TaskID
 	openAIVideo.TaskID = task.TaskID
-	openAIVideo.Model = taskcommon.DefaultString(resTask.Model, task.Properties.OriginModelName)
+	openAIVideo.Model = taskcommon.DefaultString(
+		taskcommon.DefaultString(resTask.Model, stringValue(taskResponsePayload(rawPayload), "model")),
+		task.Properties.OriginModelName,
+	)
 	openAIVideo.Status = task.Status.ToVideoStatus()
 	openAIVideo.SetProgressStr(task.Progress)
-	if openAIVideo.Progress == 0 && resTask.Progress > 0 {
-		openAIVideo.Progress = resTask.Progress
+	if progress := extractTaskProgress(resTask, rawPayload); openAIVideo.Progress == 0 && progress > 0 {
+		openAIVideo.Progress = progress
 	}
 	openAIVideo.CreatedAt = firstNonZeroInt64(resTask.CreatedAt, resTask.Created, task.CreatedAt)
 	openAIVideo.CompletedAt = firstNonZeroInt64(resTask.CompletedAt, task.FinishTime, task.UpdatedAt)
@@ -403,7 +419,7 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 		}
 	}
 
-	videoURL := extractVideoURL(resTask)
+	videoURL := extractVideoURLFromPayload(resTask, rawPayload)
 	if videoURL == "" && task.Status == model.TaskStatusSuccess {
 		videoURL = task.GetResultURL()
 		if videoURL == "" {
@@ -417,19 +433,270 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	return common.Marshal(openAIVideo)
 }
 
+func responsePayloadMap(body []byte) map[string]any {
+	var raw map[string]any
+	if err := common.Unmarshal(body, &raw); err != nil {
+		return nil
+	}
+	return raw
+}
+
+func extractTaskID(resTask responseTask, raw map[string]any) string {
+	if resTask.ID != "" {
+		return strings.TrimSpace(resTask.ID)
+	}
+	if resTask.TaskID != "" {
+		return strings.TrimSpace(resTask.TaskID)
+	}
+	if payload := taskResponsePayload(raw); payload != nil {
+		return firstStringValue(payload, "id", "task_id", "taskId")
+	}
+	return ""
+}
+
+func extractTaskIDForResult(resTask responseTask, raw map[string]any) string {
+	if resTask.TaskID != "" {
+		return strings.TrimSpace(resTask.TaskID)
+	}
+	if resTask.ID != "" {
+		return strings.TrimSpace(resTask.ID)
+	}
+	if payload := taskResponsePayload(raw); payload != nil {
+		return firstStringValue(payload, "task_id", "id", "taskId")
+	}
+	return ""
+}
+
+func extractTaskStatus(resTask responseTask, raw map[string]any) string {
+	if resTask.Status != "" {
+		return strings.TrimSpace(resTask.Status)
+	}
+	if payload := taskResponsePayload(raw); payload != nil {
+		return firstStringValue(payload, "status", "state")
+	}
+	return ""
+}
+
+func extractTaskProgress(resTask responseTask, raw map[string]any) int {
+	if resTask.Progress > 0 {
+		return resTask.Progress
+	}
+	if payload := taskResponsePayload(raw); payload != nil {
+		return intValue(payload, "progress", "percent")
+	}
+	return 0
+}
+
+func normalizeTaskStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "queued", "pending", "submitted", "created", "waiting":
+		return "queued"
+	case "processing", "in_progress", "running", "generating":
+		return "in_progress"
+	case "completed", "succeeded", "success", "done", "finished", "finish":
+		return "completed"
+	case "failed", "fail", "failure", "cancelled", "canceled", "error":
+		return "failed"
+	default:
+		return ""
+	}
+}
+
+func extractTaskErrorReason(resTask responseTask, raw map[string]any) string {
+	if resTask.Error != nil {
+		return strings.TrimSpace(resTask.Error.Message)
+	}
+	for _, values := range []map[string]any{taskResponsePayload(raw), raw} {
+		if values == nil {
+			continue
+		}
+		if errorValues := mapValue(values, "error"); errorValues != nil {
+			if reason := firstStringValue(errorValues, "message", "code", "type"); reason != "" {
+				return reason
+			}
+		}
+		if reason := firstStringValue(values, "error", "message", "code"); reason != "" {
+			return reason
+		}
+	}
+	return ""
+}
+
+func taskResponsePayload(raw map[string]any) map[string]any {
+	if raw == nil {
+		return nil
+	}
+	if hasTaskResponseFields(raw) {
+		return raw
+	}
+	for _, key := range []string{"data", "result", "response"} {
+		if nested := mapValue(raw, key); nested != nil {
+			if hasTaskResponseFields(nested) {
+				return nested
+			}
+			if payload := taskResponsePayload(nested); hasTaskResponseFields(payload) {
+				return payload
+			}
+		}
+	}
+	return raw
+}
+
+func hasTaskResponseFields(values map[string]any) bool {
+	if values == nil {
+		return false
+	}
+	return firstStringValue(values,
+		"id",
+		"task_id",
+		"taskId",
+		"status",
+		"state",
+		"url",
+		"video_url",
+		"result_url",
+		"output_url",
+	) != "" || intValue(values, "progress", "percent") > 0 || mapValue(values, "error") != nil
+}
+
 func extractVideoURL(resTask responseTask) string {
 	for _, url := range []string{
-		resTask.URL,
-		resTask.ResultURL,
-		resTask.OutputURL,
 		resTask.VideoURL,
-		stringValue(resTask.Metadata, "url"),
-		stringValue(resTask.Metadata, "result_url"),
-		stringValue(resTask.Metadata, "output_url"),
+		resTask.URL,
+		resTask.OutputURL,
+		resTask.ResultURL,
 		stringValue(resTask.Metadata, "video_url"),
+		stringValue(resTask.Metadata, "url"),
+		stringValue(resTask.Metadata, "output_url"),
+		stringValue(resTask.Metadata, "result_url"),
 	} {
 		if strings.TrimSpace(url) != "" {
 			return strings.TrimSpace(url)
+		}
+	}
+	return ""
+}
+
+func extractVideoURLFromPayload(resTask responseTask, raw map[string]any) string {
+	if url := extractVideoURL(resTask); url != "" {
+		return url
+	}
+	for _, values := range []map[string]any{taskResponsePayload(raw), raw} {
+		if values == nil {
+			continue
+		}
+		if url := firstStringValue(values, "video_url", "url", "result_url", "output_url", "download_url"); url != "" {
+			return url
+		}
+		if metadata := mapValue(values, "metadata"); metadata != nil {
+			if url := firstStringValue(metadata, "video_url", "url", "result_url", "output_url", "download_url"); url != "" {
+				return url
+			}
+		}
+		if url := firstURLFromArrayFields(values, "data", "outputs", "output", "results", "videos", "urls", "video_urls"); url != "" {
+			return url
+		}
+		if result := mapValue(values, "result"); result != nil {
+			if url := firstStringValue(result, "video_url", "url", "result_url", "output_url", "download_url"); url != "" {
+				return url
+			}
+			if url := firstURLFromArrayFields(result, "data", "outputs", "output", "results", "videos", "urls", "video_urls"); url != "" {
+				return url
+			}
+		}
+	}
+	return ""
+}
+
+func firstStringValue(values map[string]any, keys ...string) string {
+	if values == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if value := stringFromAny(values[key]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func stringFromAny(value any) string {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case fmt.Stringer:
+		return strings.TrimSpace(v.String())
+	default:
+		return ""
+	}
+}
+
+func intValue(values map[string]any, keys ...string) int {
+	if values == nil {
+		return 0
+	}
+	for _, key := range keys {
+		switch value := values[key].(type) {
+		case int:
+			if value > 0 {
+				return value
+			}
+		case int64:
+			if value > 0 {
+				return int(value)
+			}
+		case float64:
+			if value > 0 {
+				return int(value)
+			}
+		case string:
+			trimmed := strings.TrimSuffix(strings.TrimSpace(value), "%")
+			if parsed, err := strconv.Atoi(trimmed); err == nil && parsed > 0 {
+				return parsed
+			}
+		}
+	}
+	return 0
+}
+
+func mapValue(values map[string]any, key string) map[string]any {
+	if values == nil {
+		return nil
+	}
+	nested, _ := values[key].(map[string]any)
+	return nested
+}
+
+func firstURLFromArrayFields(values map[string]any, keys ...string) string {
+	if values == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if url := firstURLFromAny(values[key]); url != "" {
+			return url
+		}
+	}
+	return ""
+}
+
+func firstURLFromAny(value any) string {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case []any:
+		for _, item := range v {
+			if url := firstURLFromAny(item); url != "" {
+				return url
+			}
+		}
+	case map[string]any:
+		if url := firstStringValue(v, "video_url", "url", "result_url", "output_url", "download_url"); url != "" {
+			return url
+		}
+		if metadata := mapValue(v, "metadata"); metadata != nil {
+			if url := firstStringValue(metadata, "video_url", "url", "result_url", "output_url", "download_url"); url != "" {
+				return url
+			}
 		}
 	}
 	return ""

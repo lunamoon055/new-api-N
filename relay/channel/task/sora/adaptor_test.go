@@ -1,6 +1,8 @@
 package sora
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,6 +51,27 @@ func TestFetchTaskUsesAsyncGenerationsForSora2(t *testing.T) {
 	resp, err := adaptor.FetchTask(server.URL, "sk-test", map[string]any{
 		"task_id": "task_upstream",
 		"model":   "sora2",
+	}, "")
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	_ = resp.Body.Close()
+	require.Equal(t, "/v1/video/async-generations/task_upstream", gotPath)
+}
+
+func TestFetchTaskUsesAsyncGenerationsForSoraDash2(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"task_upstream","status":"completed"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	adaptor := &TaskAdaptor{}
+	resp, err := adaptor.FetchTask(server.URL, "sk-test", map[string]any{
+		"task_id": "task_upstream",
+		"model":   "sora-2",
 	}, "")
 
 	require.NoError(t, err)
@@ -137,6 +161,81 @@ func TestParseTaskResultCapturesCompletedMetadataURL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(model.TaskStatusSuccess), result.Status)
 	require.Equal(t, "https://cdn.example/video.mp4", result.Url)
+}
+
+func TestDoResponseAcceptsNestedDataTaskID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	adaptor := &TaskAdaptor{}
+	resp := &http.Response{
+		Body: io.NopCloser(bytes.NewBufferString(`{
+			"code": 0,
+			"message": "success",
+			"data": {
+				"task_id": "dt_task_upstream",
+				"status": "queued",
+				"progress": 10
+			}
+		}`)),
+	}
+	info := &relaycommon.RelayInfo{
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+			PublicTaskID: "task_public",
+		},
+	}
+
+	taskID, taskData, taskErr := adaptor.DoResponse(c, resp, info)
+
+	require.Nil(t, taskErr)
+	require.Equal(t, "dt_task_upstream", taskID)
+	require.Contains(t, string(taskData), "dt_task_upstream")
+
+	var body responseTask
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &body))
+	require.Equal(t, "task_public", body.ID)
+	require.Equal(t, "task_public", body.TaskID)
+}
+
+func TestParseTaskResultAcceptsNestedDataVideoURL(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+
+	result, err := adaptor.ParseTaskResult([]byte(`{
+		"code": 0,
+		"message": "success",
+		"data": {
+			"task_id": "dt_task_upstream",
+			"status": "completed",
+			"progress": 100,
+			"data": [
+				{"url": "https://cdn.example/dt-video.mp4"}
+			]
+		}
+	}`))
+
+	require.NoError(t, err)
+	require.Equal(t, string(model.TaskStatusSuccess), result.Status)
+	require.Equal(t, "dt_task_upstream", result.TaskID)
+	require.Equal(t, "https://cdn.example/dt-video.mp4", result.Url)
+}
+
+func TestParseTaskResultPrefersTopLevelVideoURLForJYShape(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+
+	result, err := adaptor.ParseTaskResult([]byte(`{
+		"id":"jy_task_upstream",
+		"task_id":"jy_task_upstream",
+		"status":"completed",
+		"progress":100,
+		"result_url":"https://cdn.example/jy-preview.png",
+		"video_url":"https://cdn.example/jy-video.mp4",
+		"data":[{"url":"https://cdn.example/dt-fallback.mp4"}]
+	}`))
+
+	require.NoError(t, err)
+	require.Equal(t, string(model.TaskStatusSuccess), result.Status)
+	require.Equal(t, "jy_task_upstream", result.TaskID)
+	require.Equal(t, "https://cdn.example/jy-video.mp4", result.Url)
 }
 
 func TestConvertToOpenAIVideoNormalizesCompletedAsyncTask(t *testing.T) {

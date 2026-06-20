@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, it } from 'bun:test'
+import { formatCreationModelCost } from '../src/features/creation-center/cost'
+import { formatQuota } from '../src/lib/format'
 import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
   EMPTY_CREATION_VIDEO_REFERENCES,
@@ -50,6 +52,42 @@ function createMemoryStorage(): CreationHistoryStorage {
 }
 
 describe('creation center session helpers', () => {
+  it('shows only the final quota for fixed-price video model costs', () => {
+    const t = (key: string) => key
+
+    const label = formatCreationModelCost(
+      {
+        billing_mode: 'per_request',
+        request_price: 0.0000072,
+        request_quota: 3.6,
+        group_ratio: 2,
+      },
+      t,
+      'video'
+    )
+
+    expect(label).toBe(formatQuota(3.6))
+    expect(label).not.toContain('per request')
+    expect(label).not.toContain('·')
+  })
+
+  it('keeps detailed fixed-price labels for non-video model costs', () => {
+    const t = (key: string) => key
+
+    const label = formatCreationModelCost(
+      {
+        billing_mode: 'per_request',
+        request_price: 0.0000072,
+        request_quota: 3.6,
+      },
+      t,
+      'image'
+    )
+
+    expect(label).toContain('per request')
+    expect(label).toContain('·')
+  })
+
   it('maps video controls to async media request fields', () => {
     expect(
       getCreationVideoRequestOptions({ resolution: '2k', duration: '10' })

@@ -41,8 +41,6 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { formatCurrencyFromUSD } from '@/lib/currency'
-import { formatQuota } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -84,6 +82,7 @@ import {
   submitCreationTask,
   uploadCreationReferenceImage,
 } from './api'
+import { formatCreationModelCost } from './cost'
 import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
   EMPTY_CREATION_VIDEO_REFERENCES,
@@ -114,7 +113,6 @@ import type {
   CreationAsset,
   CreationMode,
   CreationModel,
-  CreationModelCost,
   CreationModelCategories,
   CreationModelDescriptions,
   CreationModelGroup,
@@ -802,6 +800,7 @@ function CreationSidebar(props: SidebarProps) {
                 <ModelButton
                   key={model.id}
                   model={model}
+                  mode={props.mode}
                   active={props.selectedModel?.id === model.id}
                   onClick={() => props.onModelChange(model)}
                 />
@@ -867,50 +866,6 @@ function ModeButton(props: {
   )
 }
 
-function formatCreationModelCost(
-  cost: CreationModelCost | undefined,
-  t: (key: string) => string
-) {
-  if (!cost) return t('Pricing pending')
-  const groupSuffix =
-    cost.group_ratio && cost.group_ratio !== 1
-      ? ` · ${t('Group')} x${formatCostNumber(cost.group_ratio)}`
-      : ''
-
-  switch (cost.billing_mode) {
-    case 'dynamic':
-      return `${t('Dynamic pricing')}${groupSuffix}`
-    case 'per_request': {
-      const requestPrice = formatCurrencyFromUSD(cost.request_price, {
-        digitsLarge: 4,
-        digitsSmall: 6,
-        abbreviate: false,
-      })
-      const requestQuota = cost.request_quota
-        ? ` · ${formatQuota(cost.request_quota)}`
-        : ''
-      return `${requestPrice} ${t('per request')}${requestQuota}${groupSuffix}`
-    }
-    case 'per_token': {
-      const inputPrice = formatCurrencyFromUSD(cost.input_price_per_million, {
-        digitsLarge: 4,
-        digitsSmall: 6,
-        abbreviate: false,
-      })
-      const outputPrice = formatCurrencyFromUSD(cost.output_price_per_million, {
-        digitsLarge: 4,
-        digitsSmall: 6,
-        abbreviate: false,
-      })
-      return `${t('Input')} ${inputPrice}/1M · ${t('Output')} ${outputPrice}/1M${groupSuffix}`
-    }
-  }
-}
-
-function formatCostNumber(value: number) {
-  return Number.parseFloat(value.toFixed(6)).toString()
-}
-
 function getCreationAssetSnapshots(assets: CreationAsset[]): CreationAsset[] {
   return assets.map((asset) => ({
     id: asset.id,
@@ -951,11 +906,12 @@ function normalizeStoredCreationAssets(assets: unknown): CreationAsset[] {
 
 function ModelButton(props: {
   model: CreationModel
+  mode: CreationMode
   active: boolean
   onClick: () => void
 }) {
   const { t } = useTranslation()
-  const costLabel = formatCreationModelCost(props.model.cost, t)
+  const costLabel = formatCreationModelCost(props.model.cost, t, props.mode)
   const tagLabels: Record<string, string> = {
     advanced: t('Advanced'),
     chat: t('Chat'),
@@ -1041,7 +997,7 @@ function ModelHero(props: { mode: CreationMode; model?: CreationModel }) {
   const { t } = useTranslation()
   const title = props.model?.id || t('Select a model')
   const costLabel = props.model
-    ? formatCreationModelCost(props.model.cost, t)
+    ? formatCreationModelCost(props.model.cost, t, props.mode)
     : undefined
   const fallback =
     props.mode === 'chat'
