@@ -1,8 +1,11 @@
 package controller
 
 import (
+	"bytes"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -52,6 +55,71 @@ func TestBuildCreationModelCatalogCategorizesModels(t *testing.T) {
 	require.Equal(t, []string{"image-model"}, creationModelIDs(catalog.Modes[1].Models))
 	require.Equal(t, []string{"video-model"}, creationModelIDs(catalog.Modes[2].Models))
 	require.Equal(t, []string{"First", "Second"}, creationVendorNames(catalog.Vendors))
+}
+
+func TestCreationReferenceImageUploadAndFetch(t *testing.T) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("image", "reference.png")
+	require.NoError(t, err)
+	_, err = part.Write([]byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+		0x00, 0x00, 0x00, 0x0d,
+	})
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/creation/reference-images", body)
+	ctx.Request.Host = "example.test"
+	ctx.Request.Header.Set("Content-Type", writer.FormDataContentType())
+
+	UploadCreationReferenceImage(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var payload struct {
+		Success bool `json:"success"`
+		Data    struct {
+			URL string `json:"url"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	require.True(t, strings.HasPrefix(payload.Data.URL, "http://example.test/api/creation/reference-images/"))
+	filename := filepath.Base(payload.Data.URL)
+	t.Cleanup(func() { _ = cleanupCreationReferenceImageForTest(filename) })
+
+	fetchRecorder := httptest.NewRecorder()
+	fetchCtx, _ := gin.CreateTestContext(fetchRecorder)
+	fetchCtx.Params = gin.Params{{Key: "filename", Value: filename}}
+	fetchCtx.Request = httptest.NewRequest(http.MethodGet, "/api/creation/reference-images/"+filename, nil)
+
+	GetCreationReferenceImage(fetchCtx)
+
+	require.Equal(t, http.StatusOK, fetchRecorder.Code)
+	require.Equal(t, "image/png", fetchRecorder.Header().Get("Content-Type"))
+	require.NotEmpty(t, fetchRecorder.Body.Bytes())
+}
+
+func TestCreationReferenceImageRejectsNonImages(t *testing.T) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("image", "notes.txt")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("not an image"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/creation/reference-images", body)
+	ctx.Request.Header.Set("Content-Type", writer.FormDataContentType())
+
+	UploadCreationReferenceImage(ctx)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "image must be")
 }
 
 func TestBuildCreationModelCatalogOverridesMediaModelsByName(t *testing.T) {

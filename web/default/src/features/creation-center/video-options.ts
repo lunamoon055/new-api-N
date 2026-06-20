@@ -351,6 +351,9 @@ export function getCreationVideoReferenceError(
   if (images.some((url) => !isReferenceImage(url))) {
     return 'Reference images must be images or HTTP URLs.'
   }
+  if (capability.kind === 'video2' && images.some((url) => !isHTTPURL(url))) {
+    return 'Reference image URL must use HTTP or HTTPS.'
+  }
 
   const urls = [...normalized.videoUrls, normalized.audioUrl].filter(Boolean)
   if (urls.some((url) => !isHTTPURL(url))) {

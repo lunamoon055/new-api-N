@@ -20,7 +20,6 @@ import { describe, expect, it } from 'bun:test'
 import {
   getReferenceImageMime,
   isReferenceImageFile,
-  normalizeReferenceImageDataURL,
 } from '../src/features/creation-center/video-reference-files'
 
 describe('video reference files', () => {
@@ -32,18 +31,15 @@ describe('video reference files', () => {
     expect(isReferenceImageFile({ name: 'notes.txt', type: '' })).toBe(false)
   })
 
-  it('normalizes empty file reader mime prefixes to the detected image mime', () => {
-    const file = { name: 'reference.jpg', type: '' }
-
-    expect(getReferenceImageMime(file)).toBe('image/jpeg')
+  it('detects the upload mime from file names when needed', () => {
+    expect(getReferenceImageMime({ name: 'reference.jpg', type: '' })).toBe(
+      'image/jpeg'
+    )
     expect(
-      normalizeReferenceImageDataURL(file, 'data:;base64,AAAA')
-    ).toBe('data:image/jpeg;base64,AAAA')
-    expect(
-      normalizeReferenceImageDataURL(
-        { name: 'reference.png', type: 'application/octet-stream' },
-        'data:application/octet-stream;base64,AAAA'
-      )
-    ).toBe('data:image/png;base64,AAAA')
+      getReferenceImageMime({
+        name: 'reference.png',
+        type: 'application/octet-stream',
+      })
+    ).toBe('image/png')
   })
 })

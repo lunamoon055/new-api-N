@@ -43,6 +43,14 @@ type UpdateOptionResponse = {
   message: string
 }
 
+type CreationReferenceImageUploadResponse = {
+  success: boolean
+  message?: string
+  data?: {
+    url?: string
+  }
+}
+
 export async function getCreationCatalog(): Promise<CreationCatalogResponse> {
   const response = await api.get<CreationCatalogResponse>(
     '/api/creation/models'
@@ -68,6 +76,21 @@ export async function saveCreationModelDescriptions(
     value: JSON.stringify(descriptions),
   })
   return response.data
+}
+
+export async function uploadCreationReferenceImage(file: File) {
+  const formData = new FormData()
+  formData.append('image', file)
+  const response = await api.post<CreationReferenceImageUploadResponse>(
+    '/api/creation/reference-images',
+    formData,
+    { skipErrorHandler: true } as Record<string, unknown>
+  )
+  const url = response.data.data?.url
+  if (!response.data.success || !url) {
+    throw new Error(response.data.message || 'Unable to upload reference image.')
+  }
+  return url
 }
 
 export async function submitCreationTask(params: {

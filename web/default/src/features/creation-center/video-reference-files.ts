@@ -40,26 +40,3 @@ export function getReferenceImageMime(file: ImageFileLike) {
 export function isReferenceImageFile(file: ImageFileLike) {
   return !!getReferenceImageMime(file)
 }
-
-export function normalizeReferenceImageDataURL(
-  file: ImageFileLike,
-  dataURL: string
-) {
-  const mime = getReferenceImageMime(file)
-  if (!mime) return dataURL
-  return dataURL.replace(
-    /^data:(?:application\/octet-stream)?;base64,/i,
-    `data:${mime};base64,`
-  )
-}
-
-export function readReferenceImageAsDataURL(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.addEventListener('load', () => {
-      resolve(normalizeReferenceImageDataURL(file, String(reader.result || '')))
-    })
-    reader.addEventListener('error', () => reject(reader.error))
-    reader.readAsDataURL(file)
-  })
-}

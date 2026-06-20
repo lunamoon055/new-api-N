@@ -82,6 +82,7 @@ import {
   saveCreationModelCategories,
   saveCreationModelDescriptions,
   submitCreationTask,
+  uploadCreationReferenceImage,
 } from './api'
 import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
@@ -121,10 +122,7 @@ import type {
   CreationView,
 } from './types'
 import { VideoReferenceFields } from './video-reference-fields'
-import {
-  isReferenceImageFile,
-  readReferenceImageAsDataURL,
-} from './video-reference-files'
+import { isReferenceImageFile } from './video-reference-files'
 
 const MODES: CreationMode[] = ['chat', 'image', 'video']
 
@@ -373,9 +371,9 @@ export function CreationCenter() {
     const rejectedCount = files.length - imageFiles.length
     let urls: string[]
     try {
-      urls = await Promise.all(imageFiles.map(readReferenceImageAsDataURL))
+      urls = await Promise.all(imageFiles.map(uploadCreationReferenceImage))
     } catch {
-      toast.error(t('Unable to read reference image.'))
+      toast.error(t('Unable to upload reference image.'))
       return
     }
     if (!urls.length) {

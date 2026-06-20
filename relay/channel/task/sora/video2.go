@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -34,8 +33,6 @@ type video2Request struct {
 	AudioURL       string            `json:"audio_url,omitempty"`
 	Async          *bool             `json:"async,omitempty"`
 }
-
-var video2ImageDataURLPattern = regexp.MustCompile(`(?i)^data:image/[a-z0-9.+-]+;base64,`)
 
 func isVideo2Model(modelName string) bool {
 	switch strings.ToLower(strings.TrimSpace(modelName)) {
@@ -117,9 +114,6 @@ func validateVideo2Request(req video2Request) error {
 func validateVideo2ImageReference(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return nil
-	}
-	if video2ImageDataURLPattern.MatchString(value) {
 		return nil
 	}
 	return validateVideo2URL(value)

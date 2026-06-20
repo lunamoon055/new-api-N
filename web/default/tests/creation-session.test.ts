@@ -196,7 +196,7 @@ describe('creation center session helpers', () => {
         ...EMPTY_CREATION_VIDEO_REFERENCES,
         imageUrls: ['data:image/png;base64,AAAA'],
       })
-    ).toBeUndefined()
+    ).toBe('Reference image URL must use HTTP or HTTPS.')
     expect(
       getCreationVideoReferenceError('video-2.0', {
         ...EMPTY_CREATION_VIDEO_REFERENCES,
