@@ -33,10 +33,7 @@ func InitChannelCache() {
 	DB.Find(&abilities)
 	groups := make(map[string]bool)
 	for _, ability := range abilities {
-		group := NormalizeChannelGroupName(ability.Group)
-		if group != "" {
-			groups[group] = true
-		}
+		groups[ability.Group] = true
 	}
 	newGroup2model2channels := make(map[string]map[string][]int)
 	for group := range groups {
@@ -46,14 +43,10 @@ func InitChannelCache() {
 		if channel.Status != common.ChannelStatusEnabled {
 			continue // skip disabled channels
 		}
-		groups := NormalizeChannelGroups(channel.Group)
+		groups := strings.Split(channel.Group, ",")
 		for _, group := range groups {
 			models := strings.Split(channel.Models, ",")
 			for _, model := range models {
-				model = strings.TrimSpace(model)
-				if model == "" {
-					continue
-				}
 				if _, ok := newGroup2model2channels[group][model]; !ok {
 					newGroup2model2channels[group][model] = make([]int, 0)
 				}
@@ -102,8 +95,6 @@ func SyncChannelCache(frequency int) {
 }
 
 func GetRandomSatisfiedChannel(group string, model string, retry int) (*Channel, error) {
-	group = NormalizeChannelGroupName(group)
-	model = strings.TrimSpace(model)
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
 		return GetChannel(group, model, retry)

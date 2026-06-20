@@ -130,56 +130,11 @@ func resolveChannelSortOptions(idSort bool, sortOptions []ChannelSortOptions) Ch
 }
 
 func NormalizeChannelGroupFilter(group string) string {
-	group = NormalizeChannelGroupName(group)
 	group = strings.TrimSpace(group)
 	if group == "" || strings.EqualFold(group, "all") || strings.EqualFold(group, "null") {
 		return ""
 	}
 	return group
-}
-
-func NormalizeChannelGroupName(group string) string {
-	switch strings.TrimSpace(group) {
-	case "默认", "默认分组":
-		return "default"
-	default:
-		return strings.TrimSpace(group)
-	}
-}
-
-func NormalizeChannelGroups(groups string) []string {
-	if strings.TrimSpace(groups) == "" {
-		return nil
-	}
-	seen := make(map[string]struct{})
-	normalized := make([]string, 0)
-	for _, group := range strings.Split(strings.Trim(groups, ","), ",") {
-		group = NormalizeChannelGroupName(group)
-		if group == "" {
-			continue
-		}
-		if _, exists := seen[group]; exists {
-			continue
-		}
-		seen[group] = struct{}{}
-		normalized = append(normalized, group)
-	}
-	return normalized
-}
-
-func NormalizeChannelGroupsString(groups string) string {
-	return strings.Join(NormalizeChannelGroups(groups), ",")
-}
-
-func channelGroupLookupNames(group string) []string {
-	group = NormalizeChannelGroupName(group)
-	if group == "default" {
-		return []string{"default", "默认", "默认分组"}
-	}
-	if group == "" {
-		return []string{""}
-	}
-	return []string{group}
 }
 
 func channelGroupFilterCondition() string {
@@ -203,20 +158,7 @@ func ApplyChannelGroupFilter(query *gorm.DB, group string) *gorm.DB {
 	if group == "" {
 		return query
 	}
-	groups := channelGroupLookupNames(group)
-	conditions := make([]string, 0, len(groups))
-	args := make([]any, 0, len(groups))
-	for _, lookupGroup := range groups {
-		if lookupGroup == "" {
-			continue
-		}
-		conditions = append(conditions, channelGroupFilterCondition())
-		args = append(args, channelGroupFilterPattern(lookupGroup))
-	}
-	if len(conditions) == 0 {
-		return query
-	}
-	return query.Where("("+strings.Join(conditions, " OR ")+")", args...)
+	return query.Where(channelGroupFilterCondition(), channelGroupFilterPattern(group))
 }
 
 // Value implements driver.Valuer interface
@@ -352,7 +294,14 @@ func (channel *Channel) GetModels() []string {
 }
 
 func (channel *Channel) GetGroups() []string {
-	return NormalizeChannelGroups(channel.Group)
+	if channel.Group == "" {
+		return []string{}
+	}
+	groups := strings.Split(strings.Trim(channel.Group, ","), ",")
+	for i, group := range groups {
+		groups[i] = strings.TrimSpace(group)
+	}
+	return groups
 }
 
 func (channel *Channel) GetOtherInfo() map[string]interface{} {
@@ -566,7 +515,6 @@ func (channel *Channel) GetStatusCodeMapping() string {
 
 func (channel *Channel) Insert() error {
 	var err error
-	channel.Group = NormalizeChannelGroupsString(channel.Group)
 	err = DB.Create(channel).Error
 	if err != nil {
 		return err
@@ -576,7 +524,6 @@ func (channel *Channel) Insert() error {
 }
 
 func (channel *Channel) Update() error {
-	channel.Group = NormalizeChannelGroupsString(channel.Group)
 	// If this is a multi-key channel, recalculate MultiKeySize based on the current key list to avoid inconsistency after editing keys
 	if channel.ChannelInfo.IsMultiKey {
 		var keyStr string
@@ -836,7 +783,7 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 	}
 	if group != nil && *group != "" {
 		shouldReCreateAbilities = true
-		updateData.Group = NormalizeChannelGroupsString(*group)
+		updateData.Group = *group
 	}
 	if priority != nil {
 		updateData.Priority = priority
