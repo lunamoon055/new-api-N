@@ -58,6 +58,7 @@ export function loadCreationHistory(
     if (!Array.isArray(parsed)) return []
     return parsed
       .filter(isCreationHistoryItem)
+      .map(sanitizeCreationHistoryItem)
       .sort((left, right) => right.createdAt - left.createdAt)
       .slice(0, CREATION_HISTORY_LIMIT)
   } catch {
@@ -75,6 +76,7 @@ export function saveCreationHistory(
     key,
     JSON.stringify(
       [...items]
+        .map(sanitizeCreationHistoryItem)
         .filter(isCreationHistoryItem)
         .sort((left, right) => right.createdAt - left.createdAt)
         .slice(0, CREATION_HISTORY_LIMIT)
@@ -82,11 +84,44 @@ export function saveCreationHistory(
   )
 }
 
+export function sanitizeCreationHistoryItem(
+  item: CreationHistoryItem
+): CreationHistoryItem {
+  const references = item.videoReferences
+  if (!references) return item
+  const imageUrls = Array.isArray(references.imageUrls)
+    ? references.imageUrls.filter(isStorableReferenceURL)
+    : []
+  const startImageUrl =
+    typeof references.startImageUrl === 'string' &&
+    isStorableReferenceURL(references.startImageUrl)
+      ? references.startImageUrl
+      : ''
+  const endImageUrl =
+    typeof references.endImageUrl === 'string' &&
+    isStorableReferenceURL(references.endImageUrl)
+      ? references.endImageUrl
+      : ''
+
+  return {
+    ...item,
+    videoReferences: {
+      ...references,
+      imageUrls,
+      startImageUrl,
+      endImageUrl,
+    },
+  }
+}
+
 export function upsertCreationHistoryItem(
   items: CreationHistoryItem[],
   item: CreationHistoryItem
 ) {
-  return [item, ...items.filter((current) => current.id !== item.id)]
+  return [
+    sanitizeCreationHistoryItem(item),
+    ...items.filter((current) => current.id !== item.id),
+  ]
     .sort((left, right) => right.createdAt - left.createdAt)
     .slice(0, CREATION_HISTORY_LIMIT)
 }
@@ -143,6 +178,10 @@ export function composeCreationPrompt(prompt: string, assets: CreationAsset[]) {
       return lines
     }),
   ].join('\n')
+}
+
+function isStorableReferenceURL(value: string) {
+  return /^https?:\/\//i.test(value.trim())
 }
 
 function isCreationHistoryItem(value: unknown): value is CreationHistoryItem {

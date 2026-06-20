@@ -30,6 +30,7 @@ import {
   getCreationVideoRequestOptions,
   loadCreationHistory,
   normalizeCreationVideoReferences,
+  sanitizeCreationHistoryItem,
   saveCreationHistory,
   upsertCreationHistoryItem,
   type CreationHistoryStorage,
@@ -90,12 +91,17 @@ describe('creation center session helpers', () => {
     expect(
       getCreationVideoRequestOptions(
         { resolution: '1080p', duration: '8', aspectRatio: '16:9' },
-        'sora2'
+        'sora2',
+        {
+          ...EMPTY_CREATION_VIDEO_REFERENCES,
+          imageUrls: ['data:image/png;base64,AAAA'],
+        }
       )
     ).toMatchObject({
       seconds: '8',
       size: '1280x720',
       aspect_ratio: '16:9',
+      input_reference: 'data:image/png;base64,AAAA',
     })
     expect(
       getCreationVideoRequestOptions(
@@ -113,6 +119,15 @@ describe('creation center session helpers', () => {
         'sora-2'
       ).seconds
     ).toBe('4')
+    expect(
+      getCreationVideoReferenceError('sora2', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        imageUrls: [
+          'https://cdn.example/a.png',
+          'https://cdn.example/b.png',
+        ],
+      })
+    ).toBe('Sora2 accepts at most 1 reference image.')
   })
 
   it('uses documented Video2 capabilities and payload fields', () => {
@@ -298,6 +313,38 @@ describe('creation center session helpers', () => {
     expect(restored).toHaveLength(20)
     expect(restored[0].id).toBe('task-24')
     expect(restored.at(-1)?.id).toBe('task-5')
+  })
+
+  it('keeps local reference image data urls out of persisted history', () => {
+    const item = sanitizeCreationHistoryItem({
+      createdAt: 1,
+      id: 'task-1',
+      mode: 'video',
+      model: 'video-2.0',
+      prompt: 'prompt',
+      result: {
+        mode: 'video',
+        model: 'video-2.0',
+        status: 'queued',
+        taskId: 'task-1',
+      },
+      videoReferences: {
+        imageUrls: [
+          'data:image/png;base64,AAAA',
+          'https://cdn.example/keep.png',
+        ],
+        startImageUrl: 'data:image/png;base64,BBBB',
+        endImageUrl: 'https://cdn.example/end.png',
+        videoUrls: [],
+        audioUrl: '',
+      },
+    })
+
+    expect(item.videoReferences).toMatchObject({
+      imageUrls: ['https://cdn.example/keep.png'],
+      startImageUrl: '',
+      endImageUrl: 'https://cdn.example/end.png',
+    })
   })
 
   it('formats countdown seconds for the workspace', () => {

@@ -63,6 +63,7 @@ type LegacyCreationVideoRequestOptions = {
   seconds: string
   size: string
   aspect_ratio?: Extract<CreationAspectRatio, '9:16' | '16:9'>
+  input_reference?: string
   estimateSeconds: number
 }
 
@@ -332,6 +333,9 @@ export function getCreationVideoReferenceError(
     normalized.imageUrls.length +
     (normalized.startImageUrl ? 1 : 0) +
     (normalized.endImageUrl ? 1 : 0)
+  if (capability.kind === 'sora2' && imageCount > 1) {
+    return 'Sora2 accepts at most 1 reference image.'
+  }
   if (imageCount > 4) {
     return 'Video2 accepts at most 4 image references.'
   }
@@ -385,11 +389,20 @@ export function getCreationVideoRequestOptions(
   if (capability.kind === 'sora2') {
     const aspectRatio =
       normalizedOptions.aspectRatio === '16:9' ? '16:9' : '9:16'
-    return {
+    const normalizedReferences = normalizeCreationVideoReferences(
+      references,
+      modelId
+    )
+    const request: LegacyCreationVideoRequestOptions = {
       seconds: duration.seconds,
       size: SORA2_VIDEO_SIZES[aspectRatio],
       aspect_ratio: aspectRatio,
       estimateSeconds: duration.estimateSeconds,
+    }
+    const imageReference = normalizedReferences.imageUrls[0]
+    if (imageReference) request.input_reference = imageReference
+    return {
+      ...request,
     }
   }
 

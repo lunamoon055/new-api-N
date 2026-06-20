@@ -121,6 +121,10 @@ import type {
   CreationView,
 } from './types'
 import { VideoReferenceFields } from './video-reference-fields'
+import {
+  isReferenceImageFile,
+  readReferenceImageAsDataURL,
+} from './video-reference-files'
 
 const MODES: CreationMode[] = ['chat', 'image', 'video']
 
@@ -363,13 +367,17 @@ export function CreationCenter() {
     toast.success(t('A new creation session is ready.'))
   }
 
-  const addVideoReferenceImages = async (files: FileList | null) => {
-    if (!files?.length) return
-    const urls = await Promise.all(
-      Array.from(files)
-        .filter((file) => file.type.startsWith('image/'))
-        .map(readFileAsDataUrl)
-    )
+  const addVideoReferenceImages = async (files: File[]) => {
+    if (!files.length) return
+    const imageFiles = files.filter(isReferenceImageFile)
+    const rejectedCount = files.length - imageFiles.length
+    let urls: string[]
+    try {
+      urls = await Promise.all(imageFiles.map(readReferenceImageAsDataURL))
+    } catch {
+      toast.error(t('Unable to read reference image.'))
+      return
+    }
     if (!urls.length) {
       toast.error(t('Choose image files for reference images.'))
       return
@@ -383,6 +391,9 @@ export function CreationCenter() {
         selectedModel?.id
       )
     )
+    if (rejectedCount > 0) {
+      toast.error(t('Choose image files for reference images.'))
+    }
     toast.success(t('Reference images added.'))
   }
 
@@ -940,15 +951,6 @@ function normalizeStoredCreationAssets(assets: unknown): CreationAsset[] {
   })
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.addEventListener('load', () => resolve(String(reader.result || '')))
-    reader.addEventListener('error', () => reject(reader.error))
-    reader.readAsDataURL(file)
-  })
-}
-
 function ModelButton(props: {
   model: CreationModel
   active: boolean
@@ -1502,7 +1504,7 @@ type ComposerProps = {
   onPromptChange: (value: string) => void
   onVideoOptionsChange: (options: CreationVideoOptions) => void
   onVideoReferencesChange: (references: CreationVideoReferences) => void
-  onVideoReferenceImagesSelected: (files: FileList | null) => void
+  onVideoReferenceImagesSelected: (files: File[]) => void
   onRemoveVideoReferenceImage: (index: number) => void
   onRemoveAsset: (index: number) => void
   onSubmit: () => void

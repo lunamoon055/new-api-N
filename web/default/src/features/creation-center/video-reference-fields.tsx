@@ -29,7 +29,7 @@ import type { CreationVideoReferences } from './session'
 
 type VideoReferenceFieldsProps = {
   value: CreationVideoReferences
-  onImagesSelected: (files: FileList | null) => void
+  onImagesSelected: (files: File[]) => void
   onRemoveImage: (index: number) => void
 }
 
@@ -48,7 +48,14 @@ export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
               accept='image/*'
               multiple
               className='sr-only'
-              onChange={(event) => props.onImagesSelected(event.target.files)}
+              onChange={(event) => {
+                props.onImagesSelected(
+                  event.currentTarget.files
+                    ? Array.from(event.currentTarget.files)
+                    : []
+                )
+                event.currentTarget.value = ''
+              }}
             />
           </label>
           <span className='text-muted-foreground text-xs'>
