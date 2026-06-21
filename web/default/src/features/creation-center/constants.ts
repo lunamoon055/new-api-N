@@ -16,5 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { CreationMode } from './types'
 
-export * from '../media-generation/video-options'
+export const CREATION_MODES: CreationMode[] = ['chat', 'image', 'video']

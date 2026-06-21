@@ -365,12 +365,7 @@ function DraftNumberInput({
 }: DraftNumberInputProps) {
   const [draft, setDraft] = useState(() => formatNumberDraft(value))
   const [focused, setFocused] = useState(false)
-
-  useEffect(() => {
-    if (!focused) {
-      setDraft(formatNumberDraft(value))
-    }
-  }, [focused, value])
+  const displayValue = focused ? draft : formatNumberDraft(value)
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextDraft = event.target.value
@@ -406,7 +401,7 @@ function DraftNumberInput({
     <Input
       {...props}
       type='number'
-      value={draft}
+      value={displayValue}
       onChange={handleChange}
       onFocus={handleFocus}
       onMouseUp={handleMouseUp}
@@ -591,11 +586,8 @@ function VisualTierCard({
     const fieldKey = variable.tierField as keyof VisualTier
     return unitCostToPrice((tier[fieldKey] as number | undefined) ?? 0) > 0
   })
-  const [mediaOpen, setMediaOpen] = useState(hasMediaPricing)
-
-  useEffect(() => {
-    if (hasMediaPricing) setMediaOpen(true)
-  }, [hasMediaPricing])
+  const [mediaOpen, setMediaOpen] = useState(false)
+  const isMediaPricingVisible = hasMediaPricing || mediaOpen
 
   const renderPriceVariable = (
     variable: (typeof BILLING_EXTRA_VARS)[number]
@@ -748,12 +740,12 @@ function VisualTierCard({
           <ChevronDown
             className={cn(
               'mr-1 h-3 w-3 transition-transform',
-              mediaOpen && 'rotate-180'
+              isMediaPricingVisible && 'rotate-180'
             )}
           />
           {t('Media pricing')}
         </Button>
-        {mediaOpen && (
+        {isMediaPricingVisible && (
           <div className='flex flex-wrap gap-x-4 gap-y-2'>
             {MEDIA_PRICE_VARS.map(renderPriceVariable)}
           </div>

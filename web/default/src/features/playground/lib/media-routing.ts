@@ -17,10 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import {
+  extractMediaErrorMessage,
+  parseImageGenerationResult,
+  parseVideoGenerationResult,
+} from '@/features/media-generation/result-parsers'
+import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
   getCreationVideoRequestOptions,
   type CreationVideoRequestOptions,
-} from '../../creation-center/session'
+} from '@/features/media-generation/video-options'
 import { API_ENDPOINTS, MESSAGE_ROLES } from '../constants'
 import type { Message } from '../types'
 
@@ -176,25 +181,17 @@ function normalizePreviewUrl(url: string | undefined) {
 function isVideoApiContentUrl(url: string | undefined) {
   if (!url) return false
   return (
-    url.includes('/v1/videos/') ||
-    url.includes('/v1/video/async-generations/')
+    url.includes('/v1/videos/') || url.includes('/v1/video/async-generations/')
   )
 }
 
 function parseImageResult(raw: unknown, model: string): PlaygroundMediaResult {
-  const data = asRecord(raw)
-  const firstImage = Array.isArray(data.data) ? asRecord(data.data[0]) : {}
-  const b64 = getString(firstImage, 'b64_json')
-  const imageUrl =
-    getString(firstImage, 'url') ||
-    (b64 ? `data:image/png;base64,${b64}` : undefined)
-  const id = getString(data, 'id')
-  const revisedPrompt = getString(firstImage, 'revised_prompt')
+  const result = parseImageGenerationResult(raw)
 
   const lines = [`图片生成完成。`, `模型：${model}`]
-  if (id) lines.push(`结果 ID：${id}`)
-  if (revisedPrompt) lines.push(`优化提示词：${revisedPrompt}`)
-  if (imageUrl) {
+  if (result.id) lines.push(`结果 ID：${result.id}`)
+  if (result.revisedPrompt) lines.push(`优化提示词：${result.revisedPrompt}`)
+  if (result.imageUrl) {
     lines.push('图片预览已生成。')
   } else {
     lines.push('接口已返回结果，但暂未解析到图片地址。')
@@ -203,43 +200,28 @@ function parseImageResult(raw: unknown, model: string): PlaygroundMediaResult {
   return {
     mode: 'image',
     content: lines.join('\n'),
-    taskId: id,
-    mediaUrl: imageUrl,
+    taskId: result.id,
+    mediaUrl: result.imageUrl,
   }
 }
 
 function parseVideoResult(raw: unknown, model: string): PlaygroundMediaResult {
-  const data = asRecord(raw)
-  const envelopeData = asRecord(data.data)
-  const source = Object.keys(envelopeData).length ? envelopeData : data
-  const metadata = asRecord(source.metadata)
-  const taskId =
-    getString(source, 'task_id') ||
-    getString(data, 'task_id') ||
-    getString(source, 'id') ||
-    getString(data, 'id')
-  const status = getString(source, 'status') || getString(data, 'status')
-  const resultVideoUrl =
-    getString(source, 'url') ||
-    getString(source, 'result_url') ||
-    getString(source, 'output_url') ||
-    getString(source, 'video_url') ||
-    getString(metadata, 'url') ||
-    getString(metadata, 'result_url') ||
-    getString(metadata, 'output_url') ||
-    getString(metadata, 'video_url')
-  const normalizedResultUrl = normalizePreviewUrl(resultVideoUrl)
+  const result = parseVideoGenerationResult(raw)
+  const normalizedResultUrl = normalizePreviewUrl(result.videoUrl)
   const videoUrl =
     normalizedResultUrl && !isVideoApiContentUrl(normalizedResultUrl)
       ? normalizedResultUrl
-      : taskId
-        ? buildPlaygroundVideoProxyUrl(taskId)
+      : result.taskId
+        ? buildPlaygroundVideoProxyUrl(result.taskId)
         : normalizedResultUrl
 
-  const completed = isCompletedVideoStatus(status) && !!videoUrl
-  const lines = [completed ? `视频生成完成。` : `视频任务已提交。`, `模型：${model}`]
-  if (taskId) lines.push(`任务 ID：${taskId}`)
-  if (status) lines.push(`当前状态：${status}`)
+  const completed = result.status === 'completed' && !!videoUrl
+  const lines = [
+    completed ? `视频生成完成。` : `视频任务已提交。`,
+    `模型：${model}`,
+  ]
+  if (result.taskId) lines.push(`任务 ID：${result.taskId}`)
+  if (result.upstreamStatus) lines.push(`当前状态：${result.upstreamStatus}`)
   if (completed) {
     lines.push('视频预览已生成。')
   } else {
@@ -249,20 +231,9 @@ function parseVideoResult(raw: unknown, model: string): PlaygroundMediaResult {
   return {
     mode: 'video',
     content: lines.join('\n'),
-    taskId,
-    status,
+    taskId: result.taskId,
+    status: result.upstreamStatus,
     mediaUrl: completed ? videoUrl : undefined,
-  }
-}
-
-function isCompletedVideoStatus(status: string | undefined) {
-  switch (status?.toLowerCase()) {
-    case 'completed':
-    case 'succeeded':
-    case 'success':
-      return true
-    default:
-      return false
   }
 }
 
@@ -281,18 +252,5 @@ function normalizeModelName(model: string) {
 }
 
 function extractErrorMessage(raw: unknown): string | undefined {
-  const data = asRecord(raw)
-  const error = asRecord(data.error)
-  return getString(error, 'message') || getString(data, 'message')
-}
-
-function getString(data: Record<string, unknown>, key: string) {
-  const value = data[key]
-  return typeof value === 'string' && value.trim() ? value : undefined
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {}
+  return extractMediaErrorMessage(raw)
 }

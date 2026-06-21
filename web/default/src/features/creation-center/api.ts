@@ -18,6 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 import {
+  asRecord,
+  extractMediaErrorMessage,
+  getString,
+  parseImageGenerationResult,
+  parseVideoGenerationResult,
+} from '@/features/media-generation/result-parsers'
+import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
   composeCreationPrompt,
   getCreationVideoRequestOptions,
@@ -32,7 +39,6 @@ import type {
   CreationMode,
   CreationModel,
   CreationResult,
-  CreationResultStatus,
 } from './types'
 
 const CREATION_MODEL_CATEGORIES_OPTION_KEY = 'CreationModelCategories'
@@ -88,7 +94,9 @@ export async function uploadCreationReferenceImage(file: File) {
   )
   const url = response.data.data?.url
   if (!response.data.success || !url) {
-    throw new Error(response.data.message || 'Unable to upload reference image.')
+    throw new Error(
+      response.data.message || 'Unable to upload reference image.'
+    )
   }
   return url
 }
@@ -219,20 +227,15 @@ function parseImageResult(raw: unknown, model: string): CreationResult {
     return { mode: 'image', model, status: 'failed', error, raw }
   }
 
-  const data = asRecord(raw)
-  const firstImage = Array.isArray(data.data) ? asRecord(data.data[0]) : {}
-  const b64 = getString(firstImage, 'b64_json')
-  const imageUrl =
-    getString(firstImage, 'url') ||
-    (b64 ? `data:image/png;base64,${b64}` : undefined)
+  const result = parseImageGenerationResult(raw)
 
   return {
     mode: 'image',
     model,
-    id: getString(data, 'id'),
-    status: imageUrl ? 'completed' : 'unknown',
-    imageUrl,
-    outputText: getString(firstImage, 'revised_prompt'),
+    id: result.id,
+    status: result.imageUrl ? 'completed' : 'unknown',
+    imageUrl: result.imageUrl,
+    outputText: result.revisedPrompt,
     raw,
   }
 }
@@ -243,31 +246,15 @@ function parseVideoResult(raw: unknown, model: string): CreationResult {
     return { mode: 'video', model, status: 'failed', error, raw }
   }
 
-  const data = asRecord(raw)
-  const envelopeData = asRecord(data.data)
-  const source = Object.keys(envelopeData).length ? envelopeData : data
-  const metadata = asRecord(source.metadata)
-  const taskId =
-    getString(source, 'task_id') ||
-    getString(data, 'task_id') ||
-    getString(source, 'id') ||
-    getString(data, 'id')
+  const result = parseVideoGenerationResult(raw)
 
   return {
     mode: 'video',
     model,
-    id: getString(source, 'id') || getString(data, 'id'),
-    taskId,
-    status: normalizeStatus(getString(source, 'status')),
-    videoUrl:
-      getString(source, 'url') ||
-      getString(source, 'result_url') ||
-      getString(source, 'output_url') ||
-      getString(source, 'video_url') ||
-      getString(metadata, 'url') ||
-      getString(metadata, 'result_url') ||
-      getString(metadata, 'output_url') ||
-      getString(metadata, 'video_url'),
+    id: result.id,
+    taskId: result.taskId,
+    status: result.status,
+    videoUrl: result.videoUrl,
     raw,
   }
 }
@@ -290,41 +277,7 @@ function extractChatText(data: Record<string, unknown>): string | undefined {
 }
 
 function extractErrorMessage(raw: unknown): string | undefined {
-  const data = asRecord(raw)
-  const error = asRecord(data.error)
-  return getString(error, 'message') || getString(data, 'message')
-}
-
-function normalizeStatus(status: string | undefined): CreationResultStatus {
-  switch (status?.toLowerCase()) {
-    case 'queued':
-    case 'pending':
-    case 'submitted':
-      return 'queued'
-    case 'processing':
-    case 'running':
-    case 'in_progress':
-      return 'processing'
-    case 'completed':
-    case 'succeeded':
-    case 'success':
-      return 'completed'
-    case 'failed':
-    case 'cancelled':
-    case 'canceled':
-      return 'failed'
-    default:
-      return 'unknown'
-  }
-}
-
-function getString(data: Record<string, unknown>, key: string) {
-  const value = data[key]
-  return typeof value === 'string' && value.trim() ? value : undefined
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : {}
+  return extractMediaErrorMessage(raw)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

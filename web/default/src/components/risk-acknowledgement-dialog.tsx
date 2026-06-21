@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
@@ -43,6 +43,21 @@ type NormalizedRequiredTextPart = RequiredTextPart & {
   inputIndex?: number
 }
 
+function normalizeRequiredTextParts(
+  parts: RequiredTextPart[]
+): NormalizedRequiredTextPart[] {
+  return parts.reduce<NormalizedRequiredTextPart[]>((normalized, part) => {
+    if (part.type !== 'input') {
+      return [...normalized, part]
+    }
+
+    const inputIndex = normalized.filter(
+      (normalizedPart) => normalizedPart.type === 'input'
+    ).length
+    return [...normalized, { ...part, inputIndex }]
+  }, [])
+}
+
 type RiskAcknowledgementDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -66,40 +81,15 @@ type RiskAcknowledgementDialogProps = {
 export function RiskAcknowledgementDialog({
   open,
   onOpenChange,
-  title,
-  description,
-  items = [],
   checklist = [],
   requiredText = '',
   requiredTextParts = [],
-  inputPrompt,
-  inputPlaceholder,
-  mismatchHint,
-  confirmText,
-  cancelText,
-  destructive = true,
-  isLoading = false,
-  onConfirm,
-  className,
+  ...props
 }: RiskAcknowledgementDialogProps) {
-  const { t } = useTranslation()
-  const [checkedItems, setCheckedItems] = useState<boolean[]>([])
-  const [typedText, setTypedText] = useState('')
-  const [typedTextParts, setTypedTextParts] = useState<string[]>([])
-
-  const normalizedRequiredTextParts = useMemo<
-    NormalizedRequiredTextPart[]
-  >(() => {
-    let inputIndex = 0
-    return requiredTextParts.map((part) => {
-      if (part.type === 'input') {
-        const normalizedPart = { ...part, inputIndex }
-        inputIndex += 1
-        return normalizedPart
-      }
-      return part
-    })
-  }, [requiredTextParts])
+  const normalizedRequiredTextParts = useMemo<NormalizedRequiredTextPart[]>(
+    () => normalizeRequiredTextParts(requiredTextParts),
+    [requiredTextParts]
+  )
 
   const requiredTextInputCount = useMemo(
     () =>
@@ -112,13 +102,69 @@ export function RiskAcknowledgementDialog({
     ? normalizedRequiredTextParts.map((part) => part.text).join('')
     : requiredText
 
-  useEffect(() => {
-    if (!open) return
-    setCheckedItems(Array(checklist.length).fill(false))
-    setTypedText('')
-    setTypedTextParts(Array(requiredTextInputCount).fill(''))
-  }, [open, checklist.length, requiredTextInputCount])
+  const resetKey = [
+    open ? 'open' : 'closed',
+    checklist.length,
+    requiredTextInputCount,
+    requiredTextToDisplay,
+  ].join('|')
 
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <RiskAcknowledgementDialogBody
+        key={resetKey}
+        open={open}
+        checklist={checklist}
+        requiredText={requiredText}
+        normalizedRequiredTextParts={normalizedRequiredTextParts}
+        requiredTextInputCount={requiredTextInputCount}
+        hasSegmentedRequiredText={hasSegmentedRequiredText}
+        requiredTextToDisplay={requiredTextToDisplay}
+        {...props}
+      />
+    </AlertDialog>
+  )
+}
+
+type RiskAcknowledgementDialogBodyProps = Omit<
+  RiskAcknowledgementDialogProps,
+  'onOpenChange' | 'requiredTextParts'
+> & {
+  normalizedRequiredTextParts: NormalizedRequiredTextPart[]
+  requiredTextInputCount: number
+  hasSegmentedRequiredText: boolean
+  requiredTextToDisplay: string
+}
+
+function RiskAcknowledgementDialogBody({
+  open,
+  title,
+  description,
+  items = [],
+  checklist = [],
+  requiredText = '',
+  normalizedRequiredTextParts,
+  requiredTextInputCount,
+  hasSegmentedRequiredText,
+  requiredTextToDisplay,
+  inputPrompt,
+  inputPlaceholder,
+  mismatchHint,
+  confirmText,
+  cancelText,
+  destructive = true,
+  isLoading = false,
+  onConfirm,
+  className,
+}: RiskAcknowledgementDialogBodyProps) {
+  const { t } = useTranslation()
+  const [checkedItems, setCheckedItems] = useState<boolean[]>(() =>
+    Array(checklist.length).fill(false)
+  )
+  const [typedText, setTypedText] = useState('')
+  const [typedTextParts, setTypedTextParts] = useState<string[]>(() =>
+    Array(requiredTextInputCount).fill('')
+  )
   const allChecked = useMemo(() => {
     if (checklist.length === 0) return true
     return (
@@ -166,143 +212,141 @@ export function RiskAcknowledgementDialog({
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent
-        className={cn(
-          'flex max-h-[min(88dvh,760px)] w-[calc(100vw-1.5rem)] !max-w-[44rem] grid-rows-none flex-col gap-0 overflow-hidden !p-0 sm:w-[min(44rem,calc(100vw-3rem))]',
-          className
-        )}
-      >
-        <AlertDialogHeader className='shrink-0 px-4 pt-4 pb-3 text-left sm:px-6 sm:pt-6'>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          {description ? (
-            <AlertDialogDescription
-              render={<div />}
-              className='mt-1 text-left leading-5'
-            >
-              {description}
-            </AlertDialogDescription>
-          ) : null}
-        </AlertDialogHeader>
-
-        <div className='min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-4 sm:px-6'>
-          {items.length > 0 ? (
-            <ol className='border-border/70 bg-muted/30 text-foreground list-decimal space-y-2 rounded-lg border px-4 py-3 pl-8 text-sm leading-6 sm:px-5 sm:py-4 sm:pl-9'>
-              {items.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ol>
-          ) : null}
-
-          {checklist.length > 0 ? (
-            <div className='border-border/70 bg-muted/30 space-y-3 rounded-lg border p-3 sm:p-4'>
-              {checklist.map((item, index) => {
-                const id = `risk-acknowledgement-${index}`
-                return (
-                  <div key={item} className='flex items-start gap-3'>
-                    <Checkbox
-                      id={id}
-                      checked={checkedItems[index] ?? false}
-                      onCheckedChange={(checked) =>
-                        handleChecklistChange(index, checked === true)
-                      }
-                      className='mt-0.5'
-                    />
-                    <Label
-                      htmlFor={id}
-                      className='text-muted-foreground text-sm leading-5 font-normal'
-                    >
-                      {item}
-                    </Label>
-                  </div>
-                )
-              })}
-            </div>
-          ) : null}
-
-          {requiredTextToDisplay ? (
-            <div className='border-destructive/30 bg-destructive/5 space-y-3 rounded-lg border p-3 sm:p-4'>
-              <Label className='text-sm font-medium'>
-                {inputPrompt ?? t('Please type the following text to confirm:')}
-              </Label>
-              <div className='bg-background border-border rounded-md border px-3 py-2 font-mono text-sm break-all'>
-                {requiredTextToDisplay}
-              </div>
-              {hasSegmentedRequiredText ? (
-                <div className='flex flex-wrap items-center gap-2'>
-                  {normalizedRequiredTextParts.map((part, index) =>
-                    part.type === 'static' ? (
-                      <span
-                        key={`static-${index}`}
-                        className='text-muted-foreground bg-background/70 border-border rounded-md border px-2 py-1.5 font-mono text-sm select-none'
-                      >
-                        {part.text}
-                      </span>
-                    ) : (
-                      <Input
-                        key={`input-${index}`}
-                        value={typedTextParts[part.inputIndex ?? 0] ?? ''}
-                        onChange={(event) =>
-                          handleTextPartChange(
-                            part.inputIndex ?? 0,
-                            event.target.value
-                          )
-                        }
-                        placeholder={
-                          part.placeholder ??
-                          part.text ??
-                          inputPlaceholder ??
-                          t('Type the confirmation text here')
-                        }
-                        autoFocus={open && part.inputIndex === 0}
-                        onCopy={(event) => event.preventDefault()}
-                        onCut={(event) => event.preventDefault()}
-                        onPaste={(event) => event.preventDefault()}
-                        onDrop={(event) => event.preventDefault()}
-                        aria-invalid={hasTypedRequiredText && !typedMatched}
-                        className='w-full font-mono sm:w-64'
-                      />
-                    )
-                  )}
-                </div>
-              ) : (
-                <Input
-                  value={typedText}
-                  onChange={(event) => setTypedText(event.target.value)}
-                  placeholder={
-                    inputPlaceholder ?? t('Type the confirmation text here')
-                  }
-                  autoFocus={open}
-                  onCopy={(event) => event.preventDefault()}
-                  onCut={(event) => event.preventDefault()}
-                  onPaste={(event) => event.preventDefault()}
-                  onDrop={(event) => event.preventDefault()}
-                  aria-invalid={hasTypedRequiredText && !typedMatched}
-                />
-              )}
-              {hasTypedRequiredText && !typedMatched ? (
-                <p className='text-destructive text-xs'>
-                  {mismatchHint ??
-                    t('The entered text does not match the required text.')}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-
-        <AlertDialogFooter className='mx-0 mb-0 shrink-0 rounded-b-xl border-t p-3 sm:p-4'>
-          <AlertDialogCancel disabled={isLoading}>
-            {cancelText ?? t('Cancel')}
-          </AlertDialogCancel>
-          <Button
-            variant={destructive ? 'destructive' : 'default'}
-            disabled={!canConfirm}
-            onClick={onConfirm}
+    <AlertDialogContent
+      className={cn(
+        'flex max-h-[min(88dvh,760px)] w-[calc(100vw-1.5rem)] !max-w-[44rem] grid-rows-none flex-col gap-0 overflow-hidden !p-0 sm:w-[min(44rem,calc(100vw-3rem))]',
+        className
+      )}
+    >
+      <AlertDialogHeader className='shrink-0 px-4 pt-4 pb-3 text-left sm:px-6 sm:pt-6'>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
+        {description ? (
+          <AlertDialogDescription
+            render={<div />}
+            className='mt-1 text-left leading-5'
           >
-            {confirmText ?? t('Confirm')}
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+            {description}
+          </AlertDialogDescription>
+        ) : null}
+      </AlertDialogHeader>
+
+      <div className='min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-4 sm:px-6'>
+        {items.length > 0 ? (
+          <ol className='border-border/70 bg-muted/30 text-foreground list-decimal space-y-2 rounded-lg border px-4 py-3 pl-8 text-sm leading-6 sm:px-5 sm:py-4 sm:pl-9'>
+            {items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ol>
+        ) : null}
+
+        {checklist.length > 0 ? (
+          <div className='border-border/70 bg-muted/30 space-y-3 rounded-lg border p-3 sm:p-4'>
+            {checklist.map((item, index) => {
+              const id = `risk-acknowledgement-${index}`
+              return (
+                <div key={item} className='flex items-start gap-3'>
+                  <Checkbox
+                    id={id}
+                    checked={checkedItems[index] ?? false}
+                    onCheckedChange={(checked) =>
+                      handleChecklistChange(index, checked === true)
+                    }
+                    className='mt-0.5'
+                  />
+                  <Label
+                    htmlFor={id}
+                    className='text-muted-foreground text-sm leading-5 font-normal'
+                  >
+                    {item}
+                  </Label>
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+
+        {requiredTextToDisplay ? (
+          <div className='border-destructive/30 bg-destructive/5 space-y-3 rounded-lg border p-3 sm:p-4'>
+            <Label className='text-sm font-medium'>
+              {inputPrompt ?? t('Please type the following text to confirm:')}
+            </Label>
+            <div className='bg-background border-border rounded-md border px-3 py-2 font-mono text-sm break-all'>
+              {requiredTextToDisplay}
+            </div>
+            {hasSegmentedRequiredText ? (
+              <div className='flex flex-wrap items-center gap-2'>
+                {normalizedRequiredTextParts.map((part, index) =>
+                  part.type === 'static' ? (
+                    <span
+                      key={`static-${index}`}
+                      className='text-muted-foreground bg-background/70 border-border rounded-md border px-2 py-1.5 font-mono text-sm select-none'
+                    >
+                      {part.text}
+                    </span>
+                  ) : (
+                    <Input
+                      key={`input-${index}`}
+                      value={typedTextParts[part.inputIndex ?? 0] ?? ''}
+                      onChange={(event) =>
+                        handleTextPartChange(
+                          part.inputIndex ?? 0,
+                          event.target.value
+                        )
+                      }
+                      placeholder={
+                        part.placeholder ??
+                        part.text ??
+                        inputPlaceholder ??
+                        t('Type the confirmation text here')
+                      }
+                      autoFocus={open && part.inputIndex === 0}
+                      onCopy={(event) => event.preventDefault()}
+                      onCut={(event) => event.preventDefault()}
+                      onPaste={(event) => event.preventDefault()}
+                      onDrop={(event) => event.preventDefault()}
+                      aria-invalid={hasTypedRequiredText && !typedMatched}
+                      className='w-full font-mono sm:w-64'
+                    />
+                  )
+                )}
+              </div>
+            ) : (
+              <Input
+                value={typedText}
+                onChange={(event) => setTypedText(event.target.value)}
+                placeholder={
+                  inputPlaceholder ?? t('Type the confirmation text here')
+                }
+                autoFocus={open}
+                onCopy={(event) => event.preventDefault()}
+                onCut={(event) => event.preventDefault()}
+                onPaste={(event) => event.preventDefault()}
+                onDrop={(event) => event.preventDefault()}
+                aria-invalid={hasTypedRequiredText && !typedMatched}
+              />
+            )}
+            {hasTypedRequiredText && !typedMatched ? (
+              <p className='text-destructive text-xs'>
+                {mismatchHint ??
+                  t('The entered text does not match the required text.')}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <AlertDialogFooter className='mx-0 mb-0 shrink-0 rounded-b-xl border-t p-3 sm:p-4'>
+        <AlertDialogCancel disabled={isLoading}>
+          {cancelText ?? t('Cancel')}
+        </AlertDialogCancel>
+        <Button
+          variant={destructive ? 'destructive' : 'default'}
+          disabled={!canConfirm}
+          onClick={onConfirm}
+        >
+          {confirmText ?? t('Confirm')}
+        </Button>
+      </AlertDialogFooter>
+    </AlertDialogContent>
   )
 }

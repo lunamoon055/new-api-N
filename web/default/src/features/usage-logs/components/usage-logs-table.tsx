@@ -160,6 +160,20 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   }, [pageCount, ensurePageInRange])
 
   const isCommon = logCategory === 'common'
+  const filterBarKey = [
+    logCategory,
+    searchParams.startTime ?? '',
+    searchParams.endTime ?? '',
+    searchParams.channel ?? '',
+    searchParams.model ?? '',
+    searchParams.token ?? '',
+    searchParams.group ?? '',
+    searchParams.username ?? '',
+    searchParams.requestId ?? '',
+    searchParams.upstreamRequestId ?? '',
+    searchParams.filter ?? '',
+    Array.isArray(searchParams.type) ? searchParams.type.join(',') : '',
+  ].join('|')
 
   return (
     <DataTablePage
@@ -176,9 +190,13 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       tableHeaderClassName='bg-muted/30 sticky top-0 z-10'
       toolbar={
         isCommon ? (
-          <CommonLogsFilterBar table={table} />
+          <CommonLogsFilterBar key={filterBarKey} table={table} />
         ) : (
-          <TaskLogsFilterBar table={table} logCategory={logCategory} />
+          <TaskLogsFilterBar
+            key={filterBarKey}
+            table={table}
+            logCategory={logCategory}
+          />
         )
       }
       renderRow={(row) => {
