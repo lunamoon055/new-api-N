@@ -14,6 +14,32 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var video2ImageExtensions = map[string]struct{}{
+	"avif": {},
+	"gif":  {},
+	"jpeg": {},
+	"jpg":  {},
+	"png":  {},
+	"webp": {},
+}
+
+var video2VideoExtensions = map[string]struct{}{
+	"mp4": {},
+}
+
+var video2AudioExtensions = map[string]struct{}{
+	"mp3": {},
+	"wav": {},
+}
+
+var video2ImageMimeTypes = map[string]struct{}{
+	"image/avif": {},
+	"image/gif":  {},
+	"image/jpeg": {},
+	"image/png":  {},
+	"image/webp": {},
+}
+
 type video2Reference struct {
 	URL string `json:"url"`
 }
@@ -97,15 +123,13 @@ func validateVideo2Request(req video2Request) error {
 			return fmt.Errorf("image reference: %w", err)
 		}
 	}
-	for field, values := range map[string][]string{
-		"video reference": videoURLs,
-		"audio_url":       {req.AudioURL},
-	} {
-		for _, value := range values {
-			if err := validateVideo2URL(value); err != nil {
-				return fmt.Errorf("%s: %w", field, err)
-			}
+	for _, value := range videoURLs {
+		if err := validateVideo2URLWithExtension(value, video2VideoExtensions, "MP4"); err != nil {
+			return fmt.Errorf("video reference: %w", err)
 		}
+	}
+	if err := validateVideo2URLWithExtension(req.AudioURL, video2AudioExtensions, "MP3 or WAV"); err != nil {
+		return fmt.Errorf("audio_url: %w", err)
 	}
 
 	return nil
@@ -116,7 +140,16 @@ func validateVideo2ImageReference(value string) error {
 	if value == "" {
 		return nil
 	}
-	return validateVideo2URL(value)
+	if mime, ok := getVideo2DataURLMime(value); ok {
+		if !strings.HasPrefix(mime, "image/") {
+			return fmt.Errorf("URL must use http or https")
+		}
+		if _, ok := video2ImageMimeTypes[mime]; !ok {
+			return fmt.Errorf("format must be PNG, JPEG, WebP, GIF, or AVIF")
+		}
+		return nil
+	}
+	return validateVideo2ReferenceWithExtension(value, video2ImageExtensions, video2ImageMimeTypes, "PNG, JPEG, WebP, GIF, or AVIF")
 }
 
 func countNonBlank(values []string) int {
@@ -139,6 +172,64 @@ func validateVideo2URL(value string) error {
 		return fmt.Errorf("URL must use http or https")
 	}
 	return nil
+}
+
+func validateVideo2URLWithExtension(value string, allowed map[string]struct{}, label string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if err := validateVideo2URL(value); err != nil {
+		return err
+	}
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil {
+		return fmt.Errorf("URL must use http or https")
+	}
+	extension := getVideo2URLExtension(parsed.Path)
+	if _, ok := allowed[extension]; !ok {
+		return fmt.Errorf("format must be %s", label)
+	}
+	return nil
+}
+
+func validateVideo2ReferenceWithExtension(value string, allowedExtensions map[string]struct{}, allowedMimes map[string]struct{}, label string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if mime, ok := getVideo2DataURLMime(value); ok {
+		if _, ok := allowedMimes[mime]; !ok {
+			return fmt.Errorf("format must be %s", label)
+		}
+		return nil
+	}
+	return validateVideo2URLWithExtension(value, allowedExtensions, label)
+}
+
+func getVideo2DataURLMime(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(strings.ToLower(value), "data:") {
+		return "", false
+	}
+	metaEnd := strings.Index(value, ",")
+	if metaEnd < 0 {
+		return "", true
+	}
+	meta := value[len("data:"):metaEnd]
+	separator := strings.Index(meta, ";")
+	if separator >= 0 {
+		meta = meta[:separator]
+	}
+	return strings.ToLower(strings.TrimSpace(meta)), true
+}
+
+func getVideo2URLExtension(path string) string {
+	index := strings.LastIndex(path, ".")
+	if index < 0 || index == len(path)-1 {
+		return ""
+	}
+	return strings.ToLower(path[index+1:])
 }
 
 func validateVideo2JSONRequest(c *gin.Context, modelName string) *dto.TaskError {

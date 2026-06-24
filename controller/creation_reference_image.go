@@ -19,7 +19,7 @@ import (
 
 const (
 	creationReferenceImageFormField = "image"
-	creationReferenceImageMaxBytes  = 8 << 20
+	creationReferenceImageMaxBytes  = 20 << 20
 	creationReferenceImageDir       = "new-api-creation-reference-images"
 )
 
@@ -43,7 +43,7 @@ func UploadCreationReferenceImage(c *gin.Context) {
 	if fileHeader.Size > creationReferenceImageMaxBytes {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"message": "image must not exceed 8 MB",
+			"message": "image must not exceed 20 MB",
 		})
 		return
 	}
@@ -143,7 +143,7 @@ func readCreationReferenceImage(
 		return "", nil, fmt.Errorf("image is empty")
 	}
 	if len(data) > creationReferenceImageMaxBytes {
-		return "", nil, fmt.Errorf("image must not exceed 8 MB")
+		return "", nil, fmt.Errorf("image must not exceed 20 MB")
 	}
 
 	mimeType := http.DetectContentType(data)
@@ -222,18 +222,7 @@ func isSafeCreationReferenceImageName(filename string) bool {
 }
 
 func buildCreationReferenceImageURL(c *gin.Context, filename string) string {
-	scheme := "http"
-	if c.Request.TLS != nil {
-		scheme = "https"
-	}
-	if forwardedProto := c.GetHeader("X-Forwarded-Proto"); forwardedProto == "http" || forwardedProto == "https" {
-		scheme = forwardedProto
-	}
-	host := c.Request.Host
-	if forwardedHost := strings.TrimSpace(c.GetHeader("X-Forwarded-Host")); forwardedHost != "" {
-		host = forwardedHost
-	}
-	return fmt.Sprintf("%s://%s/api/creation/reference-images/%s", scheme, host, filename)
+	return fmt.Sprintf("%s/api/creation/reference-images/%s", buildCreationReferencePublicBaseURL(c), filename)
 }
 
 func cleanupCreationReferenceImageForTest(filename string) error {

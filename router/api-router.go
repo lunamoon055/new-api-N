@@ -32,6 +32,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/pricing", middleware.HeaderNavModuleAuth("pricing"), controller.GetPricing)
 		apiRouter.GET("/creation/models", middleware.TryUserAuth(), controller.GetCreationModels)
+		apiRouter.POST("/creation/reference-files", middleware.UserAuth(), middleware.UploadRateLimit(), controller.UploadCreationReferenceFile)
+		apiRouter.GET("/creation/reference-files/:filename", controller.GetCreationReferenceFile)
 		apiRouter.POST("/creation/reference-images", middleware.UserAuth(), middleware.UploadRateLimit(), controller.UploadCreationReferenceImage)
 		apiRouter.GET("/creation/reference-images/:filename", controller.GetCreationReferenceImage)
 		apiRouter.POST("/creation/images/generations", middleware.UserAuth(), middleware.CreationImageRequestConvert(), middleware.Distribute(), controller.CreationRelayImage)

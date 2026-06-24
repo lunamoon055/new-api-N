@@ -57,6 +57,16 @@ type CreationReferenceImageUploadResponse = {
   }
 }
 
+type CreationReferenceFileUploadResponse = {
+  success: boolean
+  message?: string
+  data?: {
+    kind?: string
+    mime_type?: string
+    url?: string
+  }
+}
+
 export async function getCreationCatalog(): Promise<CreationCatalogResponse> {
   const response = await api.get<CreationCatalogResponse>(
     '/api/creation/models'
@@ -96,6 +106,34 @@ export async function uploadCreationReferenceImage(file: File) {
   if (!response.data.success || !url) {
     throw new Error(
       response.data.message || 'Unable to upload reference image.'
+    )
+  }
+  return url
+}
+
+export async function uploadCreationReferenceFile(
+  file: File,
+  kind: 'image' | 'video' | 'audio',
+  mimeType?: string
+) {
+  const formData = new FormData()
+  formData.append('kind', kind)
+  formData.append(
+    'file',
+    mimeType && file.type !== mimeType
+      ? file.slice(0, file.size, mimeType)
+      : file,
+    file.name
+  )
+  const response = await api.post<CreationReferenceFileUploadResponse>(
+    '/api/creation/reference-files',
+    formData,
+    { skipErrorHandler: true } as Record<string, unknown>
+  )
+  const url = response.data.data?.url
+  if (!response.data.success || !url) {
+    throw new Error(
+      response.data.message || 'Unable to upload reference file.'
     )
   }
   return url

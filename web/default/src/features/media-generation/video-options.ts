@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 export type CreationResolution = '720p' | '1080p' | '2k' | '4k'
 export type CreationAspectRatio = '9:16' | '16:9' | '1:1'
 export type CreationDuration = string
+export type CreationVideoReferenceMode = 'image' | 'video' | 'multimodal'
 
 export type CreationVideoOptions = {
   resolution: CreationResolution
@@ -28,19 +29,27 @@ export type CreationVideoOptions = {
 }
 
 export type CreationVideoReferences = {
-  imageUrls: string[]
+  referenceMode: CreationVideoReferenceMode
+  imageUrls: CreationVideoReferenceValue[]
   startImageUrl: string
   endImageUrl: string
-  videoUrls: string[]
-  audioUrl: string
+  videoUrls: CreationVideoReferenceValue[]
+  audioUrl: CreationVideoReferenceValue
 }
+
+export type CreationVideoReferenceObject = {
+  url: string
+  previewUrl?: string
+}
+
+export type CreationVideoReferenceValue = string | CreationVideoReferenceObject
 
 export type CreationVideoCapability = {
   kind: 'sora2' | 'video2'
   durations: string[]
   resolutions: CreationResolution[]
   aspectRatios: CreationAspectRatio[]
-  referenceMode: 'images' | 'all'
+  referenceModes: CreationVideoReferenceMode[]
   showResolution: boolean
   durationControl: 'menu' | 'select'
 }
@@ -85,6 +94,12 @@ type Video2CreationVideoRequestOptions = {
 export type CreationVideoRequestOptions =
   | LegacyCreationVideoRequestOptions
   | Video2CreationVideoRequestOptions
+
+export const CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT = 4
+export const CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES = 20 * 1024 * 1024
+export const CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT = 3
+export const CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES = 200 * 1024 * 1024
+export const CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES = 15 * 1024 * 1024
 
 export const CREATION_RESOLUTION_OPTIONS: ResolutionOption[] = [
   { value: '1080p', label: '1080', size: '1920x1080', estimateMultiplier: 1 },
@@ -140,7 +155,7 @@ const SORA2_VIDEO_CAPABILITY: CreationVideoCapability = {
   durations: ['4', '8', '12'],
   resolutions: ['720p'],
   aspectRatios: ['9:16', '16:9'],
-  referenceMode: 'images',
+  referenceModes: ['image'],
   showResolution: false,
   durationControl: 'select',
 }
@@ -154,7 +169,7 @@ const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
     durations: VIDEO2_DURATIONS,
     resolutions: ['720p'],
     aspectRatios: ['9:16', '16:9', '1:1'],
-    referenceMode: 'images',
+    referenceModes: ['image', 'video', 'multimodal'],
     showResolution: true,
     durationControl: 'menu',
   },
@@ -163,7 +178,7 @@ const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
     durations: VIDEO2_DURATIONS,
     resolutions: ['720p'],
     aspectRatios: ['9:16', '16:9', '1:1'],
-    referenceMode: 'all',
+    referenceModes: ['image', 'video', 'multimodal'],
     showResolution: true,
     durationControl: 'menu',
   },
@@ -175,6 +190,7 @@ export const DEFAULT_CREATION_VIDEO_OPTIONS: CreationVideoOptions = {
 }
 
 export const EMPTY_CREATION_VIDEO_REFERENCES: CreationVideoReferences = {
+  referenceMode: 'image',
   imageUrls: [],
   startImageUrl: '',
   endImageUrl: '',
@@ -189,6 +205,33 @@ const SORA2_VIDEO_SIZES: Record<
   '9:16': '720x1280',
   '16:9': '1280x720',
 }
+
+const VIDEO_REFERENCE_IMAGE_EXTENSIONS = [
+  'avif',
+  'gif',
+  'jpeg',
+  'jpg',
+  'png',
+  'webp',
+]
+
+const VIDEO_REFERENCE_VIDEO_EXTENSIONS = ['mp4']
+const VIDEO_REFERENCE_AUDIO_EXTENSIONS = ['mp3', 'wav']
+const VIDEO_REFERENCE_IMAGE_MIME_TYPES = [
+  'image/avif',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]
+const VIDEO_REFERENCE_VIDEO_MIME_TYPES = ['video/mp4']
+const VIDEO_REFERENCE_AUDIO_MIME_TYPES = [
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/wave',
+  'audio/x-wav',
+]
 
 function normalizeModelId(modelId?: string) {
   return modelId?.trim().toLowerCase() ?? ''
@@ -272,6 +315,7 @@ export function getCreationVideoOptionsError(
 
 function emptyCreationVideoReferences(): CreationVideoReferences {
   return {
+    referenceMode: 'image',
     imageUrls: [],
     startImageUrl: '',
     endImageUrl: '',
@@ -280,8 +324,39 @@ function emptyCreationVideoReferences(): CreationVideoReferences {
   }
 }
 
-function cleanURLs(values: string[]) {
-  return values.map((value) => value.trim()).filter(Boolean)
+export function getCreationReferenceURL(
+  value?: CreationVideoReferenceValue | null
+) {
+  if (!value) return ''
+  if (typeof value === 'string') return value.trim()
+  return value.url.trim()
+}
+
+export function getCreationReferencePreviewURL(
+  value?: CreationVideoReferenceValue | null
+) {
+  if (!value) return ''
+  if (typeof value === 'string') return value.trim()
+  return value.previewUrl?.trim() || value.url.trim()
+}
+
+function cleanReferenceValues(
+  values: CreationVideoReferenceValue[] | undefined
+) {
+  return (values ?? []).filter((value) => getCreationReferenceURL(value))
+}
+
+function normalizeReferenceString(value: string | undefined) {
+  return value?.trim() ?? ''
+}
+
+function normalizeReferenceMode(
+  value: CreationVideoReferenceMode | undefined,
+  capability: CreationVideoCapability
+): CreationVideoReferenceMode {
+  return value && capability.referenceModes.includes(value)
+    ? value
+    : (capability.referenceModes[0] ?? 'image')
 }
 
 export function normalizeCreationVideoReferences(
@@ -291,20 +366,45 @@ export function normalizeCreationVideoReferences(
   const capability = getCreationVideoCapabilities(modelId)
   if (!capability) return emptyCreationVideoReferences()
 
-  const imageUrls = cleanURLs(references?.imageUrls ?? [])
-  if (capability.referenceMode === 'images') {
+  const referenceMode = normalizeReferenceMode(
+    references?.referenceMode,
+    capability
+  )
+  const imageUrls =
+    referenceMode === 'image' || referenceMode === 'multimodal'
+      ? cleanReferenceValues(references?.imageUrls ?? [])
+      : []
+  const videoUrls =
+    referenceMode === 'video' || referenceMode === 'multimodal'
+      ? cleanReferenceValues(references?.videoUrls ?? [])
+      : []
+
+  if (referenceMode === 'image') {
     return {
       ...emptyCreationVideoReferences(),
+      referenceMode,
       imageUrls,
     }
   }
 
   return {
+    referenceMode,
     imageUrls,
-    startImageUrl: references?.startImageUrl?.trim() ?? '',
-    endImageUrl: references?.endImageUrl?.trim() ?? '',
-    videoUrls: cleanURLs(references?.videoUrls ?? []),
-    audioUrl: references?.audioUrl?.trim() ?? '',
+    startImageUrl:
+      referenceMode === 'multimodal'
+        ? normalizeReferenceString(references?.startImageUrl)
+        : '',
+    endImageUrl:
+      referenceMode === 'multimodal'
+        ? normalizeReferenceString(references?.endImageUrl)
+        : '',
+    videoUrls,
+    audioUrl:
+      referenceMode === 'multimodal'
+        ? references?.audioUrl && getCreationReferenceURL(references.audioUrl)
+          ? references.audioUrl
+          : ''
+        : '',
   }
 }
 
@@ -318,7 +418,46 @@ function isHTTPURL(value: string) {
 }
 
 function isReferenceImage(value: string) {
-  return isHTTPURL(value) || /^data:image\/[a-z0-9.+-]+;base64,/i.test(value)
+  return isHTTPURL(value) || getDataURLMime(value)?.startsWith('image/')
+}
+
+function isReferenceVideo(value: string) {
+  return isHTTPURL(value)
+}
+
+function isReferenceAudio(value: string) {
+  return isHTTPURL(value)
+}
+
+function getDataURLMime(value: string) {
+  const match = value.match(/^data:([^;,]+)(?:;[^,]*)?,/i)
+  return match?.[1]?.toLowerCase()
+}
+
+function getURLFileExtension(value: string) {
+  try {
+    const pathname = new URL(value).pathname
+    const filename = pathname.split('/').pop() ?? ''
+    const extension = filename.includes('.') ? filename.split('.').pop() : ''
+    return extension?.toLowerCase() ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function hasAllowedURLFileExtension(value: string, extensions: string[]) {
+  const extension = getURLFileExtension(value)
+  return !!extension && extensions.includes(extension)
+}
+
+function hasAllowedReferenceFormat(
+  value: string,
+  extensions: string[],
+  mimeTypes: string[]
+) {
+  const mime = getDataURLMime(value)
+  if (mime) return mimeTypes.includes(mime)
+  return hasAllowedURLFileExtension(value, extensions)
 }
 
 export function getCreationVideoReferenceError(
@@ -336,28 +475,66 @@ export function getCreationVideoReferenceError(
   if (capability.kind === 'sora2' && imageCount > 1) {
     return 'Sora2 accepts at most 1 reference image.'
   }
-  if (imageCount > 4) {
+  if (imageCount > CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT) {
     return 'Video2 accepts at most 4 image references.'
   }
-  if (normalized.videoUrls.length > 3) {
+  if (normalized.videoUrls.length > CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT) {
     return 'Video2 accepts at most 3 video references.'
   }
 
   const images = [
-    ...normalized.imageUrls,
+    ...normalized.imageUrls.map(getCreationReferenceURL),
     normalized.startImageUrl,
     normalized.endImageUrl,
   ].filter(Boolean)
   if (images.some((url) => !isReferenceImage(url))) {
     return 'Reference images must be images or HTTP URLs.'
   }
-  if (capability.kind === 'video2' && images.some((url) => !isHTTPURL(url))) {
-    return 'Reference image URL must use HTTP or HTTPS.'
+  if (
+    capability.kind === 'video2' &&
+    images.some(
+      (url) =>
+        !hasAllowedReferenceFormat(
+          url,
+          VIDEO_REFERENCE_IMAGE_EXTENSIONS,
+          VIDEO_REFERENCE_IMAGE_MIME_TYPES
+        )
+    )
+  ) {
+    return 'Reference image format must be PNG, JPEG, WebP, GIF, or AVIF.'
   }
 
-  const urls = [...normalized.videoUrls, normalized.audioUrl].filter(Boolean)
-  if (urls.some((url) => !isHTTPURL(url))) {
+  const videoUrls = normalized.videoUrls.map(getCreationReferenceURL).filter(Boolean)
+  const audioUrls = [getCreationReferenceURL(normalized.audioUrl)].filter(Boolean)
+  if (
+    videoUrls.some((url) => !isReferenceVideo(url)) ||
+    audioUrls.some((url) => !isReferenceAudio(url))
+  ) {
     return 'Reference URL must use HTTP or HTTPS.'
+  }
+  if (
+    videoUrls.some(
+      (url) =>
+        !hasAllowedReferenceFormat(
+          url,
+          VIDEO_REFERENCE_VIDEO_EXTENSIONS,
+          VIDEO_REFERENCE_VIDEO_MIME_TYPES
+        )
+    )
+  ) {
+    return 'Reference video format must be MP4.'
+  }
+  if (
+    audioUrls.some(
+      (url) =>
+        !hasAllowedReferenceFormat(
+          url,
+          VIDEO_REFERENCE_AUDIO_EXTENSIONS,
+          VIDEO_REFERENCE_AUDIO_MIME_TYPES
+        )
+    )
+  ) {
+    return 'Reference audio format must be MP3 or WAV.'
   }
   return undefined
 }
@@ -402,7 +579,7 @@ export function getCreationVideoRequestOptions(
       aspect_ratio: aspectRatio,
       estimateSeconds: duration.estimateSeconds,
     }
-    const imageReference = normalizedReferences.imageUrls[0]
+    const imageReference = getCreationReferenceURL(normalizedReferences.imageUrls[0])
     if (imageReference) request.input_reference = imageReference
     return {
       ...request,
@@ -421,15 +598,23 @@ export function getCreationVideoRequestOptions(
     estimateSeconds: duration.estimateSeconds,
   }
 
-  if (normalizedReferences.imageUrls.length === 1) {
-    request.image_url = normalizedReferences.imageUrls[0]
-  } else if (normalizedReferences.imageUrls.length > 1) {
-    request.image_urls = normalizedReferences.imageUrls
+  const imageUrls = normalizedReferences.imageUrls
+    .map(getCreationReferenceURL)
+    .filter(Boolean)
+  const videoUrls = normalizedReferences.videoUrls
+    .map(getCreationReferenceURL)
+    .filter(Boolean)
+  const audioUrl = getCreationReferenceURL(normalizedReferences.audioUrl)
+
+  if (imageUrls.length === 1) {
+    request.image_url = imageUrls[0]
+  } else if (imageUrls.length > 1) {
+    request.image_urls = imageUrls
   }
-  if (normalizedReferences.videoUrls.length === 1) {
-    request.video_url = normalizedReferences.videoUrls[0]
-  } else if (normalizedReferences.videoUrls.length > 1) {
-    request.video_reference = normalizedReferences.videoUrls.map((url) => ({
+  if (videoUrls.length === 1) {
+    request.video_url = videoUrls[0]
+  } else if (videoUrls.length > 1) {
+    request.video_reference = videoUrls.map((url) => ({
       url,
     }))
   }
@@ -439,8 +624,8 @@ export function getCreationVideoRequestOptions(
   if (normalizedReferences.endImageUrl) {
     request.end_image_url = normalizedReferences.endImageUrl
   }
-  if (normalizedReferences.audioUrl) {
-    request.audio_url = normalizedReferences.audioUrl
+  if (audioUrl) {
+    request.audio_url = audioUrl
   }
 
   return request

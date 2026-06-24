@@ -19,24 +19,63 @@ For commercial licensing, please contact support@quantumnous.com
 
 const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   avif: 'image/avif',
-  bmp: 'image/bmp',
   gif: 'image/gif',
-  heic: 'image/heic',
-  heif: 'image/heif',
   jpeg: 'image/jpeg',
   jpg: 'image/jpeg',
   png: 'image/png',
   webp: 'image/webp',
 }
 
-type ImageFileLike = Pick<File, 'name' | 'type'>
-
-export function getReferenceImageMime(file: ImageFileLike) {
-  if (file.type.startsWith('image/')) return file.type
-  const extension = file.name.split('.').pop()?.toLowerCase()
-  return extension ? IMAGE_MIME_BY_EXTENSION[extension] : undefined
+const VIDEO_MIME_BY_EXTENSION: Record<string, string> = {
+  mp4: 'video/mp4',
 }
 
-export function isReferenceImageFile(file: ImageFileLike) {
+const AUDIO_MIME_BY_EXTENSION: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+}
+
+const AUDIO_MIME_TYPES = [
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/wave',
+  'audio/x-wav',
+]
+
+type ReferenceFileLike = Pick<File, 'name' | 'type'>
+
+function getReferenceMime(
+  file: ReferenceFileLike,
+  mimeByExtension: Record<string, string>,
+  mimeTypes = Object.values(mimeByExtension)
+) {
+  const extension = file.name.split('.').pop()?.toLowerCase()
+  const mime = extension ? mimeByExtension[extension] : undefined
+  if (mime) return mime
+  return mimeTypes.includes(file.type) ? file.type : undefined
+}
+
+export function getReferenceImageMime(file: ReferenceFileLike) {
+  return getReferenceMime(file, IMAGE_MIME_BY_EXTENSION)
+}
+
+export function getReferenceVideoMime(file: ReferenceFileLike) {
+  return getReferenceMime(file, VIDEO_MIME_BY_EXTENSION)
+}
+
+export function getReferenceAudioMime(file: ReferenceFileLike) {
+  return getReferenceMime(file, AUDIO_MIME_BY_EXTENSION, AUDIO_MIME_TYPES)
+}
+
+export function isReferenceImageFile(file: ReferenceFileLike) {
   return !!getReferenceImageMime(file)
+}
+
+export function isReferenceVideoFile(file: ReferenceFileLike) {
+  return !!getReferenceVideoMime(file)
+}
+
+export function isReferenceAudioFile(file: ReferenceFileLike) {
+  return !!getReferenceAudioMime(file)
 }

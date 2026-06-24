@@ -31,7 +31,7 @@ import {
   saveCreationModelCategories,
   saveCreationModelDescriptions,
   submitCreationTask,
-  uploadCreationReferenceImage,
+  uploadCreationReferenceFile,
 } from './api'
 import { getCreationCategoryRows } from './category-rows'
 import { Composer } from './components/composer'
@@ -44,6 +44,11 @@ import {
 } from './components/model-management-dialogs'
 import { CREATION_MODES } from './constants'
 import {
+  CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES,
+  CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT,
+  CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES,
+  CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES,
+  CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT,
   DEFAULT_CREATION_VIDEO_OPTIONS,
   EMPTY_CREATION_VIDEO_REFERENCES,
   getCreationDurationOptions,
@@ -70,7 +75,14 @@ import type {
   CreationResult,
   CreationView,
 } from './types'
-import { isReferenceImageFile } from './video-reference-files'
+import {
+  getReferenceAudioMime,
+  getReferenceImageMime,
+  getReferenceVideoMime,
+  isReferenceAudioFile,
+  isReferenceImageFile,
+  isReferenceVideoFile,
+} from './video-reference-files'
 
 export function CreationCenter() {
   const { t } = useTranslation()
@@ -311,34 +323,130 @@ export function CreationCenter() {
     toast.success(t('A new creation session is ready.'))
   }
 
-  const addVideoReferenceImages = async (files: File[]) => {
+  const addVideoReferenceFiles = async (files: File[]) => {
     if (!files.length) return
-    const imageFiles = files.filter(isReferenceImageFile)
-    const rejectedCount = files.length - imageFiles.length
-    let urls: string[]
-    try {
-      urls = await Promise.all(imageFiles.map(uploadCreationReferenceImage))
-    } catch {
-      toast.error(t('Unable to upload reference image.'))
+
+    const referenceMode = videoReferences.referenceMode
+    const acceptsImages =
+      referenceMode === 'image' || referenceMode === 'multimodal'
+    const acceptsVideos =
+      referenceMode === 'video' || referenceMode === 'multimodal'
+    const acceptsAudio = referenceMode === 'multimodal'
+    const imageFiles = acceptsImages ? files.filter(isReferenceImageFile) : []
+    const videoFiles = acceptsVideos ? files.filter(isReferenceVideoFile) : []
+    const audioFiles = acceptsAudio ? files.filter(isReferenceAudioFile) : []
+    const acceptedCount =
+      imageFiles.length + videoFiles.length + audioFiles.length
+
+    if (!acceptedCount) {
+      toast.error(t('Choose supported reference files.'))
       return
     }
-    if (!urls.length) {
-      toast.error(t('Choose image files for reference images.'))
+    if (acceptedCount < files.length) {
+      toast.error(t('Choose supported reference files.'))
+    }
+
+    const supportedImageFiles = imageFiles.filter(
+      (file) => file.size <= CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES
+    )
+    const imageOversizedCount = imageFiles.length - supportedImageFiles.length
+    const imageRemainingSlots =
+      CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT -
+      videoReferences.imageUrls.length
+    const referenceImageFiles = supportedImageFiles.slice(
+      0,
+      Math.max(imageRemainingSlots, 0)
+    )
+
+    if (
+      imageFiles.length > 0 &&
+      (imageRemainingSlots <= 0 ||
+        supportedImageFiles.length > referenceImageFiles.length)
+    ) {
+      toast.error(t('Video2 accepts at most 4 image references.'))
+    }
+    if (imageOversizedCount > 0) {
+      toast.error(t('Reference images must not exceed 20 MB each.'))
+    }
+
+    const selectedVideoBytes = videoFiles.reduce(
+      (sum, file) => sum + file.size,
+      0
+    )
+    const supportedVideoFiles =
+      selectedVideoBytes <= CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES
+        ? videoFiles
+        : []
+    const videoRemainingSlots =
+      CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT -
+      videoReferences.videoUrls.filter(Boolean).length
+    const referenceVideoFiles = supportedVideoFiles.slice(
+      0,
+      Math.max(videoRemainingSlots, 0)
+    )
+
+    if (
+      videoFiles.length > 0 &&
+      (videoRemainingSlots <= 0 ||
+        supportedVideoFiles.length > referenceVideoFiles.length)
+    ) {
+      toast.error(t('Video2 accepts at most 3 video references.'))
+    }
+    if (selectedVideoBytes > CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES) {
+      toast.error(t('Reference videos must not exceed 200 MB total.'))
+    }
+
+    const audioFile = audioFiles.find(
+      (file) => file.size <= CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES
+    )
+    if (audioFiles.length > 0 && !audioFile) {
+      toast.error(t('Reference audio must not exceed 15 MB.'))
+    }
+    if (
+      !referenceImageFiles.length &&
+      !referenceVideoFiles.length &&
+      !audioFile
+    ) {
+      return
+    }
+
+    let imageUrls: CreationVideoReferences['imageUrls'] = []
+    let videoUrls: CreationVideoReferences['videoUrls'] = []
+    let audioUrl: CreationVideoReferences['audioUrl'] | undefined
+    try {
+      imageUrls = await Promise.all(
+        referenceImageFiles.map((file) =>
+          createUploadedReferenceValue(file, 'image', getReferenceImageMime(file))
+        )
+      )
+      videoUrls = await Promise.all(
+        referenceVideoFiles.map((file) =>
+          createUploadedReferenceValue(file, 'video', getReferenceVideoMime(file))
+        )
+      )
+      if (audioFile) {
+        audioUrl = await createUploadedReferenceValue(
+          audioFile,
+          'audio',
+          getReferenceAudioMime(audioFile)
+        )
+      }
+    } catch {
+      toast.error(t('Unable to upload reference file.'))
       return
     }
     setVideoReferences((current) =>
       normalizeCreationVideoReferences(
         {
           ...current,
-          imageUrls: [...current.imageUrls, ...urls],
+          imageUrls: [...current.imageUrls, ...imageUrls],
+          videoUrls: [...current.videoUrls, ...videoUrls],
+          audioUrl: audioUrl ?? current.audioUrl,
         },
         selectedModel?.id
       )
     )
-    if (rejectedCount > 0) {
-      toast.error(t('Choose image files for reference images.'))
-    }
-    toast.success(t('Reference images added.'))
+    toast.success(t('Reference assets added.'))
   }
 
   const removeAsset = (index: number) => {
@@ -356,6 +464,32 @@ export function CreationCenter() {
           imageUrls: current.imageUrls.filter(
             (_, itemIndex) => itemIndex !== index
           ),
+        },
+        selectedModel?.id
+      )
+    )
+  }
+
+  const removeVideoReferenceVideo = (index: number) => {
+    setVideoReferences((current) =>
+      normalizeCreationVideoReferences(
+        {
+          ...current,
+          videoUrls: current.videoUrls.filter(
+            (_, itemIndex) => itemIndex !== index
+          ),
+        },
+        selectedModel?.id
+      )
+    )
+  }
+
+  const removeVideoReferenceAudio = () => {
+    setVideoReferences((current) =>
+      normalizeCreationVideoReferences(
+        {
+          ...current,
+          audioUrl: '',
         },
         selectedModel?.id
       )
@@ -609,8 +743,11 @@ export function CreationCenter() {
               sessionNumber={sessionNumber}
               onPromptChange={setPrompt}
               onVideoOptionsChange={setVideoOptions}
-              onVideoReferenceImagesSelected={addVideoReferenceImages}
+              onVideoReferencesChange={setVideoReferences}
+              onVideoReferenceFilesSelected={addVideoReferenceFiles}
               onRemoveVideoReferenceImage={removeVideoReferenceImage}
+              onRemoveVideoReferenceVideo={removeVideoReferenceVideo}
+              onRemoveVideoReferenceAudio={removeVideoReferenceAudio}
               onRemoveAsset={removeAsset}
               onSubmit={submit}
             />
@@ -688,4 +825,19 @@ function getCreationHistoryItemId(result: CreationResult, mode: CreationMode) {
     result.id ||
     `${mode}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   )
+}
+
+async function createUploadedReferenceValue(
+  file: File,
+  kind: 'image' | 'video' | 'audio',
+  mimeType: string | undefined
+) {
+  const url = await uploadCreationReferenceFile(file, kind, mimeType)
+  return {
+    url,
+    previewUrl:
+      typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+        ? URL.createObjectURL(file)
+        : url,
+  }
 }

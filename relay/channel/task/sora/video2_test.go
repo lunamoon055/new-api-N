@@ -34,6 +34,10 @@ func TestValidateVideo2Request(t *testing.T) {
 	}
 	require.NoError(t, validateVideo2Request(valid))
 
+	validDataURLReferences := valid
+	validDataURLReferences.ImageURLs = []string{"data:image/png;base64,AAAA"}
+	require.NoError(t, validateVideo2Request(validDataURLReferences))
+
 	zero := 0
 	tests := []struct {
 		name     string
@@ -94,6 +98,27 @@ func TestValidateVideo2Request(t *testing.T) {
 			contains: "video",
 		},
 		{
+			name: "unsupported image format",
+			mutate: func(req *video2Request) {
+				req.ImageURL = "https://cdn.example/one.bmp"
+			},
+			contains: "image reference",
+		},
+		{
+			name: "unsupported video format",
+			mutate: func(req *video2Request) {
+				req.VideoURL = "https://cdn.example/one.mov"
+			},
+			contains: "video reference",
+		},
+		{
+			name: "unsupported audio format",
+			mutate: func(req *video2Request) {
+				req.AudioURL = "https://cdn.example/one.flac"
+			},
+			contains: "audio_url",
+		},
+		{
 			name: "non http reference",
 			mutate: func(req *video2Request) {
 				req.AudioURL = "file:///tmp/a.mp3"
@@ -101,16 +126,30 @@ func TestValidateVideo2Request(t *testing.T) {
 			contains: "audio_url",
 		},
 		{
-			name: "data image reference",
+			name: "data video reference",
 			mutate: func(req *video2Request) {
-				req.ImageURL = "data:image/png;base64,AAAA"
+				req.VideoURL = "data:video/mp4;base64,AAAA"
 			},
-			contains: "image reference",
+			contains: "video reference",
+		},
+		{
+			name: "data audio reference",
+			mutate: func(req *video2Request) {
+				req.AudioURL = "data:audio/mpeg;base64,AAAA"
+			},
+			contains: "audio_url",
 		},
 		{
 			name: "non image data reference",
 			mutate: func(req *video2Request) {
 				req.ImageURL = "data:text/plain;base64,AAAA"
+			},
+			contains: "image reference",
+		},
+		{
+			name: "unsupported data image format",
+			mutate: func(req *video2Request) {
+				req.ImageURL = "data:image/bmp;base64,AAAA"
 			},
 			contains: "image reference",
 		},

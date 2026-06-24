@@ -20,6 +20,7 @@ import type { CreationAsset, CreationMode, CreationResult } from './types'
 import type {
   CreationVideoOptions,
   CreationVideoReferences,
+  CreationVideoReferenceValue,
 } from './video-options'
 
 export * from './video-options'
@@ -90,7 +91,9 @@ export function sanitizeCreationHistoryItem(
   const references = item.videoReferences
   if (!references) return item
   const imageUrls = Array.isArray(references.imageUrls)
-    ? references.imageUrls.filter(isStorableReferenceURL)
+    ? references.imageUrls
+        .map(getStorableReferenceURL)
+        .filter(isStorableReferenceURL)
     : []
   const startImageUrl =
     typeof references.startImageUrl === 'string' &&
@@ -102,6 +105,15 @@ export function sanitizeCreationHistoryItem(
     isStorableReferenceURL(references.endImageUrl)
       ? references.endImageUrl
       : ''
+  const videoUrls = Array.isArray(references.videoUrls)
+    ? references.videoUrls
+        .map(getStorableReferenceURL)
+        .filter(isStorableReferenceURL)
+    : []
+  const audioUrl =
+    isStorableReferenceURL(getStorableReferenceURL(references.audioUrl))
+      ? getStorableReferenceURL(references.audioUrl)
+      : ''
 
   return {
     ...item,
@@ -110,6 +122,8 @@ export function sanitizeCreationHistoryItem(
       imageUrls,
       startImageUrl,
       endImageUrl,
+      videoUrls,
+      audioUrl,
     },
   }
 }
@@ -182,6 +196,14 @@ export function composeCreationPrompt(prompt: string, assets: CreationAsset[]) {
 
 function isStorableReferenceURL(value: string) {
   return /^https?:\/\//i.test(value.trim())
+}
+
+function getStorableReferenceURL(
+  value?: CreationVideoReferenceValue | null
+) {
+  if (!value) return ''
+  if (typeof value === 'string') return value.trim()
+  return value.url.trim()
 }
 
 function isCreationHistoryItem(value: unknown): value is CreationHistoryItem {

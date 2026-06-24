@@ -185,6 +185,11 @@ describe('creation center session helpers', () => {
       '16:9',
       '1:1',
     ])
+    expect(getCreationVideoCapabilities('video-2.0')?.referenceModes).toEqual([
+      'image',
+      'video',
+      'multimodal',
+    ])
     expect(
       getCreationVideoRequestOptions(
         { resolution: '720p', duration: '15', aspectRatio: '1:1' },
@@ -198,8 +203,9 @@ describe('creation center session helpers', () => {
     })
   })
 
-  it('normalizes references per Video2 model', () => {
+  it('normalizes references for both Video2 models', () => {
     const references = {
+      referenceMode: 'multimodal' as const,
       imageUrls: ['https://cdn.example/a.png'],
       startImageUrl: 'https://cdn.example/start.png',
       endImageUrl: 'https://cdn.example/end.png',
@@ -207,13 +213,54 @@ describe('creation center session helpers', () => {
       audioUrl: 'https://cdn.example/a.mp3',
     }
 
-    expect(normalizeCreationVideoReferences(references, 'video-2.0')).toEqual({
-      ...EMPTY_CREATION_VIDEO_REFERENCES,
-      imageUrls: ['https://cdn.example/a.png'],
-    })
+    expect(normalizeCreationVideoReferences(references, 'video-2.0')).toEqual(
+      references
+    )
     expect(
       normalizeCreationVideoReferences(references, 'video-2.0-fast')
     ).toEqual(references)
+  })
+
+  it('normalizes Video2 Fast references by selected reference mode', () => {
+    const references = {
+      referenceMode: 'multimodal' as const,
+      imageUrls: ['https://cdn.example/a.png'],
+      startImageUrl: 'https://cdn.example/start.png',
+      endImageUrl: 'https://cdn.example/end.png',
+      videoUrls: ['https://cdn.example/a.mp4'],
+      audioUrl: 'https://cdn.example/a.MP3',
+    }
+
+    expect(
+      normalizeCreationVideoReferences(
+        { ...references, referenceMode: 'image' },
+        'video-2.0-fast'
+      )
+    ).toEqual({
+      referenceMode: 'image',
+      imageUrls: ['https://cdn.example/a.png'],
+      startImageUrl: '',
+      endImageUrl: '',
+      videoUrls: [],
+      audioUrl: '',
+    })
+
+    expect(
+      normalizeCreationVideoReferences(
+        { ...references, referenceMode: 'video' },
+        'video-2.0-fast'
+      )
+    ).toEqual({
+      referenceMode: 'video',
+      imageUrls: [],
+      startImageUrl: '',
+      endImageUrl: '',
+      videoUrls: ['https://cdn.example/a.mp4'],
+      audioUrl: '',
+    })
+
+    expect(normalizeCreationVideoReferences(references, 'video-2.0-fast'))
+      .toEqual(references)
   })
 
   it('validates Video2 option bounds and remote references', () => {
@@ -226,6 +273,7 @@ describe('creation center session helpers', () => {
     expect(
       getCreationVideoReferenceError('video-2.0-fast', {
         ...EMPTY_CREATION_VIDEO_REFERENCES,
+        referenceMode: 'multimodal',
         audioUrl: 'file:///tmp/a.mp3',
       })
     ).toBe('Reference URL must use HTTP or HTTPS.')
@@ -234,7 +282,27 @@ describe('creation center session helpers', () => {
         ...EMPTY_CREATION_VIDEO_REFERENCES,
         imageUrls: ['data:image/png;base64,AAAA'],
       })
-    ).toBe('Reference image URL must use HTTP or HTTPS.')
+    ).toBeUndefined()
+    expect(
+      getCreationVideoReferenceError('video-2.0', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        referenceMode: 'video',
+        videoUrls: ['data:video/mp4;base64,AAAA'],
+      })
+    ).toBe('Reference URL must use HTTP or HTTPS.')
+    expect(
+      getCreationVideoReferenceError('video-2.0-fast', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        referenceMode: 'multimodal',
+        audioUrl: 'data:audio/mpeg;base64,AAAA',
+      })
+    ).toBe('Reference URL must use HTTP or HTTPS.')
+    expect(
+      getCreationVideoReferenceError('video-2.0', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        imageUrls: ['data:image/bmp;base64,AAAA'],
+      })
+    ).toBe('Reference image format must be PNG, JPEG, WebP, GIF, or AVIF.')
     expect(
       getCreationVideoReferenceError('video-2.0', {
         ...EMPTY_CREATION_VIDEO_REFERENCES,
@@ -250,6 +318,26 @@ describe('creation center session helpers', () => {
         ),
       })
     ).toBe('Video2 accepts at most 4 image references.')
+    expect(
+      getCreationVideoReferenceError('video-2.0', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        imageUrls: ['https://cdn.example/a.bmp'],
+      })
+    ).toBe('Reference image format must be PNG, JPEG, WebP, GIF, or AVIF.')
+    expect(
+      getCreationVideoReferenceError('video-2.0-fast', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        referenceMode: 'video',
+        videoUrls: ['https://cdn.example/a.mov'],
+      })
+    ).toBe('Reference video format must be MP4.')
+    expect(
+      getCreationVideoReferenceError('video-2.0-fast', {
+        ...EMPTY_CREATION_VIDEO_REFERENCES,
+        referenceMode: 'multimodal',
+        audioUrl: 'https://cdn.example/a.flac',
+      })
+    ).toBe('Reference audio format must be MP3 or WAV.')
   })
 
   it('maps Video2 Fast references to documented singular and array fields', () => {
@@ -258,6 +346,7 @@ describe('creation center session helpers', () => {
         { resolution: '720p', duration: '8', aspectRatio: '16:9' },
         'video-2.0-fast',
         {
+          referenceMode: 'multimodal',
           imageUrls: [
             'https://cdn.example/a.png',
             'https://cdn.example/b.png',
@@ -287,6 +376,102 @@ describe('creation center session helpers', () => {
         { url: 'https://cdn.example/b.mp4' },
       ],
       audio_url: 'https://cdn.example/a.mp3',
+    })
+  })
+
+  it('uses uploaded reference URLs in Video2 payloads and keeps previews local', () => {
+    expect(
+      getCreationVideoRequestOptions(
+        { resolution: '720p', duration: '5', aspectRatio: '9:16' },
+        'video-2.0-fast',
+        {
+          ...EMPTY_CREATION_VIDEO_REFERENCES,
+          referenceMode: 'multimodal',
+          imageUrls: [
+            {
+              url: 'https://public.example/reference/a.png',
+              previewUrl: 'blob:http://localhost:3001/image-preview',
+            },
+          ],
+          videoUrls: [
+            {
+              url: 'https://public.example/reference/a.mp4',
+              previewUrl: 'blob:http://localhost:3001/video-preview',
+            },
+          ],
+          audioUrl: {
+            url: 'https://public.example/reference/a.mp3',
+            previewUrl: 'blob:http://localhost:3001/audio-preview',
+          },
+        }
+      )
+    ).toMatchObject({
+      image_url: 'https://public.example/reference/a.png',
+      video_url: 'https://public.example/reference/a.mp4',
+      audio_url: 'https://public.example/reference/a.mp3',
+    })
+  })
+
+  it('maps Video2 Fast reference modes to documented media fields', () => {
+    expect(
+      getCreationVideoRequestOptions(
+        { resolution: '720p', duration: '5', aspectRatio: '9:16' },
+        'video-2.0-fast',
+        {
+          ...EMPTY_CREATION_VIDEO_REFERENCES,
+          referenceMode: 'image',
+          imageUrls: [
+            'https://img87.zeabur.app/file/1781680907662_gpt-image2-68-1.png',
+          ],
+          videoUrls: ['https://cdn.example/ignored.mp4'],
+          audioUrl: 'https://img87.zeabur.app/file/1781680917020_0617.MP3',
+        }
+      )
+    ).toEqual({
+      duration: 5,
+      aspect_ratio: '9:16',
+      resolution: '720p',
+      async: true,
+      estimateSeconds: 135,
+      image_url:
+        'https://img87.zeabur.app/file/1781680907662_gpt-image2-68-1.png',
+    })
+
+    expect(
+      getCreationVideoRequestOptions(
+        { resolution: '720p', duration: '5', aspectRatio: '9:16' },
+        'video-2.0-fast',
+        {
+          ...EMPTY_CREATION_VIDEO_REFERENCES,
+          referenceMode: 'video',
+          imageUrls: ['https://cdn.example/ignored.png'],
+          videoUrls: ['https://cdn.example/clip.mp4'],
+          audioUrl: 'https://cdn.example/ignored.mp3',
+        }
+      )
+    ).toMatchObject({
+      video_url: 'https://cdn.example/clip.mp4',
+    })
+
+    expect(
+      getCreationVideoRequestOptions(
+        { resolution: '720p', duration: '5', aspectRatio: '9:16' },
+        'video-2.0-fast',
+        {
+          ...EMPTY_CREATION_VIDEO_REFERENCES,
+          referenceMode: 'multimodal',
+          imageUrls: [
+            'https://img87.zeabur.app/file/1781680907662_gpt-image2-68-1.png',
+          ],
+          videoUrls: ['https://cdn.example/clip.mp4'],
+          audioUrl: 'https://img87.zeabur.app/file/1781680917020_0617.MP3',
+        }
+      )
+    ).toMatchObject({
+      image_url:
+        'https://img87.zeabur.app/file/1781680907662_gpt-image2-68-1.png',
+      video_url: 'https://cdn.example/clip.mp4',
+      audio_url: 'https://img87.zeabur.app/file/1781680917020_0617.MP3',
     })
   })
 
@@ -353,7 +538,7 @@ describe('creation center session helpers', () => {
     expect(restored.at(-1)?.id).toBe('task-5')
   })
 
-  it('keeps local reference image data urls out of persisted history', () => {
+  it('keeps local reference data urls out of persisted history', () => {
     const item = sanitizeCreationHistoryItem({
       createdAt: 1,
       id: 'task-1',
@@ -367,21 +552,34 @@ describe('creation center session helpers', () => {
         taskId: 'task-1',
       },
       videoReferences: {
+        referenceMode: 'image',
         imageUrls: [
+          {
+            url: 'https://cdn.example/uploaded.png',
+            previewUrl: 'blob:http://localhost:3001/uploaded',
+          },
           'data:image/png;base64,AAAA',
           'https://cdn.example/keep.png',
         ],
         startImageUrl: 'data:image/png;base64,BBBB',
         endImageUrl: 'https://cdn.example/end.png',
-        videoUrls: [],
-        audioUrl: '',
+        videoUrls: [
+          'data:video/mp4;base64,CCCC',
+          'https://cdn.example/video.mp4',
+        ],
+        audioUrl: 'data:audio/mpeg;base64,DDDD',
       },
     })
 
     expect(item.videoReferences).toMatchObject({
-      imageUrls: ['https://cdn.example/keep.png'],
+      imageUrls: [
+        'https://cdn.example/uploaded.png',
+        'https://cdn.example/keep.png',
+      ],
       startImageUrl: '',
       endImageUrl: 'https://cdn.example/end.png',
+      videoUrls: ['https://cdn.example/video.mp4'],
+      audioUrl: '',
     })
   })
 

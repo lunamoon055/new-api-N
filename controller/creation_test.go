@@ -5,6 +5,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -100,6 +102,115 @@ func TestCreationReferenceImageUploadAndFetch(t *testing.T) {
 	require.Equal(t, http.StatusOK, fetchRecorder.Code)
 	require.Equal(t, "image/png", fetchRecorder.Header().Get("Content-Type"))
 	require.NotEmpty(t, fetchRecorder.Body.Bytes())
+}
+
+func TestCreationReferenceFileUploadAndFetch(t *testing.T) {
+	tests := []struct {
+		name        string
+		kind        string
+		filename    string
+		contentType string
+		data        []byte
+		wantType    string
+	}{
+		{
+			name:        "video",
+			kind:        "video",
+			filename:    "reference.mp4",
+			contentType: "video/mp4",
+			data:        []byte("fake mp4 content"),
+			wantType:    "video/mp4",
+		},
+		{
+			name:        "audio",
+			kind:        "audio",
+			filename:    "reference.mp3",
+			contentType: "audio/mpeg",
+			data:        []byte("fake mp3 content"),
+			wantType:    "audio/mpeg",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := &bytes.Buffer{}
+			writer := multipart.NewWriter(body)
+			require.NoError(t, writer.WriteField("kind", tt.kind))
+			part, err := writer.CreatePart(textproto.MIMEHeader{
+				"Content-Disposition": {`form-data; name="file"; filename="` + tt.filename + `"`},
+				"Content-Type":        {tt.contentType},
+			})
+			require.NoError(t, err)
+			_, err = part.Write(tt.data)
+			require.NoError(t, err)
+			require.NoError(t, writer.Close())
+
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/api/creation/reference-files", body)
+			ctx.Request.Host = "example.test"
+			ctx.Request.Header.Set("Content-Type", writer.FormDataContentType())
+
+			UploadCreationReferenceFile(ctx)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var payload struct {
+				Success bool `json:"success"`
+				Data    struct {
+					URL      string `json:"url"`
+					MimeType string `json:"mime_type"`
+				} `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+			require.True(t, payload.Success)
+			require.Equal(t, tt.wantType, payload.Data.MimeType)
+			require.True(t, strings.HasPrefix(payload.Data.URL, "http://example.test/api/creation/reference-files/"))
+			filename := filepath.Base(payload.Data.URL)
+			t.Cleanup(func() { _ = cleanupCreationReferenceFileForTest(filename) })
+
+			fetchRecorder := httptest.NewRecorder()
+			fetchCtx, _ := gin.CreateTestContext(fetchRecorder)
+			fetchCtx.Params = gin.Params{{Key: "filename", Value: filename}}
+			fetchCtx.Request = httptest.NewRequest(http.MethodGet, "/api/creation/reference-files/"+filename, nil)
+
+			GetCreationReferenceFile(fetchCtx)
+
+			require.Equal(t, http.StatusOK, fetchRecorder.Code)
+			require.Equal(t, tt.wantType, fetchRecorder.Header().Get("Content-Type"))
+			require.Equal(t, tt.data, fetchRecorder.Body.Bytes())
+		})
+	}
+}
+
+func TestBuildCreationReferencePublicBaseURLPrefersPublicOrigin(t *testing.T) {
+	previousServerAddress := system_setting.ServerAddress
+	system_setting.ServerAddress = "http://localhost:3000"
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousServerAddress
+	})
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/creation/reference-files", nil)
+	ctx.Request.Host = "[::1]:3000"
+	ctx.Request.Header.Set("Origin", "https://ghlink.top")
+
+	require.Equal(t, "https://ghlink.top", buildCreationReferencePublicBaseURL(ctx))
+}
+
+func TestBuildCreationReferencePublicBaseURLUsesForwardedHost(t *testing.T) {
+	previousServerAddress := system_setting.ServerAddress
+	system_setting.ServerAddress = "http://localhost:3000"
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousServerAddress
+	})
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/creation/reference-files", nil)
+	ctx.Request.Host = "localhost:3000"
+	ctx.Request.Header.Set("X-Forwarded-Proto", "https")
+	ctx.Request.Header.Set("X-Forwarded-Host", "ghlink.top")
+
+	require.Equal(t, "https://ghlink.top", buildCreationReferencePublicBaseURL(ctx))
 }
 
 func TestCreationReferenceImageRejectsNonImages(t *testing.T) {
