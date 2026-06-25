@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 /**
  * Type definitions for usage logs
  */
-import type { UsageLog } from './data/schema'
+import type { UsageLog } from './schemas/logs'
 
 // ============================================================================
 // Log Category Types

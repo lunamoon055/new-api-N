@@ -110,6 +110,8 @@ func VideoProxy(c *gin.Context) {
 		resultURL := strings.TrimSpace(task.GetResultURL())
 		if resultURL != "" && !isTaskProxyURL(resultURL, task.TaskID) {
 			videoURL = resultURL
+		} else if dataURL := extractTaskDataVideoURL(task); dataURL != "" && !isTaskProxyURL(dataURL, task.TaskID) {
+			videoURL = dataURL
 		} else if isAsyncGenerationsVideoTask(task) {
 			videoURL = fmt.Sprintf("%s/v1/video/async-generations/%s/content", baseURL, task.GetUpstreamTaskID())
 		} else {
@@ -119,6 +121,9 @@ func VideoProxy(c *gin.Context) {
 	default:
 		// Video URL is stored in PrivateData.ResultURL (fallback to FailReason for old data)
 		videoURL = task.GetResultURL()
+		if strings.TrimSpace(videoURL) == "" || isTaskProxyURL(videoURL, task.TaskID) {
+			videoURL = extractTaskDataVideoURL(task)
+		}
 	}
 
 	videoURL = strings.TrimSpace(videoURL)

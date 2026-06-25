@@ -66,6 +66,21 @@ describe('task log video preview helpers', () => {
     ).toBe('/v1/videos/task_video_123/content')
   })
 
+  it('does not inspect task data on the table page', () => {
+    expect(
+      getTaskLogVideoPreviewUrl(
+        createTaskLog({
+          result_url: '',
+          data: {
+            data: {
+              data: [{ url: 'https://cdn.example.com/dt-video.mp4' }],
+            },
+          } as unknown as string,
+        })
+      )
+    ).toBe('/v1/videos/task_video_123/content')
+  })
+
   it('does not expose preview links for unfinished tasks', () => {
     expect(
       getTaskLogVideoPreviewUrl(

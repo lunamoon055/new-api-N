@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/tooltip'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
-import type { UsageLog } from '../../data/schema'
+import type { UsageLog } from '../../schemas/logs'
 import {
   formatModelName,
   getFirstResponseTimeColor,
