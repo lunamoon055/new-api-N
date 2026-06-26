@@ -69,9 +69,12 @@ func oaiImage2MiniMaxImageRequest(request dto.ImageRequest) MiniMaxImageRequest 
 }
 
 func aspectRatioFromImageRequest(request dto.ImageRequest) string {
+	if aspectRatio := stringFromRawMessage(request.AspectRatio); aspectRatio != "" {
+		return aspectRatio
+	}
+
 	if raw, ok := request.Extra["aspect_ratio"]; ok {
-		var aspectRatio string
-		if err := common.Unmarshal(raw, &aspectRatio); err == nil && aspectRatio != "" {
+		if aspectRatio := stringFromRawMessage(raw); aspectRatio != "" {
 			return aspectRatio
 		}
 	}
@@ -106,6 +109,18 @@ func aspectRatioFromImageRequest(request dto.ImageRequest) string {
 	default:
 		return ""
 	}
+}
+
+func stringFromRawMessage(raw []byte) string {
+	if len(raw) == 0 {
+		return ""
+	}
+
+	var value string
+	if err := common.Unmarshal(raw, &value); err != nil {
+		return ""
+	}
+	return value
 }
 
 func parseImageSize(size string) (int, int, bool) {
