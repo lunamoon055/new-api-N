@@ -44,25 +44,32 @@ import {
 } from './components/model-management-dialogs'
 import { CREATION_MODES } from './constants'
 import {
+  CREATION_IMAGE_REFERENCE_MAX_BYTES,
+  CREATION_IMAGE_REFERENCE_MAX_COUNT,
   CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES,
   CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT,
   CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES,
   CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES,
   CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT,
+  EMPTY_CREATION_IMAGE_REFERENCES,
   DEFAULT_CREATION_VIDEO_OPTIONS,
   EMPTY_CREATION_VIDEO_REFERENCES,
+  getCreationImageReferenceError,
   getCreationDurationOptions,
   getCreationHistoryStorageKey,
   getCreationResolutionOptions,
+  supportsCreationImageReferences,
   getCreationVideoCapabilities,
   getCreationVideoOptionsError,
   getCreationVideoReferenceError,
   getCreationVideoRequestOptions,
   loadCreationHistory,
+  normalizeCreationImageReferences,
   normalizeCreationVideoOptions,
   normalizeCreationVideoReferences,
   saveCreationHistory,
   upsertCreationHistoryItem,
+  type CreationImageReferences,
   type CreationHistoryItem,
   type CreationVideoOptions,
   type CreationVideoReferences,
@@ -102,6 +109,11 @@ export function CreationCenter() {
   const [sessionNumber, setSessionNumber] = useState(1)
   const [result, setResult] = useState<CreationResult>()
   const [historyItems, setHistoryItems] = useState<CreationHistoryItem[]>([])
+  const [imageReferences, setImageReferences] =
+    useState<CreationImageReferences>({
+      ...EMPTY_CREATION_IMAGE_REFERENCES,
+      imageUrls: [],
+    })
   const [videoOptions, setVideoOptions] = useState<CreationVideoOptions>(
     DEFAULT_CREATION_VIDEO_OPTIONS
   )
@@ -111,7 +123,7 @@ export function CreationCenter() {
       imageUrls: [],
       videoUrls: [],
     })
-  const [previewNow, setPreviewNow] = useState(Date.now())
+  const [previewNow, setPreviewNow] = useState(() => Date.now())
   const [submitting, setSubmitting] = useState(false)
   const [refreshingTask, setRefreshingTask] = useState(false)
   const historyStorageKey = useMemo(
@@ -150,6 +162,10 @@ export function CreationCenter() {
   )
   const videoCapabilities = useMemo(
     () => getCreationVideoCapabilities(selectedModel?.id),
+    [selectedModel?.id]
+  )
+  const imageReferencesSupported = useMemo(
+    () => supportsCreationImageReferences(selectedModel?.id),
     [selectedModel?.id]
   )
   const modeCounts = useMemo(
@@ -212,12 +228,8 @@ export function CreationCenter() {
   })
 
   useEffect(() => {
-    if (!models.length || selectedByMode[mode]) return
-    setSelectedByMode((current) => ({ ...current, [mode]: models[0].id }))
-  }, [mode, models, selectedByMode])
-
-  useEffect(() => {
     if (typeof window === 'undefined') return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHistoryItems(loadCreationHistory(window.localStorage, historyStorageKey))
   }, [historyStorageKey])
 
@@ -231,7 +243,6 @@ export function CreationCenter() {
       return
     }
 
-    setPreviewNow(Date.now())
     const timer = window.setInterval(() => setPreviewNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [
@@ -244,6 +255,7 @@ export function CreationCenter() {
 
   useEffect(() => {
     if (mode !== 'video') return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVideoOptions((current) => {
       const normalized = normalizeCreationVideoOptions(
         current,
@@ -312,6 +324,10 @@ export function CreationCenter() {
   const startNewSession = () => {
     setPrompt('')
     setAssets([])
+    setImageReferences({
+      ...EMPTY_CREATION_IMAGE_REFERENCES,
+      imageUrls: [],
+    })
     setVideoReferences({
       ...EMPTY_CREATION_VIDEO_REFERENCES,
       imageUrls: [],
@@ -321,6 +337,69 @@ export function CreationCenter() {
     setResult(undefined)
     setSessionNumber((current) => current + 1)
     toast.success(t('A new creation session is ready.'))
+  }
+
+  const addImageReferenceFiles = async (files: File[]) => {
+    if (!files.length) return
+
+    const imageFiles = files.filter(isReferenceImageFile)
+    if (!imageFiles.length) {
+      toast.error(t('Choose supported reference files.'))
+      return
+    }
+    if (imageFiles.length < files.length) {
+      toast.error(t('Choose supported reference files.'))
+    }
+
+    const supportedImageFiles = imageFiles.filter(
+      (file) => file.size <= CREATION_IMAGE_REFERENCE_MAX_BYTES
+    )
+    const imageOversizedCount = imageFiles.length - supportedImageFiles.length
+    const imageRemainingSlots =
+      CREATION_IMAGE_REFERENCE_MAX_COUNT - imageReferences.imageUrls.length
+    const referenceImageFiles = supportedImageFiles.slice(
+      0,
+      Math.max(imageRemainingSlots, 0)
+    )
+
+    if (
+      imageFiles.length > 0 &&
+      (imageRemainingSlots <= 0 ||
+        supportedImageFiles.length > referenceImageFiles.length)
+    ) {
+      toast.error(t('Gpt-image2 accepts at most 6 reference images.'))
+    }
+    if (imageOversizedCount > 0) {
+      toast.error(t('Reference images must not exceed 20 MB each.'))
+    }
+    if (!referenceImageFiles.length) return
+
+    let imageUrls: CreationImageReferences['imageUrls'] = []
+    try {
+      imageUrls = await Promise.all(
+        referenceImageFiles.map((file) =>
+          createUploadedReferenceValue(
+            file,
+            'image',
+            getReferenceImageMime(file)
+          )
+        )
+      )
+    } catch {
+      toast.error(t('Unable to upload reference file.'))
+      return
+    }
+
+    setImageReferences((current) =>
+      normalizeCreationImageReferences(
+        {
+          ...current,
+          imageUrls: [...current.imageUrls, ...imageUrls],
+        },
+        selectedModel?.id
+      )
+    )
+    toast.success(t('Reference images added.'))
   }
 
   const addVideoReferenceFiles = async (files: File[]) => {
@@ -416,12 +495,20 @@ export function CreationCenter() {
     try {
       imageUrls = await Promise.all(
         referenceImageFiles.map((file) =>
-          createUploadedReferenceValue(file, 'image', getReferenceImageMime(file))
+          createUploadedReferenceValue(
+            file,
+            'image',
+            getReferenceImageMime(file)
+          )
         )
       )
       videoUrls = await Promise.all(
         referenceVideoFiles.map((file) =>
-          createUploadedReferenceValue(file, 'video', getReferenceVideoMime(file))
+          createUploadedReferenceValue(
+            file,
+            'video',
+            getReferenceVideoMime(file)
+          )
         )
       )
       if (audioFile) {
@@ -454,6 +541,20 @@ export function CreationCenter() {
       current.filter((_, itemIndex) => itemIndex !== index)
     )
     toast.success(t('Asset removed.'))
+  }
+
+  const removeImageReferenceImage = (index: number) => {
+    setImageReferences((current) =>
+      normalizeCreationImageReferences(
+        {
+          ...current,
+          imageUrls: current.imageUrls.filter(
+            (_, itemIndex) => itemIndex !== index
+          ),
+        },
+        selectedModel?.id
+      )
+    )
   }
 
   const removeVideoReferenceImage = (index: number) => {
@@ -528,6 +629,16 @@ export function CreationCenter() {
         return
       }
     }
+    if (mode === 'image') {
+      const referenceError = getCreationImageReferenceError(
+        selectedModel.id,
+        imageReferences
+      )
+      if (referenceError) {
+        toast.error(t(referenceError))
+        return
+      }
+    }
 
     setSubmitting(true)
     setView('preview')
@@ -548,12 +659,17 @@ export function CreationCenter() {
       mode === 'video'
         ? normalizeCreationVideoReferences(videoReferences, selectedModel.id)
         : undefined
+    const normalizedImageReferences =
+      mode === 'image'
+        ? normalizeCreationImageReferences(imageReferences, selectedModel.id)
+        : undefined
     try {
       const nextResult = await submitCreationTask({
         mode,
         model: selectedModel,
         prompt: trimmedPrompt,
         assets,
+        imageReferences: normalizedImageReferences,
         videoOptions: normalizedVideoOptions,
         videoReferences: normalizedVideoReferences,
       })
@@ -573,6 +689,7 @@ export function CreationCenter() {
         prompt: trimmedPrompt,
         assets: getCreationAssetSnapshots(assets),
         result: enrichedResult,
+        imageReferences: normalizedImageReferences,
         videoOptions: normalizedVideoOptions,
         videoReferences: normalizedVideoReferences,
       })
@@ -604,6 +721,7 @@ export function CreationCenter() {
         prompt: trimmedPrompt,
         assets: getCreationAssetSnapshots(assets),
         result: failedResult,
+        imageReferences: normalizedImageReferences,
         videoOptions: normalizedVideoOptions,
         videoReferences: normalizedVideoReferences,
       })
@@ -654,6 +772,14 @@ export function CreationCenter() {
     }))
     setPrompt(item.prompt)
     setAssets(normalizeStoredCreationAssets(item.assets))
+    setImageReferences(
+      item.imageReferences
+        ? normalizeCreationImageReferences(item.imageReferences, item.model)
+        : {
+            ...EMPTY_CREATION_IMAGE_REFERENCES,
+            imageUrls: [],
+          }
+    )
     setVideoReferences(
       item.videoReferences
         ? normalizeCreationVideoReferences(item.videoReferences, item.model)
@@ -734,6 +860,8 @@ export function CreationCenter() {
               authenticated={!!auth.user}
               mode={mode}
               model={selectedModel}
+              imageReferences={imageReferences}
+              imageReferencesSupported={imageReferencesSupported}
               videoOptions={videoOptions}
               videoReferences={videoReferences}
               videoCapabilities={videoCapabilities}
@@ -742,6 +870,8 @@ export function CreationCenter() {
               submitting={submitting}
               sessionNumber={sessionNumber}
               onPromptChange={setPrompt}
+              onImageReferenceFilesSelected={addImageReferenceFiles}
+              onRemoveImageReferenceImage={removeImageReferenceImage}
               onVideoOptionsChange={setVideoOptions}
               onVideoReferencesChange={setVideoReferences}
               onVideoReferenceFilesSelected={addVideoReferenceFiles}

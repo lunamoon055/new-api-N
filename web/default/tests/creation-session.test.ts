@@ -20,6 +20,7 @@ import { describe, expect, it } from 'bun:test'
 import { formatCreationModelCost } from '../src/features/creation-center/cost'
 import { formatQuota } from '../src/lib/format'
 import {
+  EMPTY_CREATION_IMAGE_REFERENCES,
   DEFAULT_CREATION_VIDEO_OPTIONS,
   EMPTY_CREATION_VIDEO_REFERENCES,
   formatCreationCountdown,
@@ -580,6 +581,41 @@ describe('creation center session helpers', () => {
       endImageUrl: 'https://cdn.example/end.png',
       videoUrls: ['https://cdn.example/video.mp4'],
       audioUrl: '',
+    })
+  })
+
+  it('keeps gpt-image2 reference previews out of persisted history', () => {
+    const item = sanitizeCreationHistoryItem({
+      createdAt: 1,
+      id: 'task-2',
+      mode: 'image',
+      model: 'gpt-image2',
+      prompt: 'prompt',
+      result: {
+        mode: 'image',
+        model: 'gpt-image2',
+        status: 'completed',
+        id: 'task-2',
+        imageUrls: ['https://cdn.example/result.png'],
+      },
+      imageReferences: {
+        ...EMPTY_CREATION_IMAGE_REFERENCES,
+        imageUrls: [
+          {
+            url: 'https://cdn.example/uploaded.png',
+            previewUrl: 'blob:http://localhost:3001/uploaded',
+          },
+          'data:image/png;base64,AAAA',
+          'https://cdn.example/keep.png',
+        ],
+      },
+    })
+
+    expect(item.imageReferences).toEqual({
+      imageUrls: [
+        'https://cdn.example/uploaded.png',
+        'https://cdn.example/keep.png',
+      ],
     })
   })
 

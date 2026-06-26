@@ -27,7 +27,9 @@ import {
 import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
   composeCreationPrompt,
+  getCreationImageRequestOptions,
   getCreationVideoRequestOptions,
+  type CreationImageReferences,
   type CreationVideoReferences,
   type CreationVideoOptions,
 } from './session'
@@ -47,14 +49,6 @@ const CREATION_MODEL_DESCRIPTIONS_OPTION_KEY = 'CreationModelDescriptions'
 type UpdateOptionResponse = {
   success: boolean
   message: string
-}
-
-type CreationReferenceImageUploadResponse = {
-  success: boolean
-  message?: string
-  data?: {
-    url?: string
-  }
 }
 
 type CreationReferenceFileUploadResponse = {
@@ -94,23 +88,6 @@ export async function saveCreationModelDescriptions(
   return response.data
 }
 
-export async function uploadCreationReferenceImage(file: File) {
-  const formData = new FormData()
-  formData.append('image', file)
-  const response = await api.post<CreationReferenceImageUploadResponse>(
-    '/api/creation/reference-images',
-    formData,
-    { skipErrorHandler: true } as Record<string, unknown>
-  )
-  const url = response.data.data?.url
-  if (!response.data.success || !url) {
-    throw new Error(
-      response.data.message || 'Unable to upload reference image.'
-    )
-  }
-  return url
-}
-
 export async function uploadCreationReferenceFile(
   file: File,
   kind: 'image' | 'video' | 'audio',
@@ -132,9 +109,7 @@ export async function uploadCreationReferenceFile(
   )
   const url = response.data.data?.url
   if (!response.data.success || !url) {
-    throw new Error(
-      response.data.message || 'Unable to upload reference file.'
-    )
+    throw new Error(response.data.message || 'Unable to upload reference file.')
   }
   return url
 }
@@ -144,6 +119,7 @@ export async function submitCreationTask(params: {
   model: CreationModel
   prompt: string
   assets?: CreationAsset[]
+  imageReferences?: CreationImageReferences
   videoOptions?: CreationVideoOptions
   videoReferences?: CreationVideoReferences
 }): Promise<CreationResult> {
@@ -170,12 +146,18 @@ export async function submitCreationTask(params: {
   }
 
   if (params.mode === 'image') {
+    const imageOptions = getCreationImageRequestOptions(
+      promptWithAssets,
+      params.model.id,
+      params.imageReferences
+    )
     const response = await api.post(
       '/api/creation/images/generations',
       {
         model: params.model.id,
         prompt: promptWithAssets,
         n: 1,
+        ...imageOptions,
       },
       { skipErrorHandler: true } as Record<string, unknown>
     )

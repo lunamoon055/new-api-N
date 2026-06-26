@@ -16,6 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import {
+  EMPTY_CREATION_IMAGE_REFERENCES,
+  normalizeCreationImageReferences,
+  type CreationImageReferences,
+  type CreationImageReferenceValue,
+} from '../media-generation/image-options'
 import type { CreationAsset, CreationMode, CreationResult } from './types'
 import type {
   CreationVideoOptions,
@@ -23,6 +29,7 @@ import type {
   CreationVideoReferenceValue,
 } from './video-options'
 
+export * from '../media-generation/image-options'
 export * from './video-options'
 
 export type CreationHistoryItem = {
@@ -33,6 +40,7 @@ export type CreationHistoryItem = {
   prompt: string
   assets?: CreationAsset[]
   result: CreationResult
+  imageReferences?: CreationImageReferences
   videoOptions?: CreationVideoOptions
   videoReferences?: CreationVideoReferences
 }
@@ -88,8 +96,15 @@ export function saveCreationHistory(
 export function sanitizeCreationHistoryItem(
   item: CreationHistoryItem
 ): CreationHistoryItem {
+  const imageReferences = item.imageReferences
   const references = item.videoReferences
-  if (!references) return item
+  const sanitizedItem = imageReferences
+    ? {
+        ...item,
+        imageReferences: sanitizeImageReferences(imageReferences, item.model),
+      }
+    : item
+  if (!references) return sanitizedItem
   const imageUrls = Array.isArray(references.imageUrls)
     ? references.imageUrls
         .map(getStorableReferenceURL)
@@ -110,13 +125,14 @@ export function sanitizeCreationHistoryItem(
         .map(getStorableReferenceURL)
         .filter(isStorableReferenceURL)
     : []
-  const audioUrl =
-    isStorableReferenceURL(getStorableReferenceURL(references.audioUrl))
-      ? getStorableReferenceURL(references.audioUrl)
-      : ''
+  const audioUrl = isStorableReferenceURL(
+    getStorableReferenceURL(references.audioUrl)
+  )
+    ? getStorableReferenceURL(references.audioUrl)
+    : ''
 
   return {
-    ...item,
+    ...sanitizedItem,
     videoReferences: {
       ...references,
       imageUrls,
@@ -126,6 +142,25 @@ export function sanitizeCreationHistoryItem(
       audioUrl,
     },
   }
+}
+
+function sanitizeImageReferences(
+  references: CreationImageReferences,
+  modelId: string
+): CreationImageReferences {
+  const imageUrls = Array.isArray(references.imageUrls)
+    ? references.imageUrls
+        .map(getStorableImageReferenceURL)
+        .filter(isStorableReferenceURL)
+    : []
+
+  return normalizeCreationImageReferences(
+    {
+      ...EMPTY_CREATION_IMAGE_REFERENCES,
+      imageUrls,
+    },
+    modelId
+  )
 }
 
 export function upsertCreationHistoryItem(
@@ -198,8 +233,14 @@ function isStorableReferenceURL(value: string) {
   return /^https?:\/\//i.test(value.trim())
 }
 
-function getStorableReferenceURL(
-  value?: CreationVideoReferenceValue | null
+function getStorableReferenceURL(value?: CreationVideoReferenceValue | null) {
+  if (!value) return ''
+  if (typeof value === 'string') return value.trim()
+  return value.url.trim()
+}
+
+function getStorableImageReferenceURL(
+  value?: CreationImageReferenceValue | null
 ) {
   if (!value) return ''
   if (typeof value === 'string') return value.trim()

@@ -31,7 +31,9 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
+import { ImageReferenceFields } from '../image-reference-fields'
 import {
+  type CreationImageReferences,
   normalizeCreationVideoReferences,
   type CreationAspectRatio,
   type CreationDuration,
@@ -52,6 +54,8 @@ type ComposerProps = {
   authenticated: boolean
   mode: CreationMode
   model?: CreationModel
+  imageReferences: CreationImageReferences
+  imageReferencesSupported: boolean
   videoOptions: CreationVideoOptions
   videoReferences: CreationVideoReferences
   videoCapabilities?: CreationVideoCapability
@@ -60,6 +64,8 @@ type ComposerProps = {
   submitting: boolean
   sessionNumber: number
   onPromptChange: (value: string) => void
+  onImageReferenceFilesSelected: (files: File[]) => void
+  onRemoveImageReferenceImage: (index: number) => void
   onVideoOptionsChange: (options: CreationVideoOptions) => void
   onVideoReferencesChange: (references: CreationVideoReferences) => void
   onVideoReferenceFilesSelected: (files: File[]) => void
@@ -126,6 +132,13 @@ export function Composer(props: ComposerProps) {
               onRemoveImage={props.onRemoveVideoReferenceImage}
               onRemoveVideo={props.onRemoveVideoReferenceVideo}
               onRemoveAudio={props.onRemoveVideoReferenceAudio}
+            />
+          )}
+          {props.mode === 'image' && props.imageReferencesSupported && (
+            <ImageReferenceFields
+              value={props.imageReferences}
+              onFilesSelected={props.onImageReferenceFilesSelected}
+              onRemoveImage={props.onRemoveImageReferenceImage}
             />
           )}
         </div>
