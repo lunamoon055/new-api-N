@@ -134,7 +134,7 @@ func VideoProxy(c *gin.Context) {
 	}
 
 	if strings.HasPrefix(videoURL, "data:") {
-		if err := writeVideoDataURL(c, videoURL); err != nil {
+		if err := writeVideoDataURL(c, taskID, videoURL); err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to decode video data URL for task %s: %s", taskID, err.Error()))
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
 		}
@@ -177,6 +177,7 @@ func VideoProxy(c *gin.Context) {
 	}
 
 	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	applyVideoProxyDownloadHeaders(c.Writer.Header(), taskID)
 	c.Writer.WriteHeader(resp.StatusCode)
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
@@ -207,7 +208,7 @@ func isAsyncGenerationsVideoTask(task *model.Task) bool {
 	return false
 }
 
-func writeVideoDataURL(c *gin.Context, dataURL string) error {
+func writeVideoDataURL(c *gin.Context, taskID string, dataURL string) error {
 	parts := strings.SplitN(dataURL, ",", 2)
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid data url")
@@ -235,7 +236,72 @@ func writeVideoDataURL(c *gin.Context, dataURL string) error {
 
 	c.Writer.Header().Set("Content-Type", mimeType)
 	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	applyVideoProxyDownloadHeaders(c.Writer.Header(), taskID)
 	c.Writer.WriteHeader(http.StatusOK)
 	_, err = c.Writer.Write(videoBytes)
 	return err
+}
+
+func applyVideoProxyDownloadHeaders(headers http.Header, taskID string) {
+	mimeType := normalizeVideoProxyContentType(headers.Get("Content-Type"))
+	headers.Set("Content-Type", mimeType)
+	headers.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, buildVideoProxyFilename(taskID, mimeType)))
+	headers.Set("X-Content-Type-Options", "nosniff")
+}
+
+func normalizeVideoProxyContentType(contentType string) string {
+	contentType = strings.TrimSpace(contentType)
+	if contentType == "" {
+		return "video/mp4"
+	}
+
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if strings.HasPrefix(mediaType, "video/") {
+		return contentType
+	}
+	return "video/mp4"
+}
+
+func buildVideoProxyFilename(taskID string, contentType string) string {
+	base := sanitizeVideoProxyFilenameBase(taskID)
+	if base == "" {
+		base = "video"
+	}
+	return base + videoProxyExtensionFromContentType(contentType)
+}
+
+func sanitizeVideoProxyFilenameBase(value string) string {
+	value = strings.TrimSpace(value)
+	var builder strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			builder.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			builder.WriteRune(r)
+		case r >= '0' && r <= '9':
+			builder.WriteRune(r)
+		case r == '-' || r == '_':
+			builder.WriteRune(r)
+		default:
+			builder.WriteRune('_')
+		}
+	}
+	return strings.Trim(builder.String(), "_")
+}
+
+func videoProxyExtensionFromContentType(contentType string) string {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	switch mediaType {
+	case "video/webm":
+		return ".webm"
+	case "video/quicktime", "video/mov":
+		return ".mov"
+	case "video/x-msvideo", "video/avi":
+		return ".avi"
+	case "video/mpeg":
+		return ".mpeg"
+	default:
+		return ".mp4"
+	}
 }

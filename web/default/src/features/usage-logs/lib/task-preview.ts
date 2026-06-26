@@ -38,14 +38,16 @@ export function getTaskLogVideoPreviewUrl(
     return null
   }
 
+  if (log.task_id) {
+    return `/v1/videos/${encodeURIComponent(log.task_id)}/content`
+  }
+
   const resultUrl = normalizePreviewUrl(log.result_url)
   if (resultUrl && !isVideoApiContentUrl(resultUrl)) {
     return resultUrl
   }
 
-  return log.task_id
-    ? `/v1/videos/${encodeURIComponent(log.task_id)}/content`
-    : resultUrl
+  return resultUrl
 }
 
 function normalizePreviewUrl(url: string | undefined) {

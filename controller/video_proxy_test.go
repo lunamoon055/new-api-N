@@ -1,12 +1,25 @@
 package controller
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/require"
 )
+
+func TestApplyVideoProxyDownloadHeadersUsesSafeVideoFilename(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/octet-stream")
+	headers.Set("Content-Disposition", `attachment; filename="1782445743626_1f171116"`)
+
+	applyVideoProxyDownloadHeaders(headers, "task_video_123")
+
+	require.Equal(t, "video/mp4", headers.Get("Content-Type"))
+	require.Equal(t, `inline; filename="task_video_123.mp4"`, headers.Get("Content-Disposition"))
+	require.Equal(t, "nosniff", headers.Get("X-Content-Type-Options"))
+}
 
 func TestIsAsyncGenerationsVideoTaskIncludesLinkskyModels(t *testing.T) {
 	for _, modelName := range []string{
