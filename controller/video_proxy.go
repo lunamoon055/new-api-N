@@ -37,8 +37,7 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetInt("id")
-	task, exists, err := model.GetByTaskId(userID, taskID)
+	task, exists, err := getVideoProxyTask(c, taskID)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to query task %s: %s", taskID, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to query task")
@@ -110,7 +109,7 @@ func VideoProxy(c *gin.Context) {
 		resultURL := strings.TrimSpace(task.GetResultURL())
 		if resultURL != "" && !isTaskProxyURL(resultURL, task.TaskID) {
 			videoURL = resultURL
-		} else if dataURL := extractTaskDataVideoURL(task); dataURL != "" && !isTaskProxyURL(dataURL, task.TaskID) {
+		} else if dataURL := service.ExtractTaskDataVideoURL(task); dataURL != "" && !isTaskProxyURL(dataURL, task.TaskID) {
 			videoURL = dataURL
 		} else if isAsyncGenerationsVideoTask(task) {
 			videoURL = fmt.Sprintf("%s/v1/video/async-generations/%s/content", baseURL, task.GetUpstreamTaskID())
@@ -122,7 +121,7 @@ func VideoProxy(c *gin.Context) {
 		// Video URL is stored in PrivateData.ResultURL (fallback to FailReason for old data)
 		videoURL = task.GetResultURL()
 		if strings.TrimSpace(videoURL) == "" || isTaskProxyURL(videoURL, task.TaskID) {
-			videoURL = extractTaskDataVideoURL(task)
+			videoURL = service.ExtractTaskDataVideoURL(task)
 		}
 	}
 
@@ -182,6 +181,13 @@ func VideoProxy(c *gin.Context) {
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
 	}
+}
+
+func getVideoProxyTask(c *gin.Context, taskID string) (*model.Task, bool, error) {
+	if c.GetInt("role") >= common.RoleAdminUser {
+		return model.GetByOnlyTaskId(taskID)
+	}
+	return model.GetByTaskId(c.GetInt("id"), taskID)
 }
 
 func isTaskProxyURL(rawURL string, taskID string) bool {

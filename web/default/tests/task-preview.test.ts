@@ -35,14 +35,14 @@ function createTaskLog(overrides: Partial<TaskLog>): TaskLog {
 }
 
 describe('task log video preview helpers', () => {
-  it('uses the authenticated video proxy for successful video tasks even when a direct result url is available', () => {
+  it('uses the direct result url for successful video tasks when available', () => {
     expect(
       getTaskLogVideoPreviewUrl(
         createTaskLog({
           result_url: 'http://example.com/upstream-video.mp4',
         })
       )
-    ).toBe('/v1/videos/task_video_123/content')
+    ).toBe('http://example.com/upstream-video.mp4')
   })
 
   it('uses the authenticated video proxy when successful video tasks only have a task id', () => {
@@ -66,19 +66,63 @@ describe('task log video preview helpers', () => {
     ).toBe('/v1/videos/task_video_123/content')
   })
 
-  it('does not inspect task data on the table page', () => {
+  it('uses the authenticated video proxy when result url already points at this site proxy', () => {
     expect(
       getTaskLogVideoPreviewUrl(
         createTaskLog({
-          result_url: '',
-          data: {
-            data: {
-              data: [{ url: 'https://cdn.example.com/dt-video.mp4' }],
-            },
-          } as unknown as string,
+          result_url: '/v1/videos/task_video_123/content',
         })
       )
     ).toBe('/v1/videos/task_video_123/content')
+  })
+
+  it('uses a direct video url from task data when result url is a local proxy', () => {
+    expect(
+      getTaskLogVideoPreviewUrl(
+        createTaskLog({
+          result_url: 'http://localhost:3000/v1/videos/task_video_123/content',
+          data: JSON.stringify({
+            code: 'success',
+            data: {
+              data: {
+                data: [{ url: 'https://cdn.example.com/dt-video.mp4' }],
+              },
+            },
+          }),
+        })
+      )
+    ).toBe('https://cdn.example.com/dt-video.mp4')
+  })
+
+  it('skips proxy urls inside task data and keeps looking for a direct video url', () => {
+    expect(
+      getTaskLogVideoPreviewUrl(
+        createTaskLog({
+          result_url: 'http://localhost:3000/v1/videos/task_video_123/content',
+          data: JSON.stringify({
+            result_url: 'http://localhost:3000/v1/videos/task_video_123/content',
+            data: {
+              url: 'https://cdn.example.com/final-video.mp4',
+            },
+          }),
+        })
+      )
+    ).toBe('https://cdn.example.com/final-video.mp4')
+  })
+
+  it('uses a direct video url from already parsed task data objects', () => {
+    expect(
+      getTaskLogVideoPreviewUrl(
+        createTaskLog({
+          result_url: 'http://localhost:3000/v1/videos/task_video_123/content',
+          data: {
+            data: {
+              url: 'https://cdn.example.com/object-video.mp4',
+            },
+          },
+        })
+      )
+    ).toBe('https://cdn.example.com/object-video.mp4')
   })
 
   it('does not expose preview links for unfinished tasks', () => {

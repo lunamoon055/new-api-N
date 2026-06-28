@@ -32,19 +32,24 @@ export function isTaskLogVideoTask(log: Pick<TaskLog, 'action'>) {
 }
 
 export function getTaskLogVideoPreviewUrl(
-  log: Pick<TaskLog, 'action' | 'status' | 'task_id' | 'result_url'>
+  log: Pick<TaskLog, 'action' | 'status' | 'task_id' | 'result_url' | 'data'>
 ) {
   if (log.status !== TASK_STATUS.SUCCESS || !isTaskLogVideoTask(log)) {
     return null
   }
 
-  if (log.task_id) {
-    return `/v1/videos/${encodeURIComponent(log.task_id)}/content`
+  const resultUrl = normalizePreviewUrl(log.result_url)
+  if (resultUrl && !isVideoApiContentUrl(resultUrl, log.task_id)) {
+    return resultUrl
   }
 
-  const resultUrl = normalizePreviewUrl(log.result_url)
-  if (resultUrl && !isVideoApiContentUrl(resultUrl)) {
-    return resultUrl
+  const dataUrl = findFirstVideoUrlInTaskData(log.data, log.task_id)
+  if (dataUrl && !isVideoApiContentUrl(dataUrl, log.task_id)) {
+    return dataUrl
+  }
+
+  if (log.task_id) {
+    return `/v1/videos/${encodeURIComponent(log.task_id)}/content`
   }
 
   return resultUrl
@@ -64,9 +69,102 @@ function normalizePreviewUrl(url: string | undefined) {
   return null
 }
 
-function isVideoApiContentUrl(url: string) {
+function isVideoApiContentUrl(url: string, taskId?: string) {
+  if (taskId && url.includes(`/v1/videos/${taskId}/content`)) {
+    return true
+  }
   return (
-    url.includes('/v1/videos/') ||
-    url.includes('/v1/video/async-generations/')
+    isSameSiteVideoProxyUrl(url) || url.includes('/v1/video/async-generations/')
   )
+}
+
+function isSameSiteVideoProxyUrl(url: string) {
+  if (url.startsWith('/v1/videos/')) {
+    return true
+  }
+  if (typeof window === 'undefined') {
+    return false
+  }
+  try {
+    const parsed = new URL(url)
+    return (
+      parsed.origin === window.location.origin &&
+      parsed.pathname.startsWith('/v1/videos/')
+    )
+  } catch {
+    return false
+  }
+}
+
+function findFirstVideoUrlInTaskData(data: unknown, taskId?: string) {
+  if (typeof data !== 'string') {
+    return findFirstVideoUrl(data, taskId)
+  }
+
+  if (!data.trim()) return null
+
+  try {
+    return findFirstVideoUrl(JSON.parse(data), taskId)
+  } catch {
+    return null
+  }
+}
+
+function findFirstVideoUrl(value: unknown, taskId?: string): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    const normalized = normalizePreviewUrl(trimmed)
+    if (normalized) {
+      return isVideoApiContentUrl(normalized, taskId) ? null : normalized
+    }
+
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return findFirstVideoUrl(JSON.parse(trimmed), taskId)
+      } catch {
+        return null
+      }
+    }
+    return null
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const url = findFirstVideoUrl(item, taskId)
+      if (url) return url
+    }
+    return null
+  }
+
+  if (!value || typeof value !== 'object') return null
+
+  const record = value as Record<string, unknown>
+  for (const key of [
+    'video_url',
+    'url',
+    'result_url',
+    'output_url',
+    'download_url',
+  ]) {
+    const url = findFirstVideoUrl(record[key], taskId)
+    if (url) return url
+  }
+
+  for (const key of [
+    'metadata',
+    'result',
+    'response',
+    'data',
+    'outputs',
+    'output',
+    'results',
+    'videos',
+    'urls',
+    'video_urls',
+  ]) {
+    const url = findFirstVideoUrl(record[key], taskId)
+    if (url) return url
+  }
+
+  return null
 }

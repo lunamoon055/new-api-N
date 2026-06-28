@@ -22,12 +22,7 @@ RUN mkdir -p web/default/dist web/classic/dist && \
 
 RUN go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)'" -o new-api
 
-FROM debian:bookworm-slim
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tzdata wget \
-    && rm -rf /var/lib/apt/lists/* \
-    && update-ca-certificates
+FROM golang:1.26.1-alpine
 
 COPY --from=builder /build/new-api /
 COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md /licenses/

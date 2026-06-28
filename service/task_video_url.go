@@ -1,4 +1,4 @@
-package controller
+package service
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 )
 
-func extractTaskDataVideoURL(task *model.Task) string {
+func ExtractTaskDataVideoURL(task *model.Task) string {
 	if task == nil || len(task.Data) == 0 {
 		return ""
 	}
@@ -15,35 +15,32 @@ func extractTaskDataVideoURL(task *model.Task) string {
 	if err := common.Unmarshal(task.Data, &payload); err != nil {
 		return ""
 	}
-	return findFirstVideoURL(payload)
+	return FindTaskVideoURL(payload, task.TaskID)
 }
 
-func findFirstVideoURL(value any) string {
+func FindTaskVideoURL(value any, taskID string) string {
 	switch v := value.(type) {
 	case string:
 		value := strings.TrimSpace(v)
-		if isResolvableVideoURL(value) {
+		if IsDirectTaskVideoURL(value, taskID) {
 			return value
 		}
 		if strings.HasPrefix(value, "{") || strings.HasPrefix(value, "[") {
 			var nested any
 			if err := common.Unmarshal([]byte(value), &nested); err == nil {
-				return findFirstVideoURL(nested)
+				return FindTaskVideoURL(nested, taskID)
 			}
 		}
 	case []any:
 		for _, item := range v {
-			if url := findFirstVideoURL(item); url != "" {
+			if url := FindTaskVideoURL(item, taskID); url != "" {
 				return url
 			}
 		}
 	case map[string]any:
 		for _, key := range []string{"video_url", "url", "result_url", "output_url", "download_url"} {
-			if url, ok := v[key].(string); ok {
-				url = strings.TrimSpace(url)
-				if isResolvableVideoURL(url) {
-					return url
-				}
+			if url := FindTaskVideoURL(v[key], taskID); url != "" {
+				return url
 			}
 		}
 		for _, key := range []string{
@@ -58,7 +55,7 @@ func findFirstVideoURL(value any) string {
 			"urls",
 			"video_urls",
 		} {
-			if url := findFirstVideoURL(v[key]); url != "" {
+			if url := FindTaskVideoURL(v[key], taskID); url != "" {
 				return url
 			}
 		}
@@ -66,8 +63,18 @@ func findFirstVideoURL(value any) string {
 	return ""
 }
 
-func isResolvableVideoURL(rawURL string) bool {
+func IsDirectTaskVideoURL(rawURL string, taskID string) bool {
+	if rawURL == "" || IsTaskVideoProxyURL(rawURL, taskID) {
+		return false
+	}
 	return strings.HasPrefix(rawURL, "http://") ||
 		strings.HasPrefix(rawURL, "https://") ||
 		strings.HasPrefix(rawURL, "data:")
+}
+
+func IsTaskVideoProxyURL(rawURL string, taskID string) bool {
+	if rawURL == "" || taskID == "" {
+		return false
+	}
+	return strings.Contains(rawURL, "/v1/videos/"+taskID+"/content")
 }
