@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Film, Music } from 'lucide-react'
+import { Film, MessageSquareText, Music } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatTimestampToDate } from '@/lib/format'
@@ -28,14 +28,18 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
 import { TASK_STATUS } from '../../constants'
-import { getTaskLogVideoPreviewUrl } from '../../lib/task-preview'
 import { taskActionMapper, taskStatusMapper } from '../../lib/mappers'
+import {
+  getTaskLogPrompt,
+  getTaskLogVideoPreviewUrl,
+} from '../../lib/task-preview'
 import type { TaskLog } from '../../types'
 import {
   AudioPreviewDialog,
   type AudioClip,
 } from '../dialogs/audio-preview-dialog'
 import { FailReasonDialog } from '../dialogs/fail-reason-dialog'
+import { PromptDialog } from '../dialogs/prompt-dialog'
 import { VideoPreviewDialog } from '../dialogs/video-preview-dialog'
 import { useUsageLogsContext } from '../usage-logs-provider'
 import {
@@ -116,6 +120,33 @@ function VideoPreviewCell({ log }: { log: TaskLog }) {
         videoUrl={videoUrl}
         taskId={log.task_id}
       />
+    </>
+  )
+}
+
+function PromptCell({ log }: { log: TaskLog }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const prompt = getTaskLogPrompt(log)
+
+  if (!prompt) {
+    return <span className='text-muted-foreground/60 text-xs'>-</span>
+  }
+
+  return (
+    <>
+      <button
+        type='button'
+        className='group flex max-w-[220px] items-center gap-1 text-left text-xs'
+        onClick={() => setOpen(true)}
+        title={t('Click to view full prompt')}
+      >
+        <MessageSquareText className='text-muted-foreground size-3 shrink-0' />
+        <span className='text-muted-foreground truncate leading-snug group-hover:underline'>
+          {prompt}
+        </span>
+      </button>
+      <PromptDialog prompt={prompt} open={open} onOpenChange={setOpen} />
     </>
   )
 }
@@ -224,6 +255,16 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         )
       },
       meta: { label: t('Task ID'), mobileTitle: true },
+    },
+    {
+      id: 'prompt',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Prompt')} />
+      ),
+      cell: ({ row }) => <PromptCell log={row.original} />,
+      meta: { label: t('Prompt'), mobileHidden: true },
+      size: 200,
+      maxSize: 220,
     },
     createDurationColumn<TaskLog>({
       submitTimeKey: 'submit_time',

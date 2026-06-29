@@ -49,3 +49,16 @@ func TestTaskModel2DtoKeepsProxyResultURLWhenNoDirectVideoURLExists(t *testing.T
 
 	require.Equal(t, taskcommon.BuildProxyURL("task_public"), dto.ResultURL)
 }
+
+func TestTaskModel2DtoIncludesPromptFromTaskProperties(t *testing.T) {
+	task := &model.Task{
+		TaskID: "task_public",
+		Properties: model.Properties{
+			Input: "a cinematic product video",
+		},
+	}
+
+	dto := TaskModel2Dto(task)
+
+	require.Equal(t, "a cinematic product video", dto.Prompt)
+}

@@ -55,6 +55,18 @@ export function getTaskLogVideoPreviewUrl(
   return resultUrl
 }
 
+export function getTaskLogPrompt(
+  log: Pick<TaskLog, 'prompt' | 'properties' | 'data'>
+) {
+  const explicitPrompt = normalizePrompt(log.prompt)
+  if (explicitPrompt) return explicitPrompt
+
+  const propertiesPrompt = findFirstPrompt(log.properties)
+  if (propertiesPrompt) return propertiesPrompt
+
+  return findFirstPrompt(log.data)
+}
+
 function normalizePreviewUrl(url: string | undefined) {
   const trimmed = url?.trim()
   if (!trimmed) return null
@@ -164,6 +176,58 @@ function findFirstVideoUrl(value: unknown, taskId?: string): string | null {
   ]) {
     const url = findFirstVideoUrl(record[key], taskId)
     if (url) return url
+  }
+
+  return null
+}
+
+function normalizePrompt(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function findFirstPrompt(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return findFirstPrompt(JSON.parse(trimmed))
+      } catch {
+        return null
+      }
+    }
+    return null
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const prompt = findFirstPrompt(item)
+      if (prompt) return prompt
+    }
+    return null
+  }
+
+  if (!value || typeof value !== 'object') return null
+
+  const record = value as Record<string, unknown>
+  for (const key of ['prompt', 'input', 'text']) {
+    const prompt = normalizePrompt(record[key])
+    if (prompt) return prompt
+    const nestedPrompt = findFirstPrompt(record[key])
+    if (nestedPrompt) return nestedPrompt
+  }
+
+  for (const key of [
+    'properties',
+    'request',
+    'body',
+    'payload',
+    'data',
+    'messages',
+    'content',
+  ]) {
+    const prompt = findFirstPrompt(record[key])
+    if (prompt) return prompt
   }
 
   return null

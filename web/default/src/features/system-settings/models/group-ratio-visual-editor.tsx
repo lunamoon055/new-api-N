@@ -17,7 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useMemo, useCallback, memo } from 'react'
-import { Pencil, Plus, Trash2, GripVertical, ChevronDown } from 'lucide-react'
+import {
+  Pencil,
+  Plus,
+  Trash2,
+  GripVertical,
+  ChevronDown,
+  X,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
@@ -346,6 +353,12 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
     setGroupOverrideDialogOpen(true)
   }
 
+  const closeGroupOverrideDialog = () => {
+    setGroupOverrideDialogOpen(false)
+    setGroupOverrideUserGroup(null)
+    setGroupOverrideEditData(null)
+  }
+
   const handleOverrideSave = (
     targetGroup: string,
     ratio: number,
@@ -372,7 +385,16 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
     map[groupOverrideUserGroup][targetGroup] = ratio
 
     onChange('GroupGroupRatio', JSON.stringify(map, null, 2))
-    setGroupOverrideDialogOpen(false)
+    closeGroupOverrideDialog()
+  }
+
+  const handleGroupOverrideDialogOpenChange = (open: boolean) => {
+    if (open) {
+      setGroupOverrideDialogOpen(true)
+      return
+    }
+
+    closeGroupOverrideDialog()
   }
 
   const handleOverrideDelete = (userGroup: string, targetGroup: string) => {
@@ -414,6 +436,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
         <CardContent>
           <div className='space-y-4'>
             <Button
+              type='button'
               onClick={() => handleSimpleAdd('topupGroupRatio')}
               size='sm'
             >
@@ -442,6 +465,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                         <TableCell className='text-right'>
                           <div className='flex justify-end gap-2'>
                             <Button
+                              type='button'
                               variant='ghost'
                               size='sm'
                               onClick={() =>
@@ -451,6 +475,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                               <Pencil className='h-4 w-4' />
                             </Button>
                             <Button
+                              type='button'
                               variant='ghost'
                               size='sm'
                               onClick={() =>
@@ -486,7 +511,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
         </CardHeader>
         <CardContent>
           <div className='space-y-4'>
-            <Button onClick={handleUserGroupAdd} size='sm'>
+            <Button type='button' onClick={handleUserGroupAdd} size='sm'>
               <Plus className='mr-2 h-4 w-4' />
               {t('Add user group')}
             </Button>
@@ -498,7 +523,9 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                       <div className='flex items-center justify-between p-4'>
                         <div className='flex items-center gap-2'>
                           <CollapsibleTrigger
-                            render={<Button variant='ghost' size='sm' />}
+                            render={
+                              <Button type='button' variant='ghost' size='sm' />
+                            }
                           >
                             <ChevronDown className='h-4 w-4' />
                           </CollapsibleTrigger>
@@ -513,6 +540,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                         </div>
                         <div className='flex gap-2'>
                           <Button
+                            type='button'
                             variant='ghost'
                             size='sm'
                             onClick={() =>
@@ -522,6 +550,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                             <Plus className='h-4 w-4' />
                           </Button>
                           <Button
+                            type='button'
                             variant='ghost'
                             size='sm'
                             onClick={() =>
@@ -555,6 +584,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                                     <TableCell className='text-right'>
                                       <div className='flex justify-end gap-2'>
                                         <Button
+                                          type='button'
                                           variant='ghost'
                                           size='sm'
                                           onClick={() =>
@@ -567,6 +597,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                                           <Pencil className='h-4 w-4' />
                                         </Button>
                                         <Button
+                                          type='button'
                                           variant='ghost'
                                           size='sm'
                                           onClick={() =>
@@ -608,7 +639,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
         </CardHeader>
         <CardContent>
           <div className='space-y-4'>
-            <Button onClick={handleAutoGroupAdd} size='sm'>
+            <Button type='button' onClick={handleAutoGroupAdd} size='sm'>
               <Plus className='mr-2 h-4 w-4' />
               {t('Add group')}
             </Button>
@@ -623,6 +654,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                     <span className='flex-1 font-medium'>{group}</span>
                     <div className='flex gap-1'>
                       <Button
+                        type='button'
                         variant='ghost'
                         size='sm'
                         disabled={index === 0}
@@ -631,6 +663,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                         ↑
                       </Button>
                       <Button
+                        type='button'
                         variant='ghost'
                         size='sm'
                         disabled={index === autoGroupsList.length - 1}
@@ -639,6 +672,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                         ↓
                       </Button>
                       <Button
+                        type='button'
                         variant='ghost'
                         size='sm'
                         onClick={() => handleAutoGroupDelete(index)}
@@ -684,12 +718,15 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
           </div>
           <DialogFooter>
             <Button
+              type='button'
               variant='outline'
               onClick={() => setAutoGroupDialogOpen(false)}
             >
               {t('Cancel')}
             </Button>
-            <Button onClick={handleAutoGroupSave}>{t('Add')}</Button>
+            <Button type='button' onClick={handleAutoGroupSave}>
+              {t('Add')}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -715,12 +752,15 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
           </div>
           <DialogFooter>
             <Button
+              type='button'
               variant='outline'
               onClick={() => setUserGroupDialogOpen(false)}
             >
               {t('Cancel')}
             </Button>
-            <Button onClick={handleUserGroupSave}>{t('Add')}</Button>
+            <Button type='button' onClick={handleUserGroupSave}>
+              {t('Add')}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -728,7 +768,8 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
       {/* Group Override Dialog */}
       <GroupOverrideDialog
         open={groupOverrideDialogOpen}
-        onOpenChange={setGroupOverrideDialogOpen}
+        onOpenChange={handleGroupOverrideDialogOpenChange}
+        onClose={closeGroupOverrideDialog}
         onSave={handleOverrideSave}
         editData={groupOverrideEditData}
         userGroup={groupOverrideUserGroup}
@@ -827,7 +868,12 @@ function GroupPricingTable({
               )}
             </CardDescription>
           </div>
-          <Button onClick={addRow} size='sm' className='sm:self-start'>
+          <Button
+            type='button'
+            onClick={addRow}
+            size='sm'
+            className='sm:self-start'
+          >
             <Plus className='mr-2 h-4 w-4' />
             {t('Add group')}
           </Button>
@@ -921,6 +967,7 @@ function GroupPricingTable({
                       </TableCell>
                       <TableCell className='text-right'>
                         <Button
+                          type='button'
                           variant='ghost'
                           size='sm'
                           onClick={() => removeRow(row._id)}
@@ -1043,10 +1090,14 @@ function SimpleGroupDialogBody({
         </div>
       </div>
       <DialogFooter>
-        <Button variant='outline' onClick={() => onOpenChange(false)}>
+        <Button
+          type='button'
+          variant='outline'
+          onClick={() => onOpenChange(false)}
+        >
           {t('Cancel')}
         </Button>
-        <Button onClick={handleSave}>
+        <Button type='button' onClick={handleSave}>
           {editData ? t('Update') : t('Add')}
         </Button>
       </DialogFooter>
@@ -1058,6 +1109,7 @@ function SimpleGroupDialogBody({
 type GroupOverrideDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onClose: () => void
   onSave: (targetGroup: string, ratio: number, oldTargetGroup?: string) => void
   editData: GroupOverride | null
   userGroup: string | null
@@ -1066,10 +1118,15 @@ type GroupOverrideDialogProps = {
 function GroupOverrideDialog({
   open,
   onOpenChange,
+  onClose,
   onSave,
   editData,
   userGroup,
 }: GroupOverrideDialogProps) {
+  if (!open) {
+    return null
+  }
+
   const resetKey = [
     open ? 'open' : 'closed',
     userGroup ?? '',
@@ -1082,6 +1139,7 @@ function GroupOverrideDialog({
       <GroupOverrideDialogBody
         key={resetKey}
         onOpenChange={onOpenChange}
+        onClose={onClose}
         onSave={onSave}
         editData={editData}
         userGroup={userGroup}
@@ -1093,7 +1151,7 @@ function GroupOverrideDialog({
 type GroupOverrideDialogBodyProps = Omit<GroupOverrideDialogProps, 'open'>
 
 function GroupOverrideDialogBody({
-  onOpenChange,
+  onClose,
   onSave,
   editData,
   userGroup,
@@ -1113,7 +1171,18 @@ function GroupOverrideDialogBody({
   }
 
   return (
-    <DialogContent>
+    <DialogContent showCloseButton={false}>
+      <Button
+        type='button'
+        variant='ghost'
+        className='absolute top-2 right-2'
+        size='icon-sm'
+        onClick={onClose}
+        aria-label={t('Close')}
+      >
+        <X className='h-4 w-4' />
+        <span className='sr-only'>{t('Close')}</span>
+      </Button>
       <DialogHeader>
         <DialogTitle>
           {editData ? t('Edit ratio override') : t('Add ratio override')}
@@ -1163,10 +1232,10 @@ function GroupOverrideDialogBody({
         </div>
       </div>
       <DialogFooter>
-        <Button variant='outline' onClick={() => onOpenChange(false)}>
+        <Button type='button' variant='outline' onClick={onClose}>
           {t('Cancel')}
         </Button>
-        <Button onClick={handleSave}>
+        <Button type='button' onClick={handleSave}>
           {editData ? t('Update') : t('Add')}
         </Button>
       </DialogFooter>

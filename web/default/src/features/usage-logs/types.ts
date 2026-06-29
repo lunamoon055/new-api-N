@@ -244,6 +244,8 @@ export interface TaskLog {
   finish_time?: number // seconds
   progress?: string
   progress_message_en?: string
+  prompt?: string
+  properties?: unknown
   data?: unknown // JSON payload from the task response
   fail_reason?: string
   result_url?: string

@@ -17,7 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, it } from 'bun:test'
-import { getTaskLogVideoPreviewUrl } from '../src/features/usage-logs/lib/task-preview'
+import {
+  getTaskLogPrompt,
+  getTaskLogVideoPreviewUrl,
+} from '../src/features/usage-logs/lib/task-preview'
 import type { TaskLog } from '../src/features/usage-logs/types'
 
 function createTaskLog(overrides: Partial<TaskLog>): TaskLog {
@@ -131,6 +134,59 @@ describe('task log video preview helpers', () => {
         createTaskLog({
           status: 'IN_PROGRESS',
           result_url: 'https://example.com/upstream-video.mp4',
+        })
+      )
+    ).toBeNull()
+  })
+})
+
+describe('task log prompt helpers', () => {
+  it('uses the explicit prompt field when available', () => {
+    expect(
+      getTaskLogPrompt(
+        createTaskLog({
+          prompt: 'a snow mountain at sunrise',
+          properties: {
+            input: 'ignored fallback',
+          },
+        })
+      )
+    ).toBe('a snow mountain at sunrise')
+  })
+
+  it('uses properties.input when the task dto does not include prompt', () => {
+    expect(
+      getTaskLogPrompt(
+        createTaskLog({
+          properties: {
+            input: 'a girl speaking softly',
+          },
+        })
+      )
+    ).toBe('a girl speaking softly')
+  })
+
+  it('uses properties.input from serialized task properties', () => {
+    expect(
+      getTaskLogPrompt(
+        createTaskLog({
+          properties: JSON.stringify({
+            input: 'a product video with cinematic lighting',
+          }),
+        })
+      )
+    ).toBe('a product video with cinematic lighting')
+  })
+
+  it('does not treat result urls in task data as prompts', () => {
+    expect(
+      getTaskLogPrompt(
+        createTaskLog({
+          data: {
+            data: {
+              url: 'https://cdn.example.com/final-video.mp4',
+            },
+          },
         })
       )
     ).toBeNull()
