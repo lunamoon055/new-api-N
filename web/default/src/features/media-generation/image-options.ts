@@ -27,6 +27,13 @@ export type CreationImageReferences = {
   imageUrls: CreationImageReferenceValue[]
 }
 
+export type CreationImageAspectRatio =
+  '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3'
+
+export type CreationImageOptions = {
+  aspectRatio: CreationImageAspectRatio
+}
+
 type CreationImageMessageContent =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } }
@@ -35,7 +42,7 @@ export type CreationImageRequestOptions =
   | Record<string, never>
   | {
       output_resolution: '1K'
-      aspect_ratio: '1:1'
+      aspect_ratio: CreationImageAspectRatio
       messages?: Array<{
         role: 'user'
         content: CreationImageMessageContent[]
@@ -44,9 +51,22 @@ export type CreationImageRequestOptions =
 
 export const CREATION_IMAGE_REFERENCE_MAX_COUNT = 6
 export const CREATION_IMAGE_REFERENCE_MAX_BYTES = 20 * 1024 * 1024
+export const CREATION_IMAGE_ASPECT_RATIO_OPTIONS: CreationImageAspectRatio[] = [
+  '1:1',
+  '16:9',
+  '9:16',
+  '4:3',
+  '3:4',
+  '3:2',
+  '2:3',
+]
 
 export const EMPTY_CREATION_IMAGE_REFERENCES: CreationImageReferences = {
   imageUrls: [],
+}
+
+export const DEFAULT_CREATION_IMAGE_OPTIONS: CreationImageOptions = {
+  aspectRatio: '1:1',
 }
 
 const IMAGE_REFERENCE_EXTENSIONS = ['avif', 'gif', 'jpeg', 'jpg', 'png', 'webp']
@@ -76,6 +96,22 @@ export function normalizeCreationImageReferences(
   return {
     imageUrls: cleanReferenceValues(references?.imageUrls),
   }
+}
+
+export function normalizeCreationImageOptions(
+  options?: Partial<CreationImageOptions>,
+  modelId?: string
+): CreationImageOptions {
+  if (!supportsCreationImageReferences(modelId)) {
+    return { ...DEFAULT_CREATION_IMAGE_OPTIONS }
+  }
+  const aspectRatio = CREATION_IMAGE_ASPECT_RATIO_OPTIONS.includes(
+    options?.aspectRatio as CreationImageAspectRatio
+  )
+    ? (options?.aspectRatio as CreationImageAspectRatio)
+    : DEFAULT_CREATION_IMAGE_OPTIONS.aspectRatio
+
+  return { aspectRatio }
 }
 
 export function getCreationImageReferenceError(
@@ -114,17 +150,19 @@ export function getCreationImageReferenceError(
 export function getCreationImageRequestOptions(
   prompt: string,
   modelId?: string,
-  references: CreationImageReferences = EMPTY_CREATION_IMAGE_REFERENCES
+  references: CreationImageReferences = EMPTY_CREATION_IMAGE_REFERENCES,
+  imageOptions: Partial<CreationImageOptions> = DEFAULT_CREATION_IMAGE_OPTIONS
 ): CreationImageRequestOptions {
   if (!supportsCreationImageReferences(modelId)) return {}
 
+  const normalizedOptions = normalizeCreationImageOptions(imageOptions, modelId)
   const normalized = normalizeCreationImageReferences(references, modelId)
   const imageUrls = normalized.imageUrls
     .map(getCreationReferenceURL)
     .filter(Boolean)
   const options: Exclude<CreationImageRequestOptions, Record<string, never>> = {
     output_resolution: '1K',
-    aspect_ratio: '1:1',
+    aspect_ratio: normalizedOptions.aspectRatio,
   }
 
   if (imageUrls.length) {

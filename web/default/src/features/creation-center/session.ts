@@ -18,7 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   EMPTY_CREATION_IMAGE_REFERENCES,
+  normalizeCreationImageOptions,
   normalizeCreationImageReferences,
+  type CreationImageOptions,
   type CreationImageReferences,
   type CreationImageReferenceValue,
 } from '../media-generation/image-options'
@@ -40,6 +42,7 @@ export type CreationHistoryItem = {
   prompt: string
   assets?: CreationAsset[]
   result: CreationResult
+  imageOptions?: CreationImageOptions
   imageReferences?: CreationImageReferences
   videoOptions?: CreationVideoOptions
   videoReferences?: CreationVideoReferences
@@ -101,6 +104,9 @@ export function sanitizeCreationHistoryItem(
   const sanitizedItem = imageReferences
     ? {
         ...item,
+        imageOptions: item.imageOptions
+          ? normalizeCreationImageOptions(item.imageOptions, item.model)
+          : undefined,
         imageReferences: sanitizeImageReferences(imageReferences, item.model),
       }
     : item

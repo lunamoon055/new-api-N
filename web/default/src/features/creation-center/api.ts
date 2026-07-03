@@ -29,6 +29,7 @@ import {
   composeCreationPrompt,
   getCreationImageRequestOptions,
   getCreationVideoRequestOptions,
+  type CreationImageOptions,
   type CreationImageReferences,
   type CreationVideoReferences,
   type CreationVideoOptions,
@@ -119,6 +120,7 @@ export async function submitCreationTask(params: {
   model: CreationModel
   prompt: string
   assets?: CreationAsset[]
+  imageOptions?: CreationImageOptions
   imageReferences?: CreationImageReferences
   videoOptions?: CreationVideoOptions
   videoReferences?: CreationVideoReferences
@@ -149,7 +151,8 @@ export async function submitCreationTask(params: {
     const imageOptions = getCreationImageRequestOptions(
       promptWithAssets,
       params.model.id,
-      params.imageReferences
+      params.imageReferences,
+      params.imageOptions
     )
     const response = await api.post(
       '/api/creation/images/generations',

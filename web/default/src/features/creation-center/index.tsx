@@ -46,6 +46,7 @@ import { CREATION_MODES } from './constants'
 import {
   CREATION_IMAGE_REFERENCE_MAX_BYTES,
   CREATION_IMAGE_REFERENCE_MAX_COUNT,
+  DEFAULT_CREATION_IMAGE_OPTIONS,
   CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES,
   CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT,
   CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES,
@@ -64,11 +65,13 @@ import {
   getCreationVideoReferenceError,
   getCreationVideoRequestOptions,
   loadCreationHistory,
+  normalizeCreationImageOptions,
   normalizeCreationImageReferences,
   normalizeCreationVideoOptions,
   normalizeCreationVideoReferences,
   saveCreationHistory,
   upsertCreationHistoryItem,
+  type CreationImageOptions,
   type CreationImageReferences,
   type CreationHistoryItem,
   type CreationVideoOptions,
@@ -109,6 +112,9 @@ export function CreationCenter() {
   const [sessionNumber, setSessionNumber] = useState(1)
   const [result, setResult] = useState<CreationResult>()
   const [historyItems, setHistoryItems] = useState<CreationHistoryItem[]>([])
+  const [imageOptions, setImageOptions] = useState<CreationImageOptions>(
+    DEFAULT_CREATION_IMAGE_OPTIONS
+  )
   const [imageReferences, setImageReferences] =
     useState<CreationImageReferences>({
       ...EMPTY_CREATION_IMAGE_REFERENCES,
@@ -254,6 +260,20 @@ export function CreationCenter() {
   ])
 
   useEffect(() => {
+    if (mode !== 'image') return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setImageOptions((current) => {
+      const normalized = normalizeCreationImageOptions(
+        current,
+        selectedModel?.id
+      )
+      return normalized.aspectRatio === current.aspectRatio
+        ? current
+        : normalized
+    })
+  }, [mode, selectedModel?.id])
+
+  useEffect(() => {
     if (mode !== 'video') return
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setVideoOptions((current) => {
@@ -324,6 +344,7 @@ export function CreationCenter() {
   const startNewSession = () => {
     setPrompt('')
     setAssets([])
+    setImageOptions(DEFAULT_CREATION_IMAGE_OPTIONS)
     setImageReferences({
       ...EMPTY_CREATION_IMAGE_REFERENCES,
       imageUrls: [],
@@ -663,12 +684,17 @@ export function CreationCenter() {
       mode === 'image'
         ? normalizeCreationImageReferences(imageReferences, selectedModel.id)
         : undefined
+    const normalizedImageOptions =
+      mode === 'image'
+        ? normalizeCreationImageOptions(imageOptions, selectedModel.id)
+        : undefined
     try {
       const nextResult = await submitCreationTask({
         mode,
         model: selectedModel,
         prompt: trimmedPrompt,
         assets,
+        imageOptions: normalizedImageOptions,
         imageReferences: normalizedImageReferences,
         videoOptions: normalizedVideoOptions,
         videoReferences: normalizedVideoReferences,
@@ -689,6 +715,7 @@ export function CreationCenter() {
         prompt: trimmedPrompt,
         assets: getCreationAssetSnapshots(assets),
         result: enrichedResult,
+        imageOptions: normalizedImageOptions,
         imageReferences: normalizedImageReferences,
         videoOptions: normalizedVideoOptions,
         videoReferences: normalizedVideoReferences,
@@ -721,6 +748,7 @@ export function CreationCenter() {
         prompt: trimmedPrompt,
         assets: getCreationAssetSnapshots(assets),
         result: failedResult,
+        imageOptions: normalizedImageOptions,
         imageReferences: normalizedImageReferences,
         videoOptions: normalizedVideoOptions,
         videoReferences: normalizedVideoReferences,
@@ -779,6 +807,11 @@ export function CreationCenter() {
             ...EMPTY_CREATION_IMAGE_REFERENCES,
             imageUrls: [],
           }
+    )
+    setImageOptions(
+      item.imageOptions
+        ? normalizeCreationImageOptions(item.imageOptions, item.model)
+        : DEFAULT_CREATION_IMAGE_OPTIONS
     )
     setVideoReferences(
       item.videoReferences
@@ -860,6 +893,7 @@ export function CreationCenter() {
               authenticated={!!auth.user}
               mode={mode}
               model={selectedModel}
+              imageOptions={imageOptions}
               imageReferences={imageReferences}
               imageReferencesSupported={imageReferencesSupported}
               videoOptions={videoOptions}
@@ -870,6 +904,7 @@ export function CreationCenter() {
               submitting={submitting}
               sessionNumber={sessionNumber}
               onPromptChange={setPrompt}
+              onImageOptionsChange={setImageOptions}
               onImageReferenceFilesSelected={addImageReferenceFiles}
               onRemoveImageReferenceImage={removeImageReferenceImage}
               onVideoOptionsChange={setVideoOptions}

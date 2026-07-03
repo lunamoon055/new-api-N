@@ -99,6 +99,20 @@ describe('gpt-image2 creation references', () => {
     })
   })
 
+  it('uses the selected gpt-image2 aspect ratio', () => {
+    expect(
+      getCreationImageRequestOptions(
+        'wide cinematic poster',
+        'gpt-image2',
+        EMPTY_CREATION_IMAGE_REFERENCES,
+        { aspectRatio: '16:9' }
+      )
+    ).toMatchObject({
+      output_resolution: '1K',
+      aspect_ratio: '16:9',
+    })
+  })
+
   it('drops unsupported image references for other image models', () => {
     expect(
       normalizeCreationImageReferences(

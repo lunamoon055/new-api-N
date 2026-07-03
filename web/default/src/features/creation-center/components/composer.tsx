@@ -33,6 +33,9 @@ import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { ImageReferenceFields } from '../image-reference-fields'
 import {
+  CREATION_IMAGE_ASPECT_RATIO_OPTIONS,
+  type CreationImageAspectRatio,
+  type CreationImageOptions,
   type CreationImageReferences,
   normalizeCreationVideoReferences,
   type CreationAspectRatio,
@@ -54,6 +57,7 @@ type ComposerProps = {
   authenticated: boolean
   mode: CreationMode
   model?: CreationModel
+  imageOptions: CreationImageOptions
   imageReferences: CreationImageReferences
   imageReferencesSupported: boolean
   videoOptions: CreationVideoOptions
@@ -64,6 +68,7 @@ type ComposerProps = {
   submitting: boolean
   sessionNumber: number
   onPromptChange: (value: string) => void
+  onImageOptionsChange: (options: CreationImageOptions) => void
   onImageReferenceFilesSelected: (files: File[]) => void
   onRemoveImageReferenceImage: (index: number) => void
   onVideoOptionsChange: (options: CreationVideoOptions) => void
@@ -155,6 +160,27 @@ export function Composer(props: ComposerProps) {
           )}
         </Button>
       </div>
+      {props.mode === 'image' && props.imageReferencesSupported && (
+        <>
+          <Separator className='my-3' />
+          <div className='grid gap-3 sm:grid-cols-3'>
+            <ComposerSelectGroup
+              label={t('Aspect ratio')}
+              value={props.imageOptions.aspectRatio}
+              options={CREATION_IMAGE_ASPECT_RATIO_OPTIONS.map((value) => ({
+                value,
+                label: value,
+              }))}
+              onChange={(value) =>
+                props.onImageOptionsChange({
+                  ...props.imageOptions,
+                  aspectRatio: value as CreationImageAspectRatio,
+                })
+              }
+            />
+          </div>
+        </>
+      )}
       {props.mode === 'video' && (
         <>
           <Separator className='my-3' />
