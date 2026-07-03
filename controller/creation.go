@@ -124,11 +124,7 @@ func setupCreationRelayContext(c *gin.Context, tokenPrefix string) *types.NewAPI
 	}
 	userCache.WriteContext(c)
 
-	usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
-	if usingGroup == "" {
-		usingGroup = userCache.Group
-		common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
-	}
+	usingGroup := resolveCreationUsingGroup(c, userCache)
 
 	tempToken := &model.Token{
 		UserId: userId,
@@ -139,6 +135,24 @@ func setupCreationRelayContext(c *gin.Context, tokenPrefix string) *types.NewAPI
 		return types.NewError(err, types.ErrorCodeAccessDenied, types.ErrOptionWithSkipRetry())
 	}
 	return nil
+}
+
+func resolveCreationUsingGroup(c *gin.Context, userCache *model.UserBase) string {
+	usingGroup := ""
+	if userCache != nil {
+		usingGroup = strings.TrimSpace(userCache.Group)
+	}
+	if usingGroup == "" {
+		usingGroup = strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUserGroup))
+	}
+	if usingGroup == "" {
+		usingGroup = strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
+	}
+	if usingGroup == "" {
+		usingGroup = "default"
+	}
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
+	return usingGroup
 }
 
 func respondCreationRelayError(c *gin.Context, newAPIError *types.NewAPIError) {

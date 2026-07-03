@@ -585,6 +585,10 @@ func RelayTask(c *gin.Context) {
 		task.PrivateData.BillingContext = &model.TaskBillingContext{
 			ModelPrice:         relayInfo.PriceData.ModelPrice,
 			GroupRatio:         relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+			UserGroup:          relayInfo.UserGroup,
+			UsingGroup:         relayInfo.UsingGroup,
+			GroupSpecialRatio:  relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio,
+			HasSpecialRatio:    relayInfo.PriceData.GroupRatioInfo.HasSpecialRatio,
 			ModelRatio:         relayInfo.PriceData.ModelRatio,
 			OtherRatios:        relayInfo.PriceData.OtherRatios,
 			VideoBillingMode:   relayInfo.PriceData.VideoBillingMode,

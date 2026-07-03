@@ -111,6 +111,10 @@ type TaskPrivateData struct {
 type TaskBillingContext struct {
 	ModelPrice         float64            `json:"model_price,omitempty"`          // 模型单价
 	GroupRatio         float64            `json:"group_ratio,omitempty"`          // 分组倍率
+	UserGroup          string             `json:"user_group,omitempty"`           // 提交时用户所属分组
+	UsingGroup         string             `json:"using_group,omitempty"`          // 提交时实际使用分组
+	GroupSpecialRatio  float64            `json:"group_special_ratio,omitempty"`  // 用户分组到使用分组的特殊倍率
+	HasSpecialRatio    bool               `json:"has_special_ratio,omitempty"`    // 是否命中特殊倍率
 	ModelRatio         float64            `json:"model_ratio,omitempty"`          // 模型倍率
 	OtherRatios        map[string]float64 `json:"other_ratios,omitempty"`         // 附加倍率（时长、分辨率等）
 	VideoBillingMode   string             `json:"video_billing_mode,omitempty"`   // 视频计费模式：dynamic 或 fixed

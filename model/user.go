@@ -496,6 +496,7 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 
 func (user *User) Update(updatePassword bool) error {
 	var err error
+	userId := user.Id
 	if updatePassword {
 		user.Password, err = common.Password2Hash(user.Password)
 		if err != nil {
@@ -503,8 +504,11 @@ func (user *User) Update(updatePassword bool) error {
 		}
 	}
 	newUser := *user
-	DB.First(&user, user.Id)
+	DB.First(user, userId)
 	if err = DB.Model(user).Updates(newUser).Error; err != nil {
+		return err
+	}
+	if err = DB.First(user, userId).Error; err != nil {
 		return err
 	}
 
@@ -514,6 +518,7 @@ func (user *User) Update(updatePassword bool) error {
 
 func (user *User) Edit(updatePassword bool) error {
 	var err error
+	userId := user.Id
 	if updatePassword {
 		user.Password, err = common.Password2Hash(user.Password)
 		if err != nil {
@@ -532,8 +537,11 @@ func (user *User) Edit(updatePassword bool) error {
 		updates["password"] = newUser.Password
 	}
 
-	DB.First(&user, user.Id)
+	DB.First(user, userId)
 	if err = DB.Model(user).Updates(updates).Error; err != nil {
+		return err
+	}
+	if err = DB.First(user, userId).Error; err != nil {
 		return err
 	}
 

@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,7 @@ func TestMain(m *testing.M) {
 	common.RedisEnabled = false
 	common.BatchUpdateEnabled = false
 	common.LogConsumeEnabled = true
+	ratio_setting.InitRatioSettings()
 
 	if err := db.AutoMigrate(
 		&model.Task{},
@@ -607,6 +609,31 @@ func TestNonTerminalUpdate_NoBilling(t *testing.T) {
 	var reloaded model.Task
 	require.NoError(t, model.DB.First(&reloaded, task.ID).Error)
 	assert.Equal(t, "50%", reloaded.Progress)
+}
+
+func TestRecalculateTaskQuotaByTokensUsesBillingContextGroupRatio(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 24, 24, 24
+	const initQuota, preConsumed = 10000, 300
+	const tokenRemain = 5000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-token-group-snapshot", tokenRemain)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.Group = "default"
+	task.Properties.OriginModelName = "gpt-3.5-turbo"
+	task.PrivateData.BillingContext.OriginModelName = "gpt-3.5-turbo"
+	task.PrivateData.BillingContext.GroupRatio = 0.9
+
+	RecalculateTaskQuotaByTokens(ctx, task, 1000)
+
+	assert.Equal(t, 225, task.Quota)
+	assert.Equal(t, initQuota+(preConsumed-225), getUserQuota(t, userID))
+	assert.Equal(t, tokenRemain+(preConsumed-225), getTokenRemainQuota(t, tokenID))
 }
 
 // ===========================================================================

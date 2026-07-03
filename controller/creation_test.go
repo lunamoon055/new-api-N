@@ -59,6 +59,19 @@ func TestBuildCreationModelCatalogCategorizesModels(t *testing.T) {
 	require.Equal(t, []string{"First", "Second"}, creationVendorNames(catalog.Vendors))
 }
 
+func TestResolveCreationUsingGroupPrefersCurrentUserGroup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	common.SetContextKey(ctx, constant.ContextKeyUsingGroup, "default")
+	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+
+	got := resolveCreationUsingGroup(ctx, &model.UserBase{Group: "vip"})
+
+	require.Equal(t, "vip", got)
+	require.Equal(t, "vip", common.GetContextKeyString(ctx, constant.ContextKeyUsingGroup))
+}
+
 func TestCreationReferenceImageUploadAndFetch(t *testing.T) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)

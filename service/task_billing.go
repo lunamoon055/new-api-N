@@ -132,6 +132,15 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 			other["model_ratio"] = bc.ModelRatio
 		}
 		other["group_ratio"] = bc.GroupRatio
+		if bc.UserGroup != "" {
+			other["user_group"] = bc.UserGroup
+		}
+		if bc.UsingGroup != "" {
+			other["using_group"] = bc.UsingGroup
+		}
+		if bc.HasSpecialRatio {
+			other["user_group_ratio"] = bc.GroupSpecialRatio
+		}
 		if bc.VideoBillingMode != "" {
 			other["video_billing_mode"] = bc.VideoBillingMode
 			other["applied_other_ratios"] = bc.AppliedOtherRatios
@@ -156,6 +165,31 @@ func taskModelName(task *model.Task) string {
 		return bc.OriginModelName
 	}
 	return task.Properties.OriginModelName
+}
+
+func taskGroupRatioForRecalculation(task *model.Task) float64 {
+	if task == nil {
+		return 1
+	}
+	if bc := task.PrivateData.BillingContext; bc != nil {
+		return bc.GroupRatio
+	}
+
+	usingGroup := strings.TrimSpace(task.Group)
+	userGroup := ""
+	if user, err := model.GetUserById(task.UserId, false); err == nil {
+		userGroup = strings.TrimSpace(user.Group)
+	}
+	if usingGroup == "" {
+		usingGroup = userGroup
+	}
+	if userGroup == "" {
+		userGroup = usingGroup
+	}
+	if usingGroup == "" {
+		return 1
+	}
+	return GetUserGroupRatio(userGroup, usingGroup)
 }
 
 // RefundTaskQuota 统一的任务失败退款逻辑。
@@ -272,27 +306,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 		return
 	}
 
-	// 获取用户和组的倍率信息
-	group := task.Group
-	if group == "" {
-		user, err := model.GetUserById(task.UserId, false)
-		if err == nil {
-			group = user.Group
-		}
-	}
-	if group == "" {
-		return
-	}
-
-	groupRatio := ratio_setting.GetGroupRatio(group)
-	userGroupRatio, hasUserGroupRatio := ratio_setting.GetGroupGroupRatio(group, group)
-
-	var finalGroupRatio float64
-	if hasUserGroupRatio {
-		finalGroupRatio = userGroupRatio
-	} else {
-		finalGroupRatio = groupRatio
-	}
+	finalGroupRatio := taskGroupRatioForRecalculation(task)
 
 	// 计算 OtherRatios 乘积（视频折扣、时长等）
 	otherMultiplier := 1.0

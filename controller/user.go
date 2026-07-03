@@ -587,6 +587,11 @@ func UpdateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if strings.TrimSpace(originUser.Group) != strings.TrimSpace(updatedUser.Group) {
+		if err := model.InvalidateUserTokensCache(updatedUser.Id); err != nil {
+			common.SysLog(fmt.Sprintf("invalidate user tokens cache failed after group update for user %d: %s", updatedUser.Id, err.Error()))
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
