@@ -16,15 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
+import { ChannelTestLab } from './components/channel-test-lab'
 import { ChannelsDialogs } from './components/channels-dialogs'
 import { ChannelsPrimaryButtons } from './components/channels-primary-buttons'
 import { ChannelsProvider } from './components/channels-provider'
 import { ChannelsTable } from './components/channels-table'
 
+type ChannelsView = 'list' | 'test-lab'
+
 export function Channels() {
   const { t } = useTranslation()
+  const [view, setView] = useState<ChannelsView>('list')
+
   return (
     <ChannelsProvider>
       <SectionPageLayout>
@@ -36,7 +43,18 @@ export function Channels() {
           <ChannelsPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <ChannelsTable />
+          <div className='space-y-4'>
+            <Tabs
+              value={view}
+              onValueChange={(value) => setView(value as ChannelsView)}
+            >
+              <TabsList>
+                <TabsTrigger value='list'>{t('Channel List')}</TabsTrigger>
+                <TabsTrigger value='test-lab'>{t('API Test Lab')}</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {view === 'list' ? <ChannelsTable /> : <ChannelTestLab />}
+          </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

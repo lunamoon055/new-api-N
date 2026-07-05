@@ -143,6 +143,7 @@ export interface ChannelTestResponse {
   success: boolean
   message?: string
   error_code?: string
+  time?: number
   data?: {
     response_time?: number
     error?: string
@@ -213,12 +214,7 @@ export interface MultiKeyStatusResponse {
 // ============================================================================
 
 export type ChannelSortBy =
-  | 'id'
-  | 'name'
-  | 'priority'
-  | 'balance'
-  | 'response_time'
-  | 'test_time'
+  'id' | 'name' | 'priority' | 'balance' | 'response_time' | 'test_time'
 
 export type ChannelSortOrder = 'asc' | 'desc'
 
@@ -249,7 +245,13 @@ export interface SearchChannelsParams {
 }
 
 export interface ChannelTestParams {
-  test_model?: string
+  model?: string
+  endpoint_type?: string
+  stream?: boolean
+}
+
+export interface ChannelTestLabParams extends ChannelTestParams {
+  payload?: Record<string, unknown>
 }
 
 export interface CopyChannelParams {

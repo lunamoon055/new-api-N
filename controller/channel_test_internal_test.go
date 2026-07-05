@@ -29,8 +29,21 @@ func TestResolveChannelTestEndpointUsesOpenAIVideoForVideoModels(t *testing.T) {
 
 	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, "video-2.0-fast", "")
 
-	require.Equal(t, string(constant.EndpointTypeOpenAIVideo), endpointType)
+	require.Equal(t, channelTestEndpointOpenAIVideoAsync, endpointType)
 	require.Equal(t, "/v1/video/async-generations", requestPath)
+	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
+}
+
+func TestResolveChannelTestEndpointUsesStandardOpenAIVideosForSeedance(t *testing.T) {
+	channel := &model.Channel{
+		Type:   constant.ChannelTypeOpenAI,
+		Models: "seedance2(933)",
+	}
+
+	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, "seedance2(933)", string(constant.EndpointTypeOpenAIVideo))
+
+	require.Equal(t, string(constant.EndpointTypeOpenAIVideo), endpointType)
+	require.Equal(t, "/v1/videos", requestPath)
 	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
 }
 
@@ -56,6 +69,24 @@ func TestBuildTestRequestUsesVideoPayloadForOpenAIVideoEndpoint(t *testing.T) {
 	require.NotEmpty(t, videoRequest.Prompt)
 	require.Equal(t, "720x1280", videoRequest.Size)
 	require.Equal(t, 4, videoRequest.Duration)
+}
+
+func TestBuildChannelTestRequestUsesCustomVideoPayload(t *testing.T) {
+	request, err := buildChannelTestRequest(
+		"seedance2(933)",
+		string(constant.EndpointTypeOpenAIVideo),
+		&model.Channel{},
+		false,
+		types.RelayFormatTask,
+		[]byte(`{"model":"seedance2(933)","prompt":"custom prompt","duration":5}`),
+	)
+
+	require.NoError(t, err)
+	require.IsType(t, relaycommon.TaskSubmitReq{}, request)
+	videoRequest := request.(relaycommon.TaskSubmitReq)
+	require.Equal(t, "seedance2(933)", videoRequest.Model)
+	require.Equal(t, "custom prompt", videoRequest.Prompt)
+	require.Equal(t, 5, videoRequest.Duration)
 }
 
 func TestBuildTestRequestUsesGptImage2PayloadForImageGenerationEndpoint(t *testing.T) {

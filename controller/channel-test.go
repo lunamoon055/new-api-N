@@ -67,12 +67,24 @@ type channelTestUserInfo struct {
 	usingGroup string
 }
 
+const channelTestEndpointOpenAIVideoAsync = "openai-video-async"
+
+type channelTestLabRequest struct {
+	Model        string          `json:"model"`
+	EndpointType string          `json:"endpoint_type"`
+	Stream       bool            `json:"stream"`
+	Payload      json.RawMessage `json:"payload"`
+}
+
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
 	normalized := strings.TrimSpace(endpointType)
 	if normalized != "" {
 		return normalized
 	}
 	if isChannelTestVideoModel(channel, modelName) {
+		if isChannelTestAsyncVideoModel(modelName) {
+			return channelTestEndpointOpenAIVideoAsync
+		}
 		return string(constant.EndpointTypeOpenAIVideo)
 	}
 	if strings.HasSuffix(modelName, ratio_setting.CompactModelSuffix) {
@@ -128,6 +140,10 @@ func resolveChannelTestEndpoint(channel *model.Channel, modelName, endpointType 
 		requestPath = "/v1/embeddings"
 		relayFormat = types.RelayFormatEmbedding
 	case constant.EndpointTypeOpenAIVideo:
+		requestPath = "/v1/videos"
+		relayFormat = types.RelayFormatTask
+	}
+	if endpointType == channelTestEndpointOpenAIVideoAsync {
 		requestPath = "/v1/video/async-generations"
 		relayFormat = types.RelayFormatTask
 	}
@@ -159,7 +175,21 @@ func isChannelTestVideoModel(channel *model.Channel, modelName string) bool {
 		strings.Contains(modelName, "grok-imagine-video")
 }
 
+func isChannelTestAsyncVideoModel(modelName string) bool {
+	switch strings.ToLower(strings.TrimSpace(modelName)) {
+	case "sora2", "sora-2", "kling-v3", "video-2.0", "video-2.0-fast", "ko3",
+		"veo31", "veo31-fast", "veo31-ref", "grok-imagine-video":
+		return true
+	default:
+		return false
+	}
+}
+
 func testChannel(channel *model.Channel, requester channelTestUserInfo, testModel string, endpointType string, isStream bool) testResult {
+	return testChannelWithPayload(channel, requester, testModel, endpointType, isStream, nil)
+}
+
+func testChannelWithPayload(channel *model.Channel, requester channelTestUserInfo, testModel string, endpointType string, isStream bool, payload json.RawMessage) testResult {
 	tik := time.Now()
 	if !supportsChannelConnectionTest(channel.Type) {
 		channelTypeName := constant.GetChannelTypeName(channel.Type)
@@ -183,6 +213,9 @@ func testChannel(channel *model.Channel, requester channelTestUserInfo, testMode
 				testModel = "gpt-4o-mini"
 			}
 		}
+	}
+	if payloadModel := getChannelTestPayloadModel(payload); payloadModel != "" {
+		testModel = payloadModel
 	}
 
 	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, testModel, endpointType)
@@ -211,7 +244,14 @@ func testChannel(channel *model.Channel, requester channelTestUserInfo, testMode
 		}
 	}
 
-	request := buildTestRequest(testModel, endpointType, channel, isStream)
+	request, buildErr := buildChannelTestRequest(testModel, endpointType, channel, isStream, relayFormat, payload)
+	if buildErr != nil {
+		return testResult{
+			context:     c,
+			localErr:    buildErr,
+			newAPIError: types.NewError(buildErr, types.ErrorCodeInvalidRequest, types.ErrOptionWithStatusCode(http.StatusBadRequest)),
+		}
+	}
 
 	info, err := genChannelTestRelayInfo(c, relayFormat, request)
 
@@ -923,11 +963,112 @@ func detectErrorMessageFromJSONBytes(jsonBytes []byte) string {
 	return message
 }
 
+func getChannelTestPayloadModel(payload json.RawMessage) string {
+	payload = bytes.TrimSpace(payload)
+	if len(payload) == 0 || payload[0] != '{' {
+		return ""
+	}
+	return strings.TrimSpace(gjson.GetBytes(payload, "model").String())
+}
+
+func buildChannelTestRequest(model string, endpointType string, channel *model.Channel, isStream bool, relayFormat types.RelayFormat, payload json.RawMessage) (any, error) {
+	payload = bytes.TrimSpace(payload)
+	if len(payload) == 0 || string(payload) == "null" {
+		return buildTestRequest(model, endpointType, channel, isStream), nil
+	}
+	if payload[0] != '{' {
+		return nil, errors.New("request payload must be a JSON object")
+	}
+
+	switch relayFormat {
+	case types.RelayFormatTask:
+		var request relaycommon.TaskSubmitReq
+		if err := common.Unmarshal(payload, &request); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(request.Model) == "" {
+			request.Model = model
+		}
+		return request, nil
+	case types.RelayFormatEmbedding:
+		var request dto.EmbeddingRequest
+		if err := common.Unmarshal(payload, &request); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(request.Model) == "" {
+			request.Model = model
+		}
+		return &request, nil
+	case types.RelayFormatOpenAIImage:
+		var request dto.ImageRequest
+		if err := common.Unmarshal(payload, &request); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(request.Model) == "" {
+			request.Model = model
+		}
+		return &request, nil
+	case types.RelayFormatRerank:
+		var request dto.RerankRequest
+		if err := common.Unmarshal(payload, &request); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(request.Model) == "" {
+			request.Model = model
+		}
+		return &request, nil
+	case types.RelayFormatOpenAIResponses:
+		var request dto.OpenAIResponsesRequest
+		if err := common.Unmarshal(payload, &request); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(request.Model) == "" {
+			request.Model = model
+		}
+		if isStream {
+			request.Stream = lo.ToPtr(true)
+		}
+		return &request, nil
+	case types.RelayFormatOpenAIResponsesCompaction:
+		var request dto.OpenAIResponsesCompactionRequest
+		if err := common.Unmarshal(payload, &request); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(request.Model) == "" {
+			request.Model = model
+		}
+		return &request, nil
+	case types.RelayFormatOpenAI, types.RelayFormatClaude, types.RelayFormatGemini:
+		var request dto.GeneralOpenAIRequest
+		if err := common.Unmarshal(payload, &request); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(request.Model) == "" {
+			request.Model = model
+		}
+		if isStream {
+			request.Stream = lo.ToPtr(true)
+			request.StreamOptions = &dto.StreamOptions{IncludeUsage: true}
+		}
+		return &request, nil
+	default:
+		return nil, fmt.Errorf("unsupported test endpoint relay format: %v", relayFormat)
+	}
+}
+
 func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool) any {
 	testResponsesInput := json.RawMessage(`[{"role":"user","content":"hi"}]`)
 
 	// 根据端点类型构建不同的测试请求
 	if endpointType != "" {
+		if endpointType == channelTestEndpointOpenAIVideoAsync {
+			return relaycommon.TaskSubmitReq{
+				Model:    model,
+				Prompt:   "a short product video",
+				Size:     "720x1280",
+				Duration: 4,
+			}
+		}
 		switch constant.EndpointType(endpointType) {
 		case constant.EndpointTypeOpenAIVideo:
 			return relaycommon.TaskSubmitReq{
@@ -1123,6 +1264,73 @@ func TestChannel(c *gin.Context) {
 		requester.usingGroup = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	}
 	result := testChannel(channel, requester, testModel, endpointType, isStream)
+	if result.localErr != nil {
+		resp := gin.H{
+			"success": false,
+			"message": result.localErr.Error(),
+			"time":    0.0,
+		}
+		if result.newAPIError != nil {
+			resp["error_code"] = result.newAPIError.GetErrorCode()
+		}
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+	tok := time.Now()
+	milliseconds := tok.Sub(tik).Milliseconds()
+	go channel.UpdateResponseTime(milliseconds)
+	consumedTime := float64(milliseconds) / 1000.0
+	if result.newAPIError != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success":    false,
+			"message":    result.newAPIError.Error(),
+			"time":       consumedTime,
+			"error_code": result.newAPIError.GetErrorCode(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"time":    consumedTime,
+	})
+}
+
+func TestChannelLab(c *gin.Context) {
+	channelId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	channel, err := model.CacheGetChannel(channelId)
+	if err != nil {
+		channel, err = model.GetChannelById(channelId, true)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
+
+	var request channelTestLabRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	tik := time.Now()
+	requester := channelTestUserInfo{
+		userID:     c.GetInt("id"),
+		group:      c.GetString("user_group"),
+		usingGroup: c.GetString("group"),
+	}
+	if requester.group == "" {
+		requester.group = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+	}
+	if requester.usingGroup == "" {
+		requester.usingGroup = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	}
+
+	result := testChannelWithPayload(channel, requester, request.Model, request.EndpointType, request.Stream, request.Payload)
 	if result.localErr != nil {
 		resp := gin.H{
 			"success": false,

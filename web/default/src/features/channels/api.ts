@@ -25,6 +25,8 @@ import type {
   BatchSetTagParams,
   Channel,
   ChannelBalanceResponse,
+  ChannelTestLabParams,
+  ChannelTestParams,
   ChannelTestResponse,
   CopyChannelParams,
   CopyChannelResponse,
@@ -179,9 +181,20 @@ export async function batchSetChannelTag(
  */
 export async function testChannel(
   id: number,
-  params?: { model?: string; endpoint_type?: string; stream?: boolean }
+  params?: ChannelTestParams
 ): Promise<ChannelTestResponse> {
   const res = await api.get(`/api/channel/test/${id}`, { params })
+  return res.data
+}
+
+/**
+ * Test channel with an editable request template from the API test lab
+ */
+export async function testChannelLab(
+  id: number,
+  data: ChannelTestLabParams
+): Promise<ChannelTestResponse> {
+  const res = await api.post(`/api/channel/test_lab/${id}`, data)
   return res.data
 }
 
