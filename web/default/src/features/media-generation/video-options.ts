@@ -92,8 +92,7 @@ type Video2CreationVideoRequestOptions = {
 }
 
 export type CreationVideoRequestOptions =
-  | LegacyCreationVideoRequestOptions
-  | Video2CreationVideoRequestOptions
+  LegacyCreationVideoRequestOptions | Video2CreationVideoRequestOptions
 
 export const CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT = 4
 export const CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES = 20 * 1024 * 1024
@@ -408,6 +407,88 @@ export function normalizeCreationVideoReferences(
   }
 }
 
+export function filterCreationVideoReferencesByPromptMentions(
+  prompt: string,
+  references: CreationVideoReferences,
+  modelId?: string
+): CreationVideoReferences {
+  const normalized = normalizeCreationVideoReferences(references, modelId)
+  const mentionedImageUrls = normalized.imageUrls.filter((_, index) =>
+    hasPromptMention(prompt, getReferenceMentionAliases('image', index + 1))
+  )
+  const mentionedVideoUrls = normalized.videoUrls.filter((_, index) =>
+    hasPromptMention(prompt, getReferenceMentionAliases('video', index + 1))
+  )
+  const audioMentioned =
+    !!getCreationReferenceURL(normalized.audioUrl) &&
+    hasPromptMention(prompt, getReferenceMentionAliases('audio'))
+  const hasMentions =
+    mentionedImageUrls.length > 0 ||
+    mentionedVideoUrls.length > 0 ||
+    audioMentioned
+
+  if (!hasMentions) return normalized
+
+  return normalizeCreationVideoReferences(
+    {
+      ...normalized,
+      imageUrls: mentionedImageUrls,
+      startImageUrl: '',
+      endImageUrl: '',
+      videoUrls: mentionedVideoUrls,
+      audioUrl: audioMentioned ? normalized.audioUrl : '',
+    },
+    modelId
+  )
+}
+
+function hasPromptMention(prompt: string, aliases: string[]) {
+  const normalizedPrompt = prompt.toLocaleLowerCase()
+  return aliases.some((alias) => {
+    const mention = `@${alias.toLocaleLowerCase()}`
+    let index = normalizedPrompt.indexOf(mention)
+    while (index >= 0) {
+      const next = normalizedPrompt[index + mention.length]
+      if (!next || isReferenceMentionBoundary(next)) return true
+      index = normalizedPrompt.indexOf(mention, index + mention.length)
+    }
+    return false
+  })
+}
+
+function isReferenceMentionBoundary(value: string) {
+  return !/[a-z0-9_-]/i.test(value)
+}
+
+function getReferenceMentionAliases(
+  kind: 'image' | 'video' | 'audio',
+  index?: number
+) {
+  if (kind === 'audio') {
+    return ['参考音频', '音频', 'reference audio', 'audio']
+  }
+  const number = index ?? 1
+  if (kind === 'video') {
+    return [
+      `参考视频${number}`,
+      `视频${number}`,
+      `reference video ${number}`,
+      `reference video${number}`,
+      `video${number}`,
+      `video-${number}`,
+    ]
+  }
+  return [
+    `参考图片${number}`,
+    `参考图${number}`,
+    `图片${number}`,
+    `reference image ${number}`,
+    `reference image${number}`,
+    `image${number}`,
+    `image-${number}`,
+  ]
+}
+
 function isHTTPURL(value: string) {
   try {
     const url = new URL(value)
@@ -504,8 +585,12 @@ export function getCreationVideoReferenceError(
     return 'Reference image format must be PNG, JPEG, WebP, GIF, or AVIF.'
   }
 
-  const videoUrls = normalized.videoUrls.map(getCreationReferenceURL).filter(Boolean)
-  const audioUrls = [getCreationReferenceURL(normalized.audioUrl)].filter(Boolean)
+  const videoUrls = normalized.videoUrls
+    .map(getCreationReferenceURL)
+    .filter(Boolean)
+  const audioUrls = [getCreationReferenceURL(normalized.audioUrl)].filter(
+    Boolean
+  )
   if (
     videoUrls.some((url) => !isReferenceVideo(url)) ||
     audioUrls.some((url) => !isReferenceAudio(url))
@@ -579,7 +664,9 @@ export function getCreationVideoRequestOptions(
       aspect_ratio: aspectRatio,
       estimateSeconds: duration.estimateSeconds,
     }
-    const imageReference = getCreationReferenceURL(normalizedReferences.imageUrls[0])
+    const imageReference = getCreationReferenceURL(
+      normalizedReferences.imageUrls[0]
+    )
     if (imageReference) request.input_reference = imageReference
     return {
       ...request,

@@ -55,6 +55,7 @@ import {
   EMPTY_CREATION_IMAGE_REFERENCES,
   DEFAULT_CREATION_VIDEO_OPTIONS,
   EMPTY_CREATION_VIDEO_REFERENCES,
+  filterCreationVideoReferencesByPromptMentions,
   getCreationImageReferenceError,
   getCreationDurationOptions,
   getCreationHistoryStorageKey,
@@ -632,6 +633,14 @@ export function CreationCenter() {
       toast.error(t('Write a prompt before submitting.'))
       return
     }
+    const mentionedVideoReferences =
+      mode === 'video'
+        ? filterCreationVideoReferencesByPromptMentions(
+            trimmedPrompt,
+            videoReferences,
+            selectedModel.id
+          )
+        : undefined
     if (mode === 'video') {
       const optionError = getCreationVideoOptionsError(
         videoOptions,
@@ -643,7 +652,7 @@ export function CreationCenter() {
       }
       const referenceError = getCreationVideoReferenceError(
         selectedModel.id,
-        videoReferences
+        mentionedVideoReferences ?? videoReferences
       )
       if (referenceError) {
         toast.error(t(referenceError))
@@ -669,7 +678,7 @@ export function CreationCenter() {
         ? getCreationVideoRequestOptions(
             videoOptions,
             selectedModel.id,
-            videoReferences
+            mentionedVideoReferences ?? videoReferences
           )
         : undefined
     const normalizedVideoOptions =
@@ -678,7 +687,10 @@ export function CreationCenter() {
         : undefined
     const normalizedVideoReferences =
       mode === 'video'
-        ? normalizeCreationVideoReferences(videoReferences, selectedModel.id)
+        ? normalizeCreationVideoReferences(
+            mentionedVideoReferences ?? videoReferences,
+            selectedModel.id
+          )
         : undefined
     const normalizedImageReferences =
       mode === 'image'

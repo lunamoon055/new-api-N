@@ -32,6 +32,7 @@ import {
   getCreationVideoReferenceError,
   getCreationVideoRequestOptions,
   loadCreationHistory,
+  filterCreationVideoReferencesByPromptMentions,
   normalizeCreationVideoReferences,
   sanitizeCreationHistoryItem,
   saveCreationHistory,
@@ -410,6 +411,77 @@ describe('creation center session helpers', () => {
       image_url: 'https://public.example/reference/a.png',
       video_url: 'https://public.example/reference/a.mp4',
       audio_url: 'https://public.example/reference/a.mp3',
+    })
+  })
+
+  it('filters Video2 references by prompt @ mentions and falls back to all uploads', () => {
+    const references = {
+      ...EMPTY_CREATION_VIDEO_REFERENCES,
+      referenceMode: 'multimodal' as const,
+      imageUrls: [
+        'https://cdn.example/first.png',
+        'https://cdn.example/second.png',
+      ],
+      videoUrls: [
+        'https://cdn.example/first.mp4',
+        'https://cdn.example/second.mp4',
+      ],
+      audioUrl: 'https://cdn.example/music.mp3',
+    }
+
+    expect(
+      filterCreationVideoReferencesByPromptMentions(
+        '没有指定素材时沿用全部上传素材',
+        references,
+        'video-2.0-fast'
+      )
+    ).toEqual(normalizeCreationVideoReferences(references, 'video-2.0-fast'))
+
+    expect(
+      filterCreationVideoReferencesByPromptMentions(
+        '让角色参考 @参考图片2 和 @参考视频1',
+        references,
+        'video-2.0-fast'
+      )
+    ).toEqual({
+      referenceMode: 'multimodal',
+      imageUrls: ['https://cdn.example/second.png'],
+      startImageUrl: '',
+      endImageUrl: '',
+      videoUrls: ['https://cdn.example/first.mp4'],
+      audioUrl: '',
+    })
+
+    expect(
+      filterCreationVideoReferencesByPromptMentions(
+        '让角色参考 @参考图片2里的人物',
+        references,
+        'video-2.0-fast'
+      )
+    ).toMatchObject({
+      imageUrls: ['https://cdn.example/second.png'],
+      videoUrls: [],
+      audioUrl: '',
+    })
+
+    expect(
+      filterCreationVideoReferencesByPromptMentions(
+        '不要把 @参考图片10 识别成第一张图',
+        references,
+        'video-2.0-fast'
+      )
+    ).toEqual(normalizeCreationVideoReferences(references, 'video-2.0-fast'))
+
+    expect(
+      filterCreationVideoReferencesByPromptMentions(
+        '节奏参考 @参考音频',
+        references,
+        'video-2.0-fast'
+      )
+    ).toMatchObject({
+      imageUrls: [],
+      videoUrls: [],
+      audioUrl: 'https://cdn.example/music.mp3',
     })
   })
 

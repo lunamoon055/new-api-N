@@ -16,7 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { FileImage, RefreshCw, Send, Trash2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import {
+  FileAudio,
+  FileImage,
+  FileVideo,
+  RefreshCw,
+  Send,
+  Trash2,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -33,10 +41,15 @@ import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { ImageReferenceFields } from '../image-reference-fields'
 import {
+  getPromptMentionTrigger,
+  type PromptMentionTrigger,
+} from '../lib/prompt-mentions'
+import {
   CREATION_IMAGE_ASPECT_RATIO_OPTIONS,
   type CreationImageAspectRatio,
   type CreationImageOptions,
   type CreationImageReferences,
+  getCreationReferenceURL,
   normalizeCreationVideoReferences,
   type CreationAspectRatio,
   type CreationDuration,
@@ -83,33 +96,142 @@ type ComposerProps = {
 
 export function Composer(props: ComposerProps) {
   const { t } = useTranslation()
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [mentionTrigger, setMentionTrigger] =
+    useState<PromptMentionTrigger | null>(null)
   const canSubmit = !!props.prompt.trim() && !!props.model && !props.submitting
+  const referenceMentionItems = useMemo(
+    () =>
+      props.mode === 'video' && props.videoCapabilities?.kind === 'video2'
+        ? getVideoReferenceMentionItems(props.videoReferences, t)
+        : [],
+    [props.mode, props.videoCapabilities?.kind, props.videoReferences, t]
+  )
+  const mentionSuggestions = mentionTrigger
+    ? referenceMentionItems.filter((item) =>
+        matchesReferenceMentionQuery(item, mentionTrigger.query)
+      )
+    : []
+  const showReferenceMentions =
+    !!mentionTrigger && mentionSuggestions.length > 0
+
+  const updateMentionTrigger = (
+    value: string,
+    caretPosition: number | null | undefined
+  ) => {
+    setMentionTrigger(
+      props.mode === 'video' && props.videoCapabilities?.kind === 'video2'
+        ? getPromptMentionTrigger(value, caretPosition)
+        : null
+    )
+  }
+
+  const insertReferenceMention = (item: ReferenceMentionItem) => {
+    const trigger =
+      mentionTrigger ??
+      getPromptMentionTrigger(
+        props.prompt,
+        textareaRef.current?.selectionStart ?? props.prompt.length
+      )
+    const token = `@${item.token} `
+    const start = trigger?.start ?? props.prompt.length
+    const end = trigger?.end ?? props.prompt.length
+    const nextPrompt = `${props.prompt.slice(0, start)}${token}${props.prompt.slice(end)}`
+    const nextCaret = start + token.length
+
+    props.onPromptChange(nextPrompt)
+    setMentionTrigger(null)
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(nextCaret, nextCaret)
+    })
+  }
 
   return (
     <section className='bg-card rounded-lg border p-3'>
       <div className='flex min-w-0 items-start gap-3'>
         <div className='min-w-0 flex-1'>
-          <Textarea
-            aria-label={t('Prompt')}
-            value={props.prompt}
-            maxLength={5000}
-            onChange={(event) => props.onPromptChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (
-                event.key !== 'Enter' ||
-                event.shiftKey ||
-                event.nativeEvent.isComposing
-              ) {
-                return
+          <div className='relative'>
+            <Textarea
+              ref={textareaRef}
+              aria-label={t('Prompt')}
+              value={props.prompt}
+              maxLength={5000}
+              onChange={(event) => {
+                props.onPromptChange(event.target.value)
+                updateMentionTrigger(
+                  event.target.value,
+                  event.target.selectionStart
+                )
+              }}
+              onClick={(event) =>
+                updateMentionTrigger(
+                  event.currentTarget.value,
+                  event.currentTarget.selectionStart
+                )
               }
-              event.preventDefault()
-              if (canSubmit) props.onSubmit()
-            }}
-            placeholder={t(
-              'Describe the task you want the selected model to complete...'
+              onKeyUp={(event) =>
+                updateMentionTrigger(
+                  event.currentTarget.value,
+                  event.currentTarget.selectionStart
+                )
+              }
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && mentionTrigger) {
+                  event.preventDefault()
+                  setMentionTrigger(null)
+                  return
+                }
+                if (
+                  event.key === 'Enter' &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing &&
+                  showReferenceMentions
+                ) {
+                  event.preventDefault()
+                  insertReferenceMention(mentionSuggestions[0])
+                  return
+                }
+                if (
+                  event.key !== 'Enter' ||
+                  event.shiftKey ||
+                  event.nativeEvent.isComposing
+                ) {
+                  return
+                }
+                event.preventDefault()
+                if (canSubmit) props.onSubmit()
+              }}
+              placeholder={t(
+                'Describe the task you want the selected model to complete...'
+              )}
+              className='min-h-20 resize-none border-0 px-0 py-1 shadow-none focus-visible:ring-0'
+            />
+            {showReferenceMentions && (
+              <div className='bg-popover text-popover-foreground absolute top-full right-0 left-0 z-20 mt-1 max-h-48 overflow-auto rounded-lg border p-1 shadow-md'>
+                {mentionSuggestions.map((item) => (
+                  <button
+                    key={item.id}
+                    type='button'
+                    className='hover:bg-accent hover:text-accent-foreground flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors'
+                    aria-label={item.label}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                      insertReferenceMention(item)
+                    }}
+                  >
+                    {getReferenceMentionIcon(item.kind)}
+                    <span className='min-w-0 flex-1 truncate'>
+                      {item.label}
+                    </span>
+                    <span className='text-muted-foreground shrink-0 text-xs'>
+                      @{item.token}
+                    </span>
+                  </button>
+                ))}
+              </div>
             )}
-            className='min-h-20 resize-none border-0 px-0 py-1 shadow-none focus-visible:ring-0'
-          />
+          </div>
           {!!props.assets.length && (
             <div className='mt-2 flex flex-wrap gap-1.5'>
               {props.assets.map((asset, index) => (
@@ -316,4 +438,63 @@ function getReferenceModeLabel(
   if (value === 'video') return t('Video reference')
   if (value === 'multimodal') return t('Multimodal reference')
   return t('Image reference')
+}
+
+type ReferenceMentionItem = {
+  id: string
+  kind: 'image' | 'video' | 'audio'
+  label: string
+  token: string
+}
+
+function getVideoReferenceMentionItems(
+  references: CreationVideoReferences,
+  t: (key: string) => string
+): ReferenceMentionItem[] {
+  const imageItems = references.imageUrls
+    .filter((reference) => getCreationReferenceURL(reference))
+    .map((_, index) => ({
+      id: `image-${index}`,
+      kind: 'image' as const,
+      label: `${t('Reference image')} ${index + 1}`,
+      token: `${t('Reference image')}${index + 1}`,
+    }))
+  const videoItems = references.videoUrls
+    .filter((reference) => getCreationReferenceURL(reference))
+    .map((_, index) => ({
+      id: `video-${index}`,
+      kind: 'video' as const,
+      label: `${t('Reference video')} ${index + 1}`,
+      token: `${t('Reference video')}${index + 1}`,
+    }))
+  const audioItem = getCreationReferenceURL(references.audioUrl)
+    ? [
+        {
+          id: 'audio',
+          kind: 'audio' as const,
+          label: t('Reference audio'),
+          token: t('Reference audio'),
+        },
+      ]
+    : []
+
+  return [...imageItems, ...videoItems, ...audioItem]
+}
+
+function matchesReferenceMentionQuery(
+  item: ReferenceMentionItem,
+  query: string
+) {
+  const normalizedQuery = query.toLocaleLowerCase()
+  return (
+    !normalizedQuery ||
+    item.label.toLocaleLowerCase().includes(normalizedQuery) ||
+    item.token.toLocaleLowerCase().includes(normalizedQuery)
+  )
+}
+
+function getReferenceMentionIcon(kind: ReferenceMentionItem['kind']) {
+  if (kind === 'video') return <FileVideo className='size-4 shrink-0' />
+  if (kind === 'audio') return <FileAudio className='size-4 shrink-0' />
+  return <FileImage className='size-4 shrink-0' />
 }
