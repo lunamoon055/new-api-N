@@ -1,6 +1,7 @@
 package sora
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -32,11 +33,11 @@ func TestValidateVideo2Request(t *testing.T) {
 		AudioURL: "https://cdn.example/a.mp3",
 		Async:    &asyncFalse,
 	}
-	require.NoError(t, validateVideo2Request(valid))
+	require.NoError(t, validateVideo2Request(valid, "video-2.0-fast"))
 
 	validDataURLReferences := valid
 	validDataURLReferences.ImageURLs = []string{"data:image/png;base64,AAAA"}
-	require.NoError(t, validateVideo2Request(validDataURLReferences))
+	require.NoError(t, validateVideo2Request(validDataURLReferences, "video-2.0-fast"))
 
 	zero := 0
 	tests := []struct {
@@ -173,7 +174,7 @@ func TestValidateVideo2Request(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			req := valid
 			test.mutate(&req)
-			require.ErrorContains(t, validateVideo2Request(req), test.contains)
+			require.ErrorContains(t, validateVideo2Request(req, "video-2.0-fast"), test.contains)
 		})
 	}
 }
@@ -181,6 +182,10 @@ func TestValidateVideo2Request(t *testing.T) {
 func TestIsVideo2Model(t *testing.T) {
 	require.True(t, isVideo2Model(" VIDEO-2.0 "))
 	require.True(t, isVideo2Model("video-2.0-fast"))
+	require.True(t, isVideo2Model("video-2.0-mini"))
+	require.True(t, isVideo2Model("video-2.0-480p"))
+	require.True(t, isVideo2Model("video-2.0-fast-480p"))
+	require.True(t, isVideo2Model("video-2.0-mini-480p"))
 	require.False(t, isVideo2Model("sora2"))
 }
 
@@ -252,6 +257,54 @@ func TestVideo2ValidationRejectsInvalidDuration(t *testing.T) {
 	require.Equal(t, "invalid_request", taskErr.Code)
 	require.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
 	require.ErrorContains(t, taskErr.Error, "duration")
+}
+
+func TestVideo2ValidationAcceptsMiniAnd480pModels(t *testing.T) {
+	for _, modelName := range []string{
+		"video-2.0-mini",
+		"video-2.0-480p",
+		"video-2.0-fast-480p",
+		"video-2.0-mini-480p",
+	} {
+		t.Run(modelName, func(t *testing.T) {
+			resolution := "720p"
+			size := "720x1280"
+			if strings.HasSuffix(modelName, "-480p") {
+				resolution = "480p"
+				size = "496x864"
+			}
+			c := newVideo2JSONContext(t, fmt.Sprintf(`{
+				"model":%q,
+				"prompt":"demo",
+				"duration":4,
+				"aspect_ratio":"9:16",
+				"resolution":%q,
+				"size":%q,
+				"image_url":"https://cdn.example/one.png",
+				"video_url":"https://cdn.example/one.mp4",
+				"audio_url":"https://cdn.example/one.mp3"
+			}`, modelName, resolution, size))
+
+			require.Nil(t, validateVideo2JSONRequest(c, modelName))
+		})
+	}
+}
+
+func TestVideo2ValidationRejectsConflicting480pSize(t *testing.T) {
+	c := newVideo2JSONContext(t, `{
+		"model":"video-2.0-fast-480p",
+		"prompt":"demo",
+		"duration":4,
+		"aspect_ratio":"16:9",
+		"resolution":"480p",
+		"size":"496x864"
+	}`)
+
+	taskErr := validateVideo2JSONRequest(c, "video-2.0-fast-480p")
+
+	require.NotNil(t, taskErr)
+	require.Equal(t, "invalid_request", taskErr.Code)
+	require.ErrorContains(t, taskErr.Error, "size")
 }
 
 func TestNonVideo2ModelsSkipDedicatedValidation(t *testing.T) {

@@ -260,11 +260,15 @@ func TestBuildCreationModelCatalogOverridesMediaModelsByName(t *testing.T) {
 			ModelName:              "sora2",
 			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
 		},
+		{
+			ModelName:              "video-2.0-mini-480p",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
 	}, nil, "")
 
 	require.Empty(t, catalog.Modes[0].Models)
 	require.Equal(t, []string{"gpt-image2"}, creationModelIDs(catalog.Modes[1].Models))
-	require.Equal(t, []string{"kling-v3", "sora2"}, creationModelIDs(catalog.Modes[2].Models))
+	require.Equal(t, []string{"kling-v3", "sora2", "video-2.0-mini-480p"}, creationModelIDs(catalog.Modes[2].Models))
 	require.NotEmpty(t, catalog.Modes[2].Models[1].Description)
 	require.Contains(t, catalog.Modes[2].Models[1].Tags, "video")
 }

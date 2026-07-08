@@ -60,16 +60,43 @@ type video2Request struct {
 	Async          *bool             `json:"async,omitempty"`
 }
 
+type video2ModelSpec struct {
+	resolution string
+	sizes      map[string]string
+}
+
 func isVideo2Model(modelName string) bool {
 	switch strings.ToLower(strings.TrimSpace(modelName)) {
-	case "video-2.0", "video-2.0-fast":
+	case "video-2.0", "video-2.0-fast", "video-2.0-mini",
+		"video-2.0-480p", "video-2.0-fast-480p", "video-2.0-mini-480p":
 		return true
 	default:
 		return false
 	}
 }
 
-func validateVideo2Request(req video2Request) error {
+func getVideo2ModelSpec(modelName string) video2ModelSpec {
+	if strings.HasSuffix(strings.ToLower(strings.TrimSpace(modelName)), "-480p") {
+		return video2ModelSpec{
+			resolution: "480p",
+			sizes: map[string]string{
+				"9:16": "496x864",
+				"16:9": "864x496",
+				"1:1":  "640x640",
+			},
+		}
+	}
+	return video2ModelSpec{
+		resolution: "720p",
+		sizes: map[string]string{
+			"9:16": "720x1280",
+			"16:9": "1280x720",
+			"1:1":  "960x960",
+		},
+	}
+}
+
+func validateVideo2Request(req video2Request, modelName string) error {
 	if strings.TrimSpace(req.Prompt) == "" {
 		return fmt.Errorf("prompt is required")
 	}
@@ -80,13 +107,9 @@ func validateVideo2Request(req video2Request) error {
 		return fmt.Errorf("duration must be between 4 and 15")
 	}
 
-	allowedRatios := map[string]string{
-		"9:16": "720x1280",
-		"16:9": "1280x720",
-		"1:1":  "720x720",
-	}
+	spec := getVideo2ModelSpec(modelName)
 	if req.AspectRatio != "" {
-		expectedSize, ok := allowedRatios[req.AspectRatio]
+		expectedSize, ok := spec.sizes[req.AspectRatio]
 		if !ok {
 			return fmt.Errorf("aspect_ratio must be 9:16, 16:9, or 1:1")
 		}
@@ -94,10 +117,10 @@ func validateVideo2Request(req video2Request) error {
 			return fmt.Errorf("size conflicts with aspect_ratio")
 		}
 	}
-	if req.Resolution != "" && req.Resolution != "720p" {
-		return fmt.Errorf("resolution must be 720p")
+	if req.Resolution != "" && req.Resolution != spec.resolution {
+		return fmt.Errorf("resolution must be %s", spec.resolution)
 	}
-	if req.Size != "" && req.Size != "720x1280" && req.Size != "1280x720" && req.Size != "720x720" {
+	if req.Size != "" && !video2SizeAllowed(req.Size, spec.sizes) {
 		return fmt.Errorf("size is invalid for Video2")
 	}
 
@@ -133,6 +156,15 @@ func validateVideo2Request(req video2Request) error {
 	}
 
 	return nil
+}
+
+func video2SizeAllowed(size string, sizes map[string]string) bool {
+	for _, allowedSize := range sizes {
+		if size == allowedSize {
+			return true
+		}
+	}
+	return false
 }
 
 func validateVideo2ImageReference(value string) error {
@@ -241,7 +273,7 @@ func validateVideo2JSONRequest(c *gin.Context, modelName string) *dto.TaskError 
 	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
-	if err := validateVideo2Request(req); err != nil {
+	if err := validateVideo2Request(req, modelName); err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
 	return nil

@@ -42,6 +42,10 @@ describe('playground media routing', () => {
     for (const model of [
       'video-2.0',
       'video-2.0-fast',
+      'video-2.0-mini',
+      'video-2.0-480p',
+      'video-2.0-fast-480p',
+      'video-2.0-mini-480p',
       'sora2',
       'sora-2',
       'sora-2-pro',
@@ -86,6 +90,17 @@ describe('playground media routing', () => {
       duration: 5,
       aspect_ratio: '9:16',
       resolution: '720p',
+      async: true,
+    })
+
+    expect(
+      buildPlaygroundMediaRequest('video-2.0-mini-480p', messages)
+    ).toEqual({
+      model: 'video-2.0-mini-480p',
+      prompt: 'make a short API website video',
+      duration: 5,
+      aspect_ratio: '9:16',
+      resolution: '480p',
       async: true,
     })
 

@@ -47,8 +47,7 @@ export type PlaygroundVideoRequest = {
 } & WithoutEstimate<CreationVideoRequestOptions>
 
 export type PlaygroundMediaRequest =
-  | PlaygroundImageRequest
-  | PlaygroundVideoRequest
+  PlaygroundImageRequest | PlaygroundVideoRequest
 
 export type PlaygroundMediaResult = {
   mode: Exclude<PlaygroundMediaMode, 'chat'>
@@ -61,6 +60,10 @@ export type PlaygroundMediaResult = {
 const VIDEO_MODEL_NAMES = new Set([
   'video-2.0',
   'video-2.0-fast',
+  'video-2.0-mini',
+  'video-2.0-480p',
+  'video-2.0-fast-480p',
+  'video-2.0-mini-480p',
   'sora2',
   'ko3',
   'kling-v3',

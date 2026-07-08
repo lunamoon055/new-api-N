@@ -205,6 +205,58 @@ describe('creation center session helpers', () => {
     })
   })
 
+  it('uses documented Video2 mini and 480p model capabilities', () => {
+    for (const model of [
+      'video-2.0-mini',
+      'video-2.0-480p',
+      'video-2.0-fast-480p',
+      'video-2.0-mini-480p',
+    ]) {
+      expect(getCreationVideoCapabilities(model)?.kind).toBe('video2')
+      expect(getCreationDurationOptions(model).map((item) => item.value)).toEqual(
+        Array.from({ length: 12 }, (_, index) => String(index + 4))
+      )
+      expect(getCreationVideoCapabilities(model)?.aspectRatios).toEqual([
+        '9:16',
+        '16:9',
+        '1:1',
+      ])
+      expect(getCreationVideoCapabilities(model)?.referenceModes).toEqual([
+        'image',
+        'video',
+        'multimodal',
+      ])
+    }
+
+    expect(getCreationResolutionOptions('video-2.0-mini')).toEqual([
+      {
+        value: '720p',
+        label: '720p',
+        size: '720x1280',
+        estimateMultiplier: 1,
+      },
+    ])
+    expect(getCreationResolutionOptions('video-2.0-fast-480p')).toEqual([
+      {
+        value: '480p',
+        label: '480p',
+        size: '496x864',
+        estimateMultiplier: 1,
+      },
+    ])
+    expect(
+      getCreationVideoRequestOptions(
+        { resolution: '720p', duration: '4', aspectRatio: '16:9' },
+        'video-2.0-mini-480p'
+      )
+    ).toMatchObject({
+      duration: 4,
+      aspect_ratio: '16:9',
+      resolution: '480p',
+      async: true,
+    })
+  })
+
   it('normalizes references for both Video2 models', () => {
     const references = {
       referenceMode: 'multimodal' as const,

@@ -19,6 +19,10 @@ func TestModelListIncludesLinkskySora2(t *testing.T) {
 	require.Contains(t, ModelList, "sora2")
 	require.Contains(t, ModelList, "video-2.0")
 	require.Contains(t, ModelList, "video-2.0-fast")
+	require.Contains(t, ModelList, "video-2.0-mini")
+	require.Contains(t, ModelList, "video-2.0-480p")
+	require.Contains(t, ModelList, "video-2.0-fast-480p")
+	require.Contains(t, ModelList, "video-2.0-mini-480p")
 	require.Contains(t, ModelList, "ko3")
 	require.Contains(t, ModelList, "veo31")
 	require.Contains(t, ModelList, "veo31-fast")
@@ -105,6 +109,10 @@ func TestFetchTaskUsesAsyncGenerationsForLinkskyVideoModels(t *testing.T) {
 	for _, modelName := range []string{
 		"video-2.0",
 		"video-2.0-fast",
+		"video-2.0-mini",
+		"video-2.0-480p",
+		"video-2.0-fast-480p",
+		"video-2.0-mini-480p",
 		"ko3",
 		"veo31",
 		"veo31-fast",

@@ -176,9 +176,22 @@ func isChannelTestVideoModel(channel *model.Channel, modelName string) bool {
 }
 
 func isChannelTestAsyncVideoModel(modelName string) bool {
+	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
+	if isVideo2ModelName(normalizedModelName) {
+		return true
+	}
+	switch normalizedModelName {
+	case "sora2", "sora-2", "kling-v3", "ko3", "veo31", "veo31-fast", "veo31-ref", "grok-imagine-video":
+		return true
+	default:
+		return false
+	}
+}
+
+func isVideo2ModelName(modelName string) bool {
 	switch strings.ToLower(strings.TrimSpace(modelName)) {
-	case "sora2", "sora-2", "kling-v3", "video-2.0", "video-2.0-fast", "ko3",
-		"veo31", "veo31-fast", "veo31-ref", "grok-imagine-video":
+	case "video-2.0", "video-2.0-fast", "video-2.0-mini",
+		"video-2.0-480p", "video-2.0-fast-480p", "video-2.0-mini-480p":
 		return true
 	default:
 		return false
@@ -1065,7 +1078,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			return relaycommon.TaskSubmitReq{
 				Model:    model,
 				Prompt:   "a short product video",
-				Size:     "720x1280",
+				Size:     channelTestVideoSize(model),
 				Duration: 4,
 			}
 		}
@@ -1074,7 +1087,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			return relaycommon.TaskSubmitReq{
 				Model:    model,
 				Prompt:   "a short product video",
-				Size:     "720x1280",
+				Size:     channelTestVideoSize(model),
 				Duration: 4,
 			}
 		case constant.EndpointTypeEmbeddings:
@@ -1135,7 +1148,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 		return relaycommon.TaskSubmitReq{
 			Model:    model,
 			Prompt:   "a short product video",
-			Size:     "720x1280",
+			Size:     channelTestVideoSize(model),
 			Duration: 4,
 		}
 	}
@@ -1206,6 +1219,13 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	}
 
 	return testRequest
+}
+
+func channelTestVideoSize(modelName string) string {
+	if strings.HasSuffix(strings.ToLower(strings.TrimSpace(modelName)), "-480p") {
+		return "496x864"
+	}
+	return "720x1280"
 }
 
 func buildImageGenerationTestRequest(modelName string) *dto.ImageRequest {

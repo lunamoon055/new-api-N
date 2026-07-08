@@ -472,6 +472,7 @@ func getCreationModelMetadata(modelName string) creationModelMetadata {
 			Tags:        []string{"image", "generation"},
 		}
 	case strings.HasPrefix(modelName, "sora") ||
+		strings.HasPrefix(modelName, "video-2.0") ||
 		strings.HasPrefix(modelName, "veo") ||
 		strings.Contains(modelName, "kling") ||
 		strings.Contains(modelName, "grok-imagine-video"):

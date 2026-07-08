@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-export type CreationResolution = '720p' | '1080p' | '2k' | '4k'
+export type CreationResolution = '480p' | '720p' | '1080p' | '2k' | '4k'
 export type CreationAspectRatio = '9:16' | '16:9' | '1:1'
 export type CreationDuration = string
 export type CreationVideoReferenceMode = 'image' | 'video' | 'multimodal'
@@ -79,7 +79,7 @@ type LegacyCreationVideoRequestOptions = {
 type Video2CreationVideoRequestOptions = {
   duration: number
   aspect_ratio: CreationAspectRatio
-  resolution: '720p'
+  resolution: '480p' | '720p'
   async: true
   estimateSeconds: number
   image_url?: string
@@ -106,11 +106,20 @@ export const CREATION_RESOLUTION_OPTIONS: ResolutionOption[] = [
   { value: '4k', label: '4K', size: '3840x2160', estimateMultiplier: 1.75 },
 ]
 
-const VIDEO2_CREATION_RESOLUTION_OPTIONS: ResolutionOption[] = [
+const VIDEO2_720P_CREATION_RESOLUTION_OPTIONS: ResolutionOption[] = [
   {
     value: '720p',
     label: '720p',
     size: '720x1280',
+    estimateMultiplier: 1,
+  },
+]
+
+const VIDEO2_480P_CREATION_RESOLUTION_OPTIONS: ResolutionOption[] = [
+  {
+    value: '480p',
+    label: '480p',
+    size: '496x864',
     estimateMultiplier: 1,
   },
 ]
@@ -159,28 +168,31 @@ const SORA2_VIDEO_CAPABILITY: CreationVideoCapability = {
   durationControl: 'select',
 }
 
+const VIDEO2_720P_CAPABILITY: CreationVideoCapability = {
+  kind: 'video2',
+  durations: VIDEO2_DURATIONS,
+  resolutions: ['720p'],
+  aspectRatios: ['9:16', '16:9', '1:1'],
+  referenceModes: ['image', 'video', 'multimodal'],
+  showResolution: true,
+  durationControl: 'menu',
+}
+
+const VIDEO2_480P_CAPABILITY: CreationVideoCapability = {
+  ...VIDEO2_720P_CAPABILITY,
+  resolutions: ['480p'],
+}
+
 const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
   sora2: SORA2_VIDEO_CAPABILITY,
   'sora-2': SORA2_VIDEO_CAPABILITY,
   'sora-2-pro': SORA2_VIDEO_CAPABILITY,
-  'video-2.0': {
-    kind: 'video2',
-    durations: VIDEO2_DURATIONS,
-    resolutions: ['720p'],
-    aspectRatios: ['9:16', '16:9', '1:1'],
-    referenceModes: ['image', 'video', 'multimodal'],
-    showResolution: true,
-    durationControl: 'menu',
-  },
-  'video-2.0-fast': {
-    kind: 'video2',
-    durations: VIDEO2_DURATIONS,
-    resolutions: ['720p'],
-    aspectRatios: ['9:16', '16:9', '1:1'],
-    referenceModes: ['image', 'video', 'multimodal'],
-    showResolution: true,
-    durationControl: 'menu',
-  },
+  'video-2.0': VIDEO2_720P_CAPABILITY,
+  'video-2.0-fast': VIDEO2_720P_CAPABILITY,
+  'video-2.0-mini': VIDEO2_720P_CAPABILITY,
+  'video-2.0-480p': VIDEO2_480P_CAPABILITY,
+  'video-2.0-fast-480p': VIDEO2_480P_CAPABILITY,
+  'video-2.0-mini-480p': VIDEO2_480P_CAPABILITY,
 }
 
 export const DEFAULT_CREATION_VIDEO_OPTIONS: CreationVideoOptions = {
@@ -246,7 +258,11 @@ export function getCreationVideoCapabilities(modelId?: string) {
 
 export function getCreationResolutionOptions(modelId?: string) {
   const capability = getCreationVideoCapabilities(modelId)
-  if (capability?.kind === 'video2') return VIDEO2_CREATION_RESOLUTION_OPTIONS
+  if (capability?.kind === 'video2') {
+    return capability.resolutions.includes('480p')
+      ? VIDEO2_480P_CREATION_RESOLUTION_OPTIONS
+      : VIDEO2_720P_CREATION_RESOLUTION_OPTIONS
+  }
   if (capability?.kind === 'sora2') return SORA2_CREATION_RESOLUTION_OPTIONS
   return CREATION_RESOLUTION_OPTIONS
 }
@@ -680,7 +696,7 @@ export function getCreationVideoRequestOptions(
   const request: Video2CreationVideoRequestOptions = {
     duration: Number(normalizedOptions.duration),
     aspect_ratio: normalizedOptions.aspectRatio ?? capability.aspectRatios[0],
-    resolution: '720p',
+    resolution: normalizedOptions.resolution === '480p' ? '480p' : '720p',
     async: true,
     estimateSeconds: duration.estimateSeconds,
   }

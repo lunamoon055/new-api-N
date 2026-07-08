@@ -71,6 +71,16 @@ func TestBuildTestRequestUsesVideoPayloadForOpenAIVideoEndpoint(t *testing.T) {
 	require.Equal(t, 4, videoRequest.Duration)
 }
 
+func TestBuildTestRequestUses480pPayloadForVideo2Async480pModels(t *testing.T) {
+	request := buildTestRequest("video-2.0-fast-480p", channelTestEndpointOpenAIVideoAsync, &model.Channel{}, false)
+
+	require.IsType(t, relaycommon.TaskSubmitReq{}, request)
+	videoRequest := request.(relaycommon.TaskSubmitReq)
+	require.Equal(t, "video-2.0-fast-480p", videoRequest.Model)
+	require.Equal(t, "496x864", videoRequest.Size)
+	require.Equal(t, 4, videoRequest.Duration)
+}
+
 func TestBuildChannelTestRequestUsesCustomVideoPayload(t *testing.T) {
 	request, err := buildChannelTestRequest(
 		"seedance2(933)",
