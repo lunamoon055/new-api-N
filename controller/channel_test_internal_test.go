@@ -60,6 +60,45 @@ func TestResolveChannelTestEndpointUsesImageGenerationForGptImage2(t *testing.T)
 	require.Equal(t, types.RelayFormat(types.RelayFormatOpenAIImage), relayFormat)
 }
 
+func TestResolveChannelTestEndpointUsesSanbaoImageTemplate(t *testing.T) {
+	channel := &model.Channel{
+		Type:   constant.ChannelTypeSanbao,
+		Models: "gpt-image2",
+	}
+
+	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, "gpt-image2", channelTestEndpointSanbaoImage)
+
+	require.Equal(t, channelTestEndpointSanbaoImage, endpointType)
+	require.Equal(t, "/v1/images/generations", requestPath)
+	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
+}
+
+func TestResolveChannelTestEndpointUsesSanbaoVideoTemplate(t *testing.T) {
+	channel := &model.Channel{
+		Type:   constant.ChannelTypeSanbao,
+		Models: "sd2_full",
+	}
+
+	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, "sd2_full", channelTestEndpointSanbaoVideo)
+
+	require.Equal(t, channelTestEndpointSanbaoVideo, endpointType)
+	require.Equal(t, "/v1/video/async-generations", requestPath)
+	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
+}
+
+func TestResolveChannelTestEndpointUsesSanbaoUploadTemplate(t *testing.T) {
+	channel := &model.Channel{
+		Type:   constant.ChannelTypeSanbao,
+		Models: "sd2_full",
+	}
+
+	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, "sd2_full", channelTestEndpointSanbaoUpload)
+
+	require.Equal(t, channelTestEndpointSanbaoUpload, endpointType)
+	require.Equal(t, "/v1/video/async-generations", requestPath)
+	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
+}
+
 func TestBuildTestRequestUsesVideoPayloadForOpenAIVideoEndpoint(t *testing.T) {
 	request := buildTestRequest("video-2.0-fast", string(constant.EndpointTypeOpenAIVideo), &model.Channel{}, false)
 
@@ -97,6 +136,29 @@ func TestBuildChannelTestRequestUsesCustomVideoPayload(t *testing.T) {
 	require.Equal(t, "seedance2(933)", videoRequest.Model)
 	require.Equal(t, "custom prompt", videoRequest.Prompt)
 	require.Equal(t, 5, videoRequest.Duration)
+}
+
+func TestBuildChannelTestTaskPayloadPreservesSanbaoFields(t *testing.T) {
+	request, err := buildChannelTestRequest(
+		"gpt-image2",
+		channelTestEndpointSanbaoImage,
+		&model.Channel{Type: constant.ChannelTypeSanbao},
+		false,
+		types.RelayFormatTask,
+		[]byte(`{"prompt":"poster","aspect_ratio":"16:9","images":["https://example.com/ref.png"],"quality":"high"}`),
+	)
+	require.NoError(t, err)
+
+	payload, err := buildChannelTestTaskPayload("gpt-image2", request, []byte(`{"prompt":"poster","aspect_ratio":"16:9","images":["https://example.com/ref.png"],"quality":"high"}`))
+
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"model":"gpt-image2",
+		"prompt":"poster",
+		"aspect_ratio":"16:9",
+		"images":["https://example.com/ref.png"],
+		"quality":"high"
+	}`, string(payload))
 }
 
 func TestBuildTestRequestUsesGptImage2PayloadForImageGenerationEndpoint(t *testing.T) {
@@ -138,7 +200,7 @@ func TestRelayInfoForVideoTestUsesTaskRelayMode(t *testing.T) {
 	ctx.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
 	request := relaycommon.TaskSubmitReq{Model: "video-2.0-fast", Prompt: "hi"}
 
-	info, err := genChannelTestRelayInfo(ctx, types.RelayFormatTask, request)
+	info, err := genChannelTestRelayInfo(ctx, types.RelayFormatTask, request, nil)
 
 	require.NoError(t, err)
 	require.Equal(t, relayconstant.RelayModeVideoSubmit, info.RelayMode)

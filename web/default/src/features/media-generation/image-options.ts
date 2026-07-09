@@ -18,6 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   getCreationReferenceURL,
+  type CreationModelInput,
+  type CreationModelMetadataLike,
   type CreationVideoReferenceValue,
 } from './video-options'
 
@@ -27,11 +29,16 @@ export type CreationImageReferences = {
   imageUrls: CreationImageReferenceValue[]
 }
 
-export type CreationImageAspectRatio =
-  '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3'
+export type CreationImageAspectRatio = string
 
 export type CreationImageOptions = {
   aspectRatio: CreationImageAspectRatio
+}
+
+export type CreationImageReferenceLimits = {
+  maxImages: number
+  maxImageSizeBytes: number
+  maxImageSizeMB: number
 }
 
 type CreationImageMessageContent =
@@ -47,6 +54,12 @@ export type CreationImageRequestOptions =
         role: 'user'
         content: CreationImageMessageContent[]
       }>
+    }
+  | {
+      aspect_ratio: CreationImageAspectRatio
+      images?: string[]
+      quality?: 'high' | 'medium' | 'low'
+      concurrency?: number
     }
 
 export const CREATION_IMAGE_REFERENCE_MAX_COUNT = 6
@@ -78,19 +91,84 @@ const IMAGE_REFERENCE_MIME_TYPES = [
   'image/webp',
 ]
 
-function normalizeModelId(modelId?: string) {
-  return modelId?.trim().toLowerCase() ?? ''
+function getModelId(model?: CreationModelInput) {
+  if (typeof model === 'string') return model
+  return model?.id ?? ''
 }
 
-export function supportsCreationImageReferences(modelId?: string) {
-  return normalizeModelId(modelId) === 'gpt-image2'
+function getModelMetadata(model?: CreationModelInput) {
+  return typeof model === 'string' ? undefined : model?.metadata
+}
+
+function normalizeModelId(model?: CreationModelInput) {
+  return getModelId(model).trim().toLowerCase()
+}
+
+function isSanbaoImageModel(model?: CreationModelInput) {
+  const metadata = getModelMetadata(model)
+  if (metadata?.provider?.trim().toLowerCase() !== 'sanbao') return false
+  return getSanbaoMediaType(metadata)?.includes('image') ?? false
+}
+
+function getSanbaoMediaType(metadata?: CreationModelMetadataLike) {
+  return [metadata?.type, metadata?.category, metadata?.model_type]
+    .map((value) => value?.trim().toLowerCase() ?? '')
+    .find(Boolean)
+}
+
+function cleanAspectRatioOptions(values?: string[]) {
+  const seen = new Set<string>()
+  return (values ?? []).flatMap((value) => {
+    const normalized = value.trim()
+    if (!normalized || seen.has(normalized)) return []
+    seen.add(normalized)
+    return [normalized]
+  })
+}
+
+export function supportsCreationImageReferences(model?: CreationModelInput) {
+  return normalizeModelId(model) === 'gpt-image2' || isSanbaoImageModel(model)
+}
+
+export function getCreationImageReferenceLimits(
+  model?: CreationModelInput
+): CreationImageReferenceLimits {
+  const metadata = getModelMetadata(model)
+  if (isSanbaoImageModel(model)) {
+    const maxImageSizeMB = metadata?.max_image_size_mb ?? 20
+    return {
+      maxImages: metadata?.max_images ?? CREATION_IMAGE_REFERENCE_MAX_COUNT,
+      maxImageSizeMB,
+      maxImageSizeBytes: maxImageSizeMB * 1024 * 1024,
+    }
+  }
+  return {
+    maxImages: CREATION_IMAGE_REFERENCE_MAX_COUNT,
+    maxImageSizeMB: 20,
+    maxImageSizeBytes: CREATION_IMAGE_REFERENCE_MAX_BYTES,
+  }
+}
+
+export function getCreationImageAspectRatioOptions(
+  model?: CreationModelInput
+): CreationImageAspectRatio[] {
+  const metadata = getModelMetadata(model)
+  if (isSanbaoImageModel(model)) {
+    const values = cleanAspectRatioOptions(
+      metadata?.aspect_ratios?.length
+        ? metadata.aspect_ratios
+        : metadata?.ratios
+    )
+    if (values.length) return values
+  }
+  return CREATION_IMAGE_ASPECT_RATIO_OPTIONS
 }
 
 export function normalizeCreationImageReferences(
   references?: Partial<CreationImageReferences>,
-  modelId?: string
+  model?: CreationModelInput
 ): CreationImageReferences {
-  if (!supportsCreationImageReferences(modelId)) {
+  if (!supportsCreationImageReferences(model)) {
     return { ...EMPTY_CREATION_IMAGE_REFERENCES }
   }
   return {
@@ -100,28 +178,33 @@ export function normalizeCreationImageReferences(
 
 export function normalizeCreationImageOptions(
   options?: Partial<CreationImageOptions>,
-  modelId?: string
+  model?: CreationModelInput
 ): CreationImageOptions {
-  if (!supportsCreationImageReferences(modelId)) {
+  if (!supportsCreationImageReferences(model)) {
     return { ...DEFAULT_CREATION_IMAGE_OPTIONS }
   }
-  const aspectRatio = CREATION_IMAGE_ASPECT_RATIO_OPTIONS.includes(
+  const aspectRatioOptions = getCreationImageAspectRatioOptions(model)
+  const aspectRatio = aspectRatioOptions.includes(
     options?.aspectRatio as CreationImageAspectRatio
   )
     ? (options?.aspectRatio as CreationImageAspectRatio)
-    : DEFAULT_CREATION_IMAGE_OPTIONS.aspectRatio
+    : (aspectRatioOptions[0] ?? DEFAULT_CREATION_IMAGE_OPTIONS.aspectRatio)
 
   return { aspectRatio }
 }
 
 export function getCreationImageReferenceError(
-  modelId: string | undefined,
+  model: CreationModelInput,
   references: CreationImageReferences
 ) {
-  if (!supportsCreationImageReferences(modelId)) return undefined
+  if (!supportsCreationImageReferences(model)) return undefined
 
-  const normalized = normalizeCreationImageReferences(references, modelId)
-  if (normalized.imageUrls.length > CREATION_IMAGE_REFERENCE_MAX_COUNT) {
+  const normalized = normalizeCreationImageReferences(references, model)
+  const limits = getCreationImageReferenceLimits(model)
+  if (normalized.imageUrls.length > limits.maxImages) {
+    if (isSanbaoImageModel(model)) {
+      return 'Sanbao accepts too many reference images.'
+    }
     return 'Gpt-image2 accepts at most 6 reference images.'
   }
 
@@ -149,17 +232,25 @@ export function getCreationImageReferenceError(
 
 export function getCreationImageRequestOptions(
   prompt: string,
-  modelId?: string,
+  model?: CreationModelInput,
   references: CreationImageReferences = EMPTY_CREATION_IMAGE_REFERENCES,
   imageOptions: Partial<CreationImageOptions> = DEFAULT_CREATION_IMAGE_OPTIONS
 ): CreationImageRequestOptions {
-  if (!supportsCreationImageReferences(modelId)) return {}
+  if (!supportsCreationImageReferences(model)) return {}
 
-  const normalizedOptions = normalizeCreationImageOptions(imageOptions, modelId)
-  const normalized = normalizeCreationImageReferences(references, modelId)
+  const normalizedOptions = normalizeCreationImageOptions(imageOptions, model)
+  const normalized = normalizeCreationImageReferences(references, model)
   const imageUrls = normalized.imageUrls
     .map(getCreationReferenceURL)
     .filter(Boolean)
+  if (isSanbaoImageModel(model)) {
+    return {
+      aspect_ratio: normalizedOptions.aspectRatio,
+      ...(imageUrls.length ? { images: imageUrls } : {}),
+      quality: 'high',
+      concurrency: 1,
+    }
+  }
   const options: Exclude<CreationImageRequestOptions, Record<string, never>> = {
     output_resolution: '1K',
     aspect_ratio: normalizedOptions.aspectRatio,

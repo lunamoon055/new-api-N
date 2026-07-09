@@ -18,9 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 export type CreationResolution = '480p' | '720p' | '1080p' | '2k' | '4k'
-export type CreationAspectRatio = '9:16' | '16:9' | '1:1'
+export type CreationAspectRatio = string
 export type CreationDuration = string
 export type CreationVideoReferenceMode = 'image' | 'video' | 'multimodal'
+type Sora2AspectRatio = '9:16' | '16:9'
 
 export type CreationVideoOptions = {
   resolution: CreationResolution
@@ -44,14 +45,61 @@ export type CreationVideoReferenceObject = {
 
 export type CreationVideoReferenceValue = string | CreationVideoReferenceObject
 
+export type CreationModelMetadataLike = {
+  provider?: string
+  id?: string
+  upstream_model_id?: string
+  type?: string
+  category?: string
+  model_type?: string
+  resolutions?: string[]
+  ratios?: string[]
+  aspect_ratios?: string[]
+  durations?: Array<number | string>
+  max_images?: number
+  max_videos?: number
+  max_audios?: number
+  max_media_files?: number
+  max_image_size_mb?: number
+  max_video_size_mb?: number
+  max_audio_size_mb?: number
+  min_reference_video_duration_seconds?: number
+  max_reference_video_duration_seconds?: number
+  concurrency_options?: number[]
+}
+
+export type CreationModelLike = {
+  id?: string
+  metadata?: CreationModelMetadataLike
+}
+
+export type CreationModelInput = string | CreationModelLike | undefined
+
+export type CreationVideoReferenceLimits = {
+  maxImages: number
+  maxVideos: number
+  maxAudios: number
+  maxMediaFiles?: number
+  maxImageSizeBytes: number
+  maxVideoSizeBytes: number
+  maxAudioSizeBytes: number
+  maxImageSizeMB: number
+  maxVideoSizeMB: number
+  maxAudioSizeMB: number
+  minReferenceVideoDurationSeconds?: number
+  maxReferenceVideoDurationSeconds?: number
+}
+
 export type CreationVideoCapability = {
-  kind: 'sora2' | 'video2'
+  kind: 'sora2' | 'video2' | 'sanbao'
   durations: string[]
   resolutions: CreationResolution[]
   aspectRatios: CreationAspectRatio[]
   referenceModes: CreationVideoReferenceMode[]
   showResolution: boolean
   durationControl: 'menu' | 'select'
+  referenceLimits: CreationVideoReferenceLimits
+  concurrencyOptions?: number[]
 }
 
 export type ResolutionOption = {
@@ -71,7 +119,7 @@ export type DurationOption = {
 type LegacyCreationVideoRequestOptions = {
   seconds: string
   size: string
-  aspect_ratio?: Extract<CreationAspectRatio, '9:16' | '16:9'>
+  aspect_ratio?: Sora2AspectRatio
   input_reference?: string
   estimateSeconds: number
 }
@@ -91,14 +139,48 @@ type Video2CreationVideoRequestOptions = {
   audio_url?: string
 }
 
+type SanbaoCreationVideoRequestOptions = {
+  duration: number
+  ratio: CreationAspectRatio
+  resolution: CreationResolution
+  concurrency?: number
+  reference?: 'all'
+  estimateSeconds: number
+  images?: string[]
+  videos?: string[]
+  audios?: string[]
+}
+
 export type CreationVideoRequestOptions =
-  LegacyCreationVideoRequestOptions | Video2CreationVideoRequestOptions
+  | LegacyCreationVideoRequestOptions
+  | Video2CreationVideoRequestOptions
+  | SanbaoCreationVideoRequestOptions
 
 export const CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT = 4
 export const CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES = 20 * 1024 * 1024
 export const CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT = 3
 export const CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES = 200 * 1024 * 1024
 export const CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES = 15 * 1024 * 1024
+
+const VIDEO2_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
+  maxImages: CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT,
+  maxVideos: CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT,
+  maxAudios: 1,
+  maxMediaFiles: undefined,
+  maxImageSizeBytes: CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES,
+  maxVideoSizeBytes: CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES,
+  maxAudioSizeBytes: CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES,
+  maxImageSizeMB: 20,
+  maxVideoSizeMB: 200,
+  maxAudioSizeMB: 15,
+}
+
+const SORA2_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
+  ...VIDEO2_REFERENCE_LIMITS,
+  maxImages: 1,
+  maxVideos: 0,
+  maxAudios: 0,
+}
 
 export const CREATION_RESOLUTION_OPTIONS: ResolutionOption[] = [
   { value: '1080p', label: '1080', size: '1920x1080', estimateMultiplier: 1 },
@@ -166,6 +248,7 @@ const SORA2_VIDEO_CAPABILITY: CreationVideoCapability = {
   referenceModes: ['image'],
   showResolution: false,
   durationControl: 'select',
+  referenceLimits: SORA2_REFERENCE_LIMITS,
 }
 
 const VIDEO2_720P_CAPABILITY: CreationVideoCapability = {
@@ -176,6 +259,7 @@ const VIDEO2_720P_CAPABILITY: CreationVideoCapability = {
   referenceModes: ['image', 'video', 'multimodal'],
   showResolution: true,
   durationControl: 'menu',
+  referenceLimits: VIDEO2_REFERENCE_LIMITS,
 }
 
 const VIDEO2_480P_CAPABILITY: CreationVideoCapability = {
@@ -209,10 +293,7 @@ export const EMPTY_CREATION_VIDEO_REFERENCES: CreationVideoReferences = {
   audioUrl: '',
 }
 
-const SORA2_VIDEO_SIZES: Record<
-  Extract<CreationAspectRatio, '9:16' | '16:9'>,
-  string
-> = {
+const SORA2_VIDEO_SIZES: Record<Sora2AspectRatio, string> = {
   '9:16': '720x1280',
   '16:9': '1280x720',
 }
@@ -244,20 +325,160 @@ const VIDEO_REFERENCE_AUDIO_MIME_TYPES = [
   'audio/x-wav',
 ]
 
-function normalizeModelId(modelId?: string) {
-  return modelId?.trim().toLowerCase() ?? ''
+function getModelId(model?: CreationModelInput) {
+  if (typeof model === 'string') return model
+  return model?.id ?? ''
 }
 
-export function isVideo2Model(modelId?: string) {
-  return getCreationVideoCapabilities(modelId)?.kind === 'video2'
+function getModelMetadata(model?: CreationModelInput) {
+  return typeof model === 'string' ? undefined : model?.metadata
 }
 
-export function getCreationVideoCapabilities(modelId?: string) {
-  return VIDEO_CAPABILITIES[normalizeModelId(modelId)]
+function normalizeModelId(model?: CreationModelInput) {
+  return getModelId(model).trim().toLowerCase()
 }
 
-export function getCreationResolutionOptions(modelId?: string) {
-  const capability = getCreationVideoCapabilities(modelId)
+function isSanbaoMetadata(
+  metadata?: CreationModelMetadataLike
+): metadata is CreationModelMetadataLike {
+  return metadata?.provider?.trim().toLowerCase() === 'sanbao'
+}
+
+function getSanbaoMediaType(metadata?: CreationModelMetadataLike) {
+  return [metadata?.type, metadata?.category, metadata?.model_type]
+    .map((value) => value?.trim().toLowerCase() ?? '')
+    .find(Boolean)
+}
+
+function cleanStringOptions(values?: Array<string | number>) {
+  const seen = new Set<string>()
+  return (values ?? []).flatMap((value) => {
+    const normalized = String(value).trim()
+    if (!normalized || seen.has(normalized)) return []
+    seen.add(normalized)
+    return [normalized]
+  })
+}
+
+function cleanPositiveIntegers(values?: Array<string | number>) {
+  const seen = new Set<string>()
+  return (values ?? []).flatMap((value) => {
+    const parsed = Number(value)
+    if (!Number.isInteger(parsed) || parsed <= 0) return []
+    const normalized = String(parsed)
+    if (seen.has(normalized)) return []
+    seen.add(normalized)
+    return [normalized]
+  })
+}
+
+function buildSanbaoReferenceLimits(
+  metadata: CreationModelMetadataLike
+): CreationVideoReferenceLimits {
+  const maxImageSizeMB = metadata.max_image_size_mb ?? 20
+  const maxVideoSizeMB = metadata.max_video_size_mb ?? 200
+  const maxAudioSizeMB = metadata.max_audio_size_mb ?? 15
+  return {
+    maxImages: metadata.max_images ?? 0,
+    maxVideos: metadata.max_videos ?? 0,
+    maxAudios: metadata.max_audios ?? 0,
+    maxMediaFiles: metadata.max_media_files,
+    maxImageSizeMB,
+    maxVideoSizeMB,
+    maxAudioSizeMB,
+    maxImageSizeBytes: maxImageSizeMB * 1024 * 1024,
+    maxVideoSizeBytes: maxVideoSizeMB * 1024 * 1024,
+    maxAudioSizeBytes: maxAudioSizeMB * 1024 * 1024,
+    minReferenceVideoDurationSeconds:
+      metadata.min_reference_video_duration_seconds,
+    maxReferenceVideoDurationSeconds:
+      metadata.max_reference_video_duration_seconds,
+  }
+}
+
+function getSanbaoVideoCapability(
+  model?: CreationModelInput
+): CreationVideoCapability | undefined {
+  const metadata = getModelMetadata(model)
+  if (!isSanbaoMetadata(metadata)) return undefined
+  const mediaType = getSanbaoMediaType(metadata)
+  if (!mediaType?.includes('video')) return undefined
+
+  const referenceLimits = buildSanbaoReferenceLimits(metadata)
+  const referenceModes: CreationVideoReferenceMode[] = []
+  if (referenceLimits.maxImages > 0) referenceModes.push('image')
+  if (referenceLimits.maxVideos > 0) referenceModes.push('video')
+  if (
+    referenceLimits.maxImages > 0 &&
+    (referenceLimits.maxVideos > 0 || referenceLimits.maxAudios > 0)
+  ) {
+    referenceModes.push('multimodal')
+  }
+
+  return {
+    kind: 'sanbao',
+    durations: cleanPositiveIntegers(metadata.durations).length
+      ? cleanPositiveIntegers(metadata.durations)
+      : VIDEO2_DURATIONS,
+    resolutions: cleanStringOptions(metadata.resolutions).length
+      ? (cleanStringOptions(metadata.resolutions) as CreationResolution[])
+      : ['720p'],
+    aspectRatios: cleanStringOptions(
+      metadata.ratios?.length ? metadata.ratios : metadata.aspect_ratios
+    ).length
+      ? (cleanStringOptions(
+          metadata.ratios?.length ? metadata.ratios : metadata.aspect_ratios
+        ) as CreationAspectRatio[])
+      : ['9:16', '16:9', '1:1'],
+    referenceModes: referenceModes.length ? referenceModes : ['image'],
+    showResolution: true,
+    durationControl: 'select',
+    referenceLimits,
+    concurrencyOptions: metadata.concurrency_options,
+  }
+}
+
+function getResolutionOption(value: CreationResolution): ResolutionOption {
+  const known = [
+    ...CREATION_RESOLUTION_OPTIONS,
+    ...VIDEO2_720P_CREATION_RESOLUTION_OPTIONS,
+    ...VIDEO2_480P_CREATION_RESOLUTION_OPTIONS,
+  ].find((item) => item.value === value)
+  if (known) return known
+  return {
+    value,
+    label: value,
+    size: value,
+    estimateMultiplier: 1,
+  }
+}
+
+function getDurationOption(value: CreationDuration): DurationOption {
+  const seconds = Number(value)
+  return {
+    value,
+    label: `${value}s`,
+    seconds: value,
+    estimateSeconds: Number.isFinite(seconds) ? 60 + seconds * 15 : 120,
+  }
+}
+
+export function isVideo2Model(model?: CreationModelInput) {
+  return getCreationVideoCapabilities(model)?.kind === 'video2'
+}
+
+export function getCreationVideoCapabilities(model?: CreationModelInput) {
+  return (
+    getSanbaoVideoCapability(model) ??
+    VIDEO_CAPABILITIES[normalizeModelId(model)]
+  )
+}
+
+export function getCreationResolutionOptions(model?: CreationModelInput) {
+  const capability = getCreationVideoCapabilities(model)
+  if (capability?.kind === 'sanbao' && capability.resolutions.length) {
+    return capability.resolutions.map(getResolutionOption)
+  }
   if (capability?.kind === 'video2') {
     return capability.resolutions.includes('480p')
       ? VIDEO2_480P_CREATION_RESOLUTION_OPTIONS
@@ -267,8 +488,11 @@ export function getCreationResolutionOptions(modelId?: string) {
   return CREATION_RESOLUTION_OPTIONS
 }
 
-export function getCreationDurationOptions(modelId?: string) {
-  const capability = getCreationVideoCapabilities(modelId)
+export function getCreationDurationOptions(model?: CreationModelInput) {
+  const capability = getCreationVideoCapabilities(model)
+  if (capability?.kind === 'sanbao' && capability.durations.length) {
+    return capability.durations.map(getDurationOption)
+  }
   if (capability?.kind === 'video2') {
     return VIDEO2_DURATION_OPTIONS
   }
@@ -278,15 +502,15 @@ export function getCreationDurationOptions(modelId?: string) {
 
 export function normalizeCreationVideoOptions(
   options: CreationVideoOptions,
-  modelId?: string
+  model?: CreationModelInput
 ): CreationVideoOptions {
-  const resolutionOptions = getCreationResolutionOptions(modelId)
+  const resolutionOptions = getCreationResolutionOptions(model)
   const matchedResolution = resolutionOptions.find(
     (item) => item.value === options.resolution
   )
   const resolution = matchedResolution ?? resolutionOptions[0]
-  const durationOptions = getCreationDurationOptions(modelId)
-  const capability = getCreationVideoCapabilities(modelId)
+  const durationOptions = getCreationDurationOptions(model)
+  const capability = getCreationVideoCapabilities(model)
   const matchedDuration = durationOptions.find(
     (item) => item.value === options.duration
   )
@@ -314,18 +538,30 @@ export function normalizeCreationVideoOptions(
 
 export function getCreationVideoOptionsError(
   options: CreationVideoOptions,
-  modelId?: string
+  model?: CreationModelInput
 ) {
-  if (!getCreationVideoCapabilities(modelId)) return undefined
+  if (!getCreationVideoCapabilities(model)) return undefined
   const duration = Number(options.duration)
-  const capability = getCreationVideoCapabilities(modelId)
+  const capability = getCreationVideoCapabilities(model)
   if (
     !Number.isInteger(duration) ||
     !capability?.durations.includes(String(duration))
   ) {
+    if (capability?.kind === 'sanbao') {
+      return 'This model does not support the selected duration.'
+    }
     return 'Duration must be between 4 and 15 seconds.'
   }
   return undefined
+}
+
+export function getCreationVideoReferenceLimits(
+  model?: CreationModelInput
+): CreationVideoReferenceLimits {
+  return (
+    getCreationVideoCapabilities(model)?.referenceLimits ??
+    VIDEO2_REFERENCE_LIMITS
+  )
 }
 
 function emptyCreationVideoReferences(): CreationVideoReferences {
@@ -376,9 +612,9 @@ function normalizeReferenceMode(
 
 export function normalizeCreationVideoReferences(
   references?: Partial<CreationVideoReferences>,
-  modelId?: string
+  model?: CreationModelInput
 ): CreationVideoReferences {
-  const capability = getCreationVideoCapabilities(modelId)
+  const capability = getCreationVideoCapabilities(model)
   if (!capability) return emptyCreationVideoReferences()
 
   const referenceMode = normalizeReferenceMode(
@@ -426,9 +662,9 @@ export function normalizeCreationVideoReferences(
 export function filterCreationVideoReferencesByPromptMentions(
   prompt: string,
   references: CreationVideoReferences,
-  modelId?: string
+  model?: CreationModelInput
 ): CreationVideoReferences {
-  const normalized = normalizeCreationVideoReferences(references, modelId)
+  const normalized = normalizeCreationVideoReferences(references, model)
   const mentionedImageUrls = normalized.imageUrls.filter((_, index) =>
     hasPromptMention(prompt, getReferenceMentionAliases('image', index + 1))
   )
@@ -454,7 +690,7 @@ export function filterCreationVideoReferencesByPromptMentions(
       videoUrls: mentionedVideoUrls,
       audioUrl: audioMentioned ? normalized.audioUrl : '',
     },
-    modelId
+    model
   )
 }
 
@@ -558,25 +794,48 @@ function hasAllowedReferenceFormat(
 }
 
 export function getCreationVideoReferenceError(
-  modelId: string | undefined,
+  model: CreationModelInput,
   references: CreationVideoReferences
 ) {
-  const capability = getCreationVideoCapabilities(modelId)
+  const capability = getCreationVideoCapabilities(model)
   if (!capability) return undefined
 
-  const normalized = normalizeCreationVideoReferences(references, modelId)
+  const normalized = normalizeCreationVideoReferences(references, model)
   const imageCount =
     normalized.imageUrls.length +
     (normalized.startImageUrl ? 1 : 0) +
     (normalized.endImageUrl ? 1 : 0)
+  const referenceLimits = capability.referenceLimits
   if (capability.kind === 'sora2' && imageCount > 1) {
     return 'Sora2 accepts at most 1 reference image.'
   }
-  if (imageCount > CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT) {
+  if (imageCount > referenceLimits.maxImages) {
+    if (capability.kind === 'sanbao') {
+      return 'Sanbao accepts too many reference images.'
+    }
     return 'Video2 accepts at most 4 image references.'
   }
-  if (normalized.videoUrls.length > CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT) {
+  if (normalized.videoUrls.length > referenceLimits.maxVideos) {
+    if (capability.kind === 'sanbao') {
+      return 'Sanbao accepts too many reference videos.'
+    }
     return 'Video2 accepts at most 3 video references.'
+  }
+  if (
+    getCreationReferenceURL(normalized.audioUrl) &&
+    referenceLimits.maxAudios <= 0
+  ) {
+    return 'Sanbao does not accept reference audio for this model.'
+  }
+  const mediaCount =
+    imageCount +
+    normalized.videoUrls.length +
+    (getCreationReferenceURL(normalized.audioUrl) ? 1 : 0)
+  if (
+    referenceLimits.maxMediaFiles &&
+    mediaCount > referenceLimits.maxMediaFiles
+  ) {
+    return 'Sanbao accepts too many reference assets.'
   }
 
   const images = [
@@ -588,7 +847,7 @@ export function getCreationVideoReferenceError(
     return 'Reference images must be images or HTTP URLs.'
   }
   if (
-    capability.kind === 'video2' &&
+    (capability.kind === 'video2' || capability.kind === 'sanbao') &&
     images.some(
       (url) =>
         !hasAllowedReferenceFormat(
@@ -642,18 +901,18 @@ export function getCreationVideoReferenceError(
 
 export function getCreationVideoRequestOptions(
   options: CreationVideoOptions,
-  modelId?: string,
+  model?: CreationModelInput,
   references: CreationVideoReferences = EMPTY_CREATION_VIDEO_REFERENCES
 ): CreationVideoRequestOptions {
-  const normalizedOptions = normalizeCreationVideoOptions(options, modelId)
-  const durationOptions = getCreationDurationOptions(modelId)
+  const normalizedOptions = normalizeCreationVideoOptions(options, model)
+  const durationOptions = getCreationDurationOptions(model)
   const duration =
     durationOptions.find((item) => item.value === normalizedOptions.duration) ??
     durationOptions[0]
-  const capability = getCreationVideoCapabilities(modelId)
+  const capability = getCreationVideoCapabilities(model)
 
   if (!capability) {
-    const resolutionOptions = getCreationResolutionOptions(modelId)
+    const resolutionOptions = getCreationResolutionOptions(model)
     const resolution =
       resolutionOptions.find(
         (item) => item.value === normalizedOptions.resolution
@@ -672,7 +931,7 @@ export function getCreationVideoRequestOptions(
       normalizedOptions.aspectRatio === '16:9' ? '16:9' : '9:16'
     const normalizedReferences = normalizeCreationVideoReferences(
       references,
-      modelId
+      model
     )
     const request: LegacyCreationVideoRequestOptions = {
       seconds: duration.seconds,
@@ -691,8 +950,31 @@ export function getCreationVideoRequestOptions(
 
   const normalizedReferences = normalizeCreationVideoReferences(
     references,
-    modelId
+    model
   )
+  if (capability.kind === 'sanbao') {
+    const imageUrls = normalizedReferences.imageUrls
+      .map(getCreationReferenceURL)
+      .filter(Boolean)
+    const videoUrls = normalizedReferences.videoUrls
+      .map(getCreationReferenceURL)
+      .filter(Boolean)
+    const audioUrl = getCreationReferenceURL(normalizedReferences.audioUrl)
+    const request: SanbaoCreationVideoRequestOptions = {
+      duration: Number(normalizedOptions.duration),
+      ratio: normalizedOptions.aspectRatio ?? capability.aspectRatios[0],
+      resolution: normalizedOptions.resolution,
+      concurrency: capability.concurrencyOptions?.[0] ?? 1,
+      estimateSeconds: duration.estimateSeconds,
+    }
+    if (imageUrls.length) request.images = imageUrls
+    if (videoUrls.length) request.videos = videoUrls
+    if (audioUrl) request.audios = [audioUrl]
+    if (imageUrls.length || videoUrls.length || audioUrl) {
+      request.reference = 'all'
+    }
+    return request
+  }
   const request: Video2CreationVideoRequestOptions = {
     duration: Number(normalizedOptions.duration),
     aspect_ratio: normalizedOptions.aspectRatio ?? capability.aspectRatios[0],

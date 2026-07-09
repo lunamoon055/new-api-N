@@ -1,11 +1,15 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -31,11 +35,19 @@ const (
 	creationCostModePerToken   = "per_token"
 )
 
+const sanbaoCreationModelCapabilitiesTTL = 5 * time.Minute
+
 var creationModeOrder = []string{
 	creationModeChat,
 	creationModeImage,
 	creationModeVideo,
 }
+
+var sanbaoCreationModelCapabilitiesCache = struct {
+	sync.Mutex
+	expiresAt time.Time
+	values    map[string]dto.CreationModelMetadata
+}{}
 
 type creationModelMetadata struct {
 	Mode        string
@@ -86,8 +98,15 @@ func GetCreationModels(c *gin.Context) {
 		return
 	}
 
-	pricing, group, _ := getPricingForRequest(c)
-	common.ApiSuccess(c, buildCreationModelCatalog(pricing, model.GetVendors(), mode, getCreationCatalogGroupRatio(group)))
+	pricing, group, usableGroup := getPricingForRequest(c)
+	providerMetadata := getCreationProviderModelMetadata(c.Request.Context(), pricing, usableGroup)
+	common.ApiSuccess(c, buildCreationModelCatalogWithProviderMetadata(
+		pricing,
+		model.GetVendors(),
+		mode,
+		providerMetadata,
+		getCreationCatalogGroupRatio(group),
+	))
 }
 
 func CreationRelayImage(c *gin.Context) {
@@ -177,17 +196,28 @@ func normalizeCreationMode(mode string) (string, bool) {
 }
 
 func buildCreationModelCatalog(pricing []model.Pricing, vendors []model.PricingVendor, requestedMode string, groupRatio ...float64) dto.CreationModelCatalog {
+	return buildCreationModelCatalogWithProviderMetadata(pricing, vendors, requestedMode, nil, groupRatio...)
+}
+
+func buildCreationModelCatalogWithProviderMetadata(
+	pricing []model.Pricing,
+	vendors []model.PricingVendor,
+	requestedMode string,
+	providerMetadata map[string]dto.CreationModelMetadata,
+	groupRatio ...float64,
+) dto.CreationModelCatalog {
 	costGroupRatio := 1.0
 	if len(groupRatio) > 0 && groupRatio[0] >= 0 {
 		costGroupRatio = groupRatio[0]
 	}
-	return buildCreationModelCatalogWithCategories(
+	return buildCreationModelCatalogWithCategoriesAndMetadata(
 		pricing,
 		vendors,
 		requestedMode,
 		getCreationModelCategories(),
 		getCreationModelDescriptions(),
 		costGroupRatio,
+		providerMetadata,
 	)
 }
 
@@ -199,14 +229,39 @@ func buildCreationModelCatalogWithCategories(
 	manualDescriptions map[string]string,
 	groupRatio float64,
 ) dto.CreationModelCatalog {
+	return buildCreationModelCatalogWithCategoriesAndMetadata(
+		pricing,
+		vendors,
+		requestedMode,
+		manualCategories,
+		manualDescriptions,
+		groupRatio,
+		nil,
+	)
+}
+
+func buildCreationModelCatalogWithCategoriesAndMetadata(
+	pricing []model.Pricing,
+	vendors []model.PricingVendor,
+	requestedMode string,
+	manualCategories map[string]string,
+	manualDescriptions map[string]string,
+	groupRatio float64,
+	providerMetadata map[string]dto.CreationModelMetadata,
+) dto.CreationModelCatalog {
 	modelsByMode := make(map[string][]dto.CreationModel, len(creationModeOrder))
 	usedVendorIDs := make(map[int]struct{})
 
 	for _, item := range pricing {
+		providerMeta, hasProviderMeta := getProviderCreationModelMetadata(item.ModelName, providerMetadata)
 		mode, hasManualMode := getManualCreationModelMode(item.ModelName, manualCategories)
 		ok := hasManualMode
 		if !hasManualMode {
-			mode, ok = getCreationModelMode(item.ModelName, item.SupportedEndpointTypes)
+			if providerMode, hasProviderMode := getCreationModelModeFromProviderMetadata(providerMeta); hasProviderMode {
+				mode, ok = providerMode, true
+			} else {
+				mode, ok = getCreationModelMode(item.ModelName, item.SupportedEndpointTypes)
+			}
 		}
 		if !ok || (requestedMode != "" && mode != requestedMode) {
 			continue
@@ -221,8 +276,16 @@ func buildCreationModelCatalogWithCategories(
 		if hasManualDescription {
 			description = manualDescription
 		}
+		if description == "" && hasProviderMeta {
+			description = strings.TrimSpace(providerMeta.Description)
+		}
 		if description == "" {
 			description = metadata.Description
+		}
+		var responseMetadata *dto.CreationModelMetadata
+		if hasProviderMeta {
+			meta := providerMeta
+			responseMetadata = &meta
 		}
 
 		modelsByMode[mode] = append(modelsByMode[mode], dto.CreationModel{
@@ -233,6 +296,7 @@ func buildCreationModelCatalogWithCategories(
 			Tags:                   mergeCreationModelTags(splitCreationModelTags(item.Tags), metadataTags),
 			VendorID:               item.VendorID,
 			Cost:                   buildCreationModelCost(item, groupRatio),
+			Metadata:               responseMetadata,
 			SupportedEndpointTypes: item.SupportedEndpointTypes,
 		})
 		if item.VendorID != 0 {
@@ -293,6 +357,245 @@ func getCreationCatalogGroupRatio(userGroup string) float64 {
 		return ratio
 	}
 	return ratio_setting.GetGroupRatio(userGroup)
+}
+
+func getCreationProviderModelMetadata(ctx context.Context, pricing []model.Pricing, usableGroup map[string]string) map[string]dto.CreationModelMetadata {
+	if len(pricing) == 0 {
+		return nil
+	}
+
+	modelNames := make([]string, 0, len(pricing))
+	for _, item := range pricing {
+		if strings.TrimSpace(item.ModelName) != "" {
+			modelNames = append(modelNames, item.ModelName)
+		}
+	}
+	if len(modelNames) == 0 {
+		return nil
+	}
+
+	groups := make([]string, 0, len(usableGroup))
+	for group := range usableGroup {
+		if strings.TrimSpace(group) != "" {
+			groups = append(groups, group)
+		}
+	}
+	sort.Strings(groups)
+
+	owners, err := model.GetPreferredModelOwnerChannelTypes(modelNames, groups)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("GetPreferredModelOwnerChannelTypes error: %v", err))
+		return nil
+	}
+
+	needsSanbaoMetadata := false
+	for _, item := range pricing {
+		if owners[item.ModelName] == constant.ChannelTypeSanbao {
+			needsSanbaoMetadata = true
+			break
+		}
+	}
+	if !needsSanbaoMetadata {
+		return nil
+	}
+
+	sanbaoCapabilities := getSanbaoCreationModelCapabilities(ctx)
+	if len(sanbaoCapabilities) == 0 {
+		return nil
+	}
+
+	result := make(map[string]dto.CreationModelMetadata)
+	for _, item := range pricing {
+		if owners[item.ModelName] != constant.ChannelTypeSanbao {
+			continue
+		}
+		if metadata, ok := sanbaoCapabilities[normalizeCreationModelMetadataKey(item.ModelName)]; ok {
+			result[normalizeCreationModelMetadataKey(item.ModelName)] = metadata
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func getSanbaoCreationModelCapabilities(ctx context.Context) map[string]dto.CreationModelMetadata {
+	sanbaoCreationModelCapabilitiesCache.Lock()
+	if time.Now().Before(sanbaoCreationModelCapabilitiesCache.expiresAt) {
+		cached := cloneCreationModelMetadataMap(sanbaoCreationModelCapabilitiesCache.values)
+		sanbaoCreationModelCapabilitiesCache.Unlock()
+		return cached
+	}
+	sanbaoCreationModelCapabilitiesCache.Unlock()
+
+	channels, err := model.GetEnabledChannelsByTypeWithKeys(constant.ChannelTypeSanbao)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("get Sanbao channels failed: %v", err))
+		return nil
+	}
+	if len(channels) == 0 {
+		return nil
+	}
+
+	var capabilities map[string]dto.CreationModelMetadata
+	for _, channel := range channels {
+		if capabilities == nil {
+			capabilities, err = fetchSanbaoCreationModelCapabilities(ctx, channel)
+			if err != nil {
+				common.SysLog(fmt.Sprintf("fetch Sanbao model capabilities failed: channel_id=%d err=%v", channel.Id, err))
+				continue
+			}
+		}
+		applySanbaoModelMappingAliases(capabilities, channel)
+	}
+
+	sanbaoCreationModelCapabilitiesCache.Lock()
+	sanbaoCreationModelCapabilitiesCache.values = cloneCreationModelMetadataMap(capabilities)
+	sanbaoCreationModelCapabilitiesCache.expiresAt = time.Now().Add(sanbaoCreationModelCapabilitiesTTL)
+	sanbaoCreationModelCapabilitiesCache.Unlock()
+	return capabilities
+}
+
+func fetchSanbaoCreationModelCapabilities(ctx context.Context, channel *model.Channel) (map[string]dto.CreationModelMetadata, error) {
+	if channel == nil {
+		return nil, fmt.Errorf("channel is nil")
+	}
+	apiKey, _, apiErr := channel.GetNextEnabledKey()
+	if apiErr != nil {
+		return nil, apiErr
+	}
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return nil, fmt.Errorf("Sanbao channel key is empty")
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, strings.TrimRight(channel.GetBaseURL(), "/")+"/openapi/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("Sanbao /models returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return parseSanbaoCreationModelCapabilities(body)
+}
+
+func parseSanbaoCreationModelCapabilities(body []byte) (map[string]dto.CreationModelMetadata, error) {
+	var payload struct {
+		Data []dto.CreationModelMetadata `json:"data"`
+	}
+	if err := common.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	if len(payload.Data) == 0 {
+		var items []dto.CreationModelMetadata
+		if err := common.Unmarshal(body, &items); err != nil {
+			return nil, err
+		}
+		payload.Data = items
+	}
+
+	result := make(map[string]dto.CreationModelMetadata, len(payload.Data))
+	for _, item := range payload.Data {
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
+		}
+		item.Provider = "sanbao"
+		if item.UpstreamModelID == "" {
+			item.UpstreamModelID = id
+		}
+		result[normalizeCreationModelMetadataKey(id)] = item
+	}
+	return result, nil
+}
+
+func applySanbaoModelMappingAliases(capabilities map[string]dto.CreationModelMetadata, channel *model.Channel) {
+	if len(capabilities) == 0 || channel == nil {
+		return
+	}
+	rawMapping := strings.TrimSpace(channel.GetModelMapping())
+	if rawMapping == "" || rawMapping == "{}" {
+		return
+	}
+
+	var parsed map[string]string
+	if err := common.UnmarshalJsonStr(rawMapping, &parsed); err != nil {
+		common.SysLog(fmt.Sprintf("parse Sanbao model mapping failed: channel_id=%d err=%v", channel.Id, err))
+		return
+	}
+	for alias, upstream := range parsed {
+		alias = strings.TrimSpace(alias)
+		upstream = strings.TrimSpace(upstream)
+		if alias == "" || upstream == "" {
+			continue
+		}
+		metadata, ok := capabilities[normalizeCreationModelMetadataKey(upstream)]
+		if !ok {
+			continue
+		}
+		metadata.ID = alias
+		if metadata.UpstreamModelID == "" {
+			metadata.UpstreamModelID = upstream
+		}
+		capabilities[normalizeCreationModelMetadataKey(alias)] = metadata
+	}
+}
+
+func getProviderCreationModelMetadata(modelName string, metadata map[string]dto.CreationModelMetadata) (dto.CreationModelMetadata, bool) {
+	if len(metadata) == 0 {
+		return dto.CreationModelMetadata{}, false
+	}
+	value, ok := metadata[normalizeCreationModelMetadataKey(modelName)]
+	return value, ok
+}
+
+func getCreationModelModeFromProviderMetadata(metadata dto.CreationModelMetadata) (string, bool) {
+	modelType := strings.ToLower(strings.TrimSpace(metadata.Type))
+	if modelType == "" {
+		modelType = strings.ToLower(strings.TrimSpace(metadata.Category))
+	}
+	if modelType == "" {
+		modelType = strings.ToLower(strings.TrimSpace(metadata.ModelType))
+	}
+	switch {
+	case strings.Contains(modelType, "image"):
+		return creationModeImage, true
+	case strings.Contains(modelType, "video"):
+		return creationModeVideo, true
+	default:
+		return "", false
+	}
+}
+
+func normalizeCreationModelMetadataKey(modelName string) string {
+	return strings.ToLower(strings.TrimSpace(modelName))
+}
+
+func cloneCreationModelMetadataMap(src map[string]dto.CreationModelMetadata) map[string]dto.CreationModelMetadata {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]dto.CreationModelMetadata, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
 }
 
 func buildCreationModelCost(item model.Pricing, groupRatio float64) *dto.CreationModelCost {

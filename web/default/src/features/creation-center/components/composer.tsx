@@ -45,9 +45,9 @@ import {
   type PromptMentionTrigger,
 } from '../lib/prompt-mentions'
 import {
-  CREATION_IMAGE_ASPECT_RATIO_OPTIONS,
   type CreationImageAspectRatio,
   type CreationImageOptions,
+  type CreationImageReferenceLimits,
   type CreationImageReferences,
   getCreationReferenceURL,
   normalizeCreationVideoReferences,
@@ -73,6 +73,8 @@ type ComposerProps = {
   imageOptions: CreationImageOptions
   imageReferences: CreationImageReferences
   imageReferencesSupported: boolean
+  imageAspectRatioOptions: CreationImageAspectRatio[]
+  imageReferenceLimits: CreationImageReferenceLimits
   videoOptions: CreationVideoOptions
   videoReferences: CreationVideoReferences
   videoCapabilities?: CreationVideoCapability
@@ -102,10 +104,11 @@ export function Composer(props: ComposerProps) {
   const canSubmit = !!props.prompt.trim() && !!props.model && !props.submitting
   const referenceMentionItems = useMemo(
     () =>
-      props.mode === 'video' && props.videoCapabilities?.kind === 'video2'
+      props.mode === 'video' &&
+      supportsReferenceMentions(props.videoCapabilities)
         ? getVideoReferenceMentionItems(props.videoReferences, t)
         : [],
-    [props.mode, props.videoCapabilities?.kind, props.videoReferences, t]
+    [props.mode, props.videoCapabilities, props.videoReferences, t]
   )
   const mentionSuggestions = mentionTrigger
     ? referenceMentionItems.filter((item) =>
@@ -120,7 +123,8 @@ export function Composer(props: ComposerProps) {
     caretPosition: number | null | undefined
   ) => {
     setMentionTrigger(
-      props.mode === 'video' && props.videoCapabilities?.kind === 'video2'
+      props.mode === 'video' &&
+        supportsReferenceMentions(props.videoCapabilities)
         ? getPromptMentionTrigger(value, caretPosition)
         : null
     )
@@ -259,11 +263,13 @@ export function Composer(props: ComposerProps) {
               onRemoveImage={props.onRemoveVideoReferenceImage}
               onRemoveVideo={props.onRemoveVideoReferenceVideo}
               onRemoveAudio={props.onRemoveVideoReferenceAudio}
+              capability={props.videoCapabilities}
             />
           )}
           {props.mode === 'image' && props.imageReferencesSupported && (
             <ImageReferenceFields
               value={props.imageReferences}
+              limits={props.imageReferenceLimits}
               onFilesSelected={props.onImageReferenceFilesSelected}
               onRemoveImage={props.onRemoveImageReferenceImage}
             />
@@ -289,7 +295,7 @@ export function Composer(props: ComposerProps) {
             <ComposerSelectGroup
               label={t('Aspect ratio')}
               value={props.imageOptions.aspectRatio}
-              options={CREATION_IMAGE_ASPECT_RATIO_OPTIONS.map((value) => ({
+              options={props.imageAspectRatioOptions.map((value) => ({
                 value,
                 label: value,
               }))}
@@ -333,7 +339,7 @@ export function Composer(props: ComposerProps) {
                         ...props.videoReferences,
                         referenceMode: value as CreationVideoReferenceMode,
                       },
-                      props.model?.id
+                      props.model
                     )
                   )
                 }
@@ -396,6 +402,10 @@ export function Composer(props: ComposerProps) {
       </div>
     </section>
   )
+}
+
+function supportsReferenceMentions(capability?: CreationVideoCapability) {
+  return capability?.kind === 'video2' || capability?.kind === 'sanbao'
 }
 
 function ComposerSelectGroup(props: {

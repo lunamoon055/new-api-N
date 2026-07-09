@@ -45,19 +45,14 @@ import {
 } from './components/model-management-dialogs'
 import { CREATION_MODES } from './constants'
 import {
-  CREATION_IMAGE_REFERENCE_MAX_BYTES,
-  CREATION_IMAGE_REFERENCE_MAX_COUNT,
   DEFAULT_CREATION_IMAGE_OPTIONS,
-  CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES,
-  CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT,
-  CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES,
-  CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES,
-  CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT,
   EMPTY_CREATION_IMAGE_REFERENCES,
   DEFAULT_CREATION_VIDEO_OPTIONS,
   EMPTY_CREATION_VIDEO_REFERENCES,
   filterCreationVideoReferencesByPromptMentions,
+  getCreationImageAspectRatioOptions,
   getCreationImageReferenceError,
+  getCreationImageReferenceLimits,
   getCreationDurationOptions,
   getCreationHistoryStorageKey,
   getCreationResolutionOptions,
@@ -65,6 +60,7 @@ import {
   getCreationVideoCapabilities,
   getCreationVideoOptionsError,
   getCreationVideoReferenceError,
+  getCreationVideoReferenceLimits,
   getCreationVideoRequestOptions,
   loadCreationHistory,
   normalizeCreationImageOptions,
@@ -161,20 +157,28 @@ export function CreationCenter() {
     [mode, models, selectedByMode]
   )
   const durationOptions = useMemo(
-    () => getCreationDurationOptions(selectedModel?.id),
-    [selectedModel?.id]
+    () => getCreationDurationOptions(selectedModel),
+    [selectedModel]
   )
   const resolutionOptions = useMemo(
-    () => getCreationResolutionOptions(selectedModel?.id),
-    [selectedModel?.id]
+    () => getCreationResolutionOptions(selectedModel),
+    [selectedModel]
   )
   const videoCapabilities = useMemo(
-    () => getCreationVideoCapabilities(selectedModel?.id),
-    [selectedModel?.id]
+    () => getCreationVideoCapabilities(selectedModel),
+    [selectedModel]
   )
   const imageReferencesSupported = useMemo(
-    () => supportsCreationImageReferences(selectedModel?.id),
-    [selectedModel?.id]
+    () => supportsCreationImageReferences(selectedModel),
+    [selectedModel]
+  )
+  const imageAspectRatioOptions = useMemo(
+    () => getCreationImageAspectRatioOptions(selectedModel),
+    [selectedModel]
+  )
+  const imageReferenceLimits = useMemo(
+    () => getCreationImageReferenceLimits(selectedModel),
+    [selectedModel]
   )
   const modeCounts = useMemo(
     () =>
@@ -265,24 +269,18 @@ export function CreationCenter() {
     if (mode !== 'image') return
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setImageOptions((current) => {
-      const normalized = normalizeCreationImageOptions(
-        current,
-        selectedModel?.id
-      )
+      const normalized = normalizeCreationImageOptions(current, selectedModel)
       return normalized.aspectRatio === current.aspectRatio
         ? current
         : normalized
     })
-  }, [mode, selectedModel?.id])
+  }, [mode, selectedModel])
 
   useEffect(() => {
     if (mode !== 'video') return
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setVideoOptions((current) => {
-      const normalized = normalizeCreationVideoOptions(
-        current,
-        selectedModel?.id
-      )
+      const normalized = normalizeCreationVideoOptions(current, selectedModel)
       return normalized.duration === current.duration &&
         normalized.resolution === current.resolution &&
         normalized.aspectRatio === current.aspectRatio
@@ -292,13 +290,13 @@ export function CreationCenter() {
     setVideoReferences((current) => {
       const normalized = normalizeCreationVideoReferences(
         current,
-        selectedModel?.id
+        selectedModel
       )
       return JSON.stringify(normalized) === JSON.stringify(current)
         ? current
         : normalized
     })
-  }, [mode, selectedModel?.id])
+  }, [mode, selectedModel])
 
   const persistHistoryItem = (item: CreationHistoryItem) => {
     if (typeof window === 'undefined') return
@@ -374,12 +372,13 @@ export function CreationCenter() {
       toast.error(t('Choose supported reference files.'))
     }
 
+    const imageReferenceLimits = getCreationImageReferenceLimits(selectedModel)
     const supportedImageFiles = imageFiles.filter(
-      (file) => file.size <= CREATION_IMAGE_REFERENCE_MAX_BYTES
+      (file) => file.size <= imageReferenceLimits.maxImageSizeBytes
     )
     const imageOversizedCount = imageFiles.length - supportedImageFiles.length
     const imageRemainingSlots =
-      CREATION_IMAGE_REFERENCE_MAX_COUNT - imageReferences.imageUrls.length
+      imageReferenceLimits.maxImages - imageReferences.imageUrls.length
     const referenceImageFiles = supportedImageFiles.slice(
       0,
       Math.max(imageRemainingSlots, 0)
@@ -390,10 +389,18 @@ export function CreationCenter() {
       (imageRemainingSlots <= 0 ||
         supportedImageFiles.length > referenceImageFiles.length)
     ) {
-      toast.error(t('Gpt-image2 accepts at most 6 reference images.'))
+      toast.error(
+        t('This model accepts at most {{count}} reference images.', {
+          count: imageReferenceLimits.maxImages,
+        })
+      )
     }
     if (imageOversizedCount > 0) {
-      toast.error(t('Reference images must not exceed 20 MB each.'))
+      toast.error(
+        t('Reference images must not exceed {{size}} MB each.', {
+          size: imageReferenceLimits.maxImageSizeMB,
+        })
+      )
     }
     if (!referenceImageFiles.length) return
 
@@ -419,7 +426,7 @@ export function CreationCenter() {
           ...current,
           imageUrls: [...current.imageUrls, ...imageUrls],
         },
-        selectedModel?.id
+        selectedModel
       )
     )
     toast.success(t('Reference images added.'))
@@ -429,11 +436,15 @@ export function CreationCenter() {
     if (!files.length) return
 
     const referenceMode = videoReferences.referenceMode
+    const videoReferenceLimits = getCreationVideoReferenceLimits(selectedModel)
     const acceptsImages =
-      referenceMode === 'image' || referenceMode === 'multimodal'
+      (referenceMode === 'image' || referenceMode === 'multimodal') &&
+      videoReferenceLimits.maxImages > 0
     const acceptsVideos =
-      referenceMode === 'video' || referenceMode === 'multimodal'
-    const acceptsAudio = referenceMode === 'multimodal'
+      (referenceMode === 'video' || referenceMode === 'multimodal') &&
+      videoReferenceLimits.maxVideos > 0
+    const acceptsAudio =
+      referenceMode === 'multimodal' && videoReferenceLimits.maxAudios > 0
     const imageFiles = acceptsImages ? files.filter(isReferenceImageFile) : []
     const videoFiles = acceptsVideos ? files.filter(isReferenceVideoFile) : []
     const audioFiles = acceptsAudio ? files.filter(isReferenceAudioFile) : []
@@ -449,12 +460,11 @@ export function CreationCenter() {
     }
 
     const supportedImageFiles = imageFiles.filter(
-      (file) => file.size <= CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES
+      (file) => file.size <= videoReferenceLimits.maxImageSizeBytes
     )
     const imageOversizedCount = imageFiles.length - supportedImageFiles.length
     const imageRemainingSlots =
-      CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT -
-      videoReferences.imageUrls.length
+      videoReferenceLimits.maxImages - videoReferences.imageUrls.length
     const referenceImageFiles = supportedImageFiles.slice(
       0,
       Math.max(imageRemainingSlots, 0)
@@ -465,10 +475,18 @@ export function CreationCenter() {
       (imageRemainingSlots <= 0 ||
         supportedImageFiles.length > referenceImageFiles.length)
     ) {
-      toast.error(t('Video2 accepts at most 4 image references.'))
+      toast.error(
+        t('This model accepts at most {{count}} image references.', {
+          count: videoReferenceLimits.maxImages,
+        })
+      )
     }
     if (imageOversizedCount > 0) {
-      toast.error(t('Reference images must not exceed 20 MB each.'))
+      toast.error(
+        t('Reference images must not exceed {{size}} MB each.', {
+          size: videoReferenceLimits.maxImageSizeMB,
+        })
+      )
     }
 
     const selectedVideoBytes = videoFiles.reduce(
@@ -476,11 +494,11 @@ export function CreationCenter() {
       0
     )
     const supportedVideoFiles =
-      selectedVideoBytes <= CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES
+      selectedVideoBytes <= videoReferenceLimits.maxVideoSizeBytes
         ? videoFiles
         : []
     const videoRemainingSlots =
-      CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT -
+      videoReferenceLimits.maxVideos -
       videoReferences.videoUrls.filter(Boolean).length
     const referenceVideoFiles = supportedVideoFiles.slice(
       0,
@@ -492,17 +510,29 @@ export function CreationCenter() {
       (videoRemainingSlots <= 0 ||
         supportedVideoFiles.length > referenceVideoFiles.length)
     ) {
-      toast.error(t('Video2 accepts at most 3 video references.'))
+      toast.error(
+        t('This model accepts at most {{count}} video references.', {
+          count: videoReferenceLimits.maxVideos,
+        })
+      )
     }
-    if (selectedVideoBytes > CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES) {
-      toast.error(t('Reference videos must not exceed 200 MB total.'))
+    if (selectedVideoBytes > videoReferenceLimits.maxVideoSizeBytes) {
+      toast.error(
+        t('Reference videos must not exceed {{size}} MB total.', {
+          size: videoReferenceLimits.maxVideoSizeMB,
+        })
+      )
     }
 
     const audioFile = audioFiles.find(
-      (file) => file.size <= CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES
+      (file) => file.size <= videoReferenceLimits.maxAudioSizeBytes
     )
     if (audioFiles.length > 0 && !audioFile) {
-      toast.error(t('Reference audio must not exceed 15 MB.'))
+      toast.error(
+        t('Reference audio must not exceed {{size}} MB.', {
+          size: videoReferenceLimits.maxAudioSizeMB,
+        })
+      )
     }
     if (
       !referenceImageFiles.length &&
@@ -553,7 +583,7 @@ export function CreationCenter() {
           videoUrls: [...current.videoUrls, ...videoUrls],
           audioUrl: audioUrl ?? current.audioUrl,
         },
-        selectedModel?.id
+        selectedModel
       )
     )
     toast.success(t('Reference assets added.'))
@@ -575,7 +605,7 @@ export function CreationCenter() {
             (_, itemIndex) => itemIndex !== index
           ),
         },
-        selectedModel?.id
+        selectedModel
       )
     )
   }
@@ -589,7 +619,7 @@ export function CreationCenter() {
             (_, itemIndex) => itemIndex !== index
           ),
         },
-        selectedModel?.id
+        selectedModel
       )
     )
   }
@@ -603,7 +633,7 @@ export function CreationCenter() {
             (_, itemIndex) => itemIndex !== index
           ),
         },
-        selectedModel?.id
+        selectedModel
       )
     )
   }
@@ -615,7 +645,7 @@ export function CreationCenter() {
           ...current,
           audioUrl: '',
         },
-        selectedModel?.id
+        selectedModel
       )
     )
   }
@@ -639,20 +669,20 @@ export function CreationCenter() {
         ? filterCreationVideoReferencesByPromptMentions(
             trimmedPrompt,
             videoReferences,
-            selectedModel.id
+            selectedModel
           )
         : undefined
     if (mode === 'video') {
       const optionError = getCreationVideoOptionsError(
         videoOptions,
-        selectedModel.id
+        selectedModel
       )
       if (optionError) {
         toast.error(t(optionError))
         return
       }
       const referenceError = getCreationVideoReferenceError(
-        selectedModel.id,
+        selectedModel,
         mentionedVideoReferences ?? videoReferences
       )
       if (referenceError) {
@@ -662,7 +692,7 @@ export function CreationCenter() {
     }
     if (mode === 'image') {
       const referenceError = getCreationImageReferenceError(
-        selectedModel.id,
+        selectedModel,
         imageReferences
       )
       if (referenceError) {
@@ -678,28 +708,28 @@ export function CreationCenter() {
       mode === 'video'
         ? getCreationVideoRequestOptions(
             videoOptions,
-            selectedModel.id,
+            selectedModel,
             mentionedVideoReferences ?? videoReferences
           )
         : undefined
     const normalizedVideoOptions =
       mode === 'video'
-        ? normalizeCreationVideoOptions(videoOptions, selectedModel.id)
+        ? normalizeCreationVideoOptions(videoOptions, selectedModel)
         : undefined
     const normalizedVideoReferences =
       mode === 'video'
         ? normalizeCreationVideoReferences(
             mentionedVideoReferences ?? videoReferences,
-            selectedModel.id
+            selectedModel
           )
         : undefined
     const normalizedImageReferences =
       mode === 'image'
-        ? normalizeCreationImageReferences(imageReferences, selectedModel.id)
+        ? normalizeCreationImageReferences(imageReferences, selectedModel)
         : undefined
     const normalizedImageOptions =
       mode === 'image'
-        ? normalizeCreationImageOptions(imageOptions, selectedModel.id)
+        ? normalizeCreationImageOptions(imageOptions, selectedModel)
         : undefined
     try {
       const nextResult = await submitCreationTask({
@@ -929,6 +959,8 @@ export function CreationCenter() {
               imageOptions={imageOptions}
               imageReferences={imageReferences}
               imageReferencesSupported={imageReferencesSupported}
+              imageAspectRatioOptions={imageAspectRatioOptions}
+              imageReferenceLimits={imageReferenceLimits}
               videoOptions={videoOptions}
               videoReferences={videoReferences}
               videoCapabilities={videoCapabilities}

@@ -34,9 +34,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
-  CREATION_IMAGE_REFERENCE_MAX_COUNT,
   getCreationReferencePreviewURL,
   getCreationReferenceURL,
+  type CreationImageReferenceLimits,
   type CreationImageReferences,
 } from './session'
 
@@ -45,6 +45,7 @@ const IMAGE_REFERENCE_ACCEPT =
 
 type ImageReferenceFieldsProps = {
   value: CreationImageReferences
+  limits: CreationImageReferenceLimits
   onFilesSelected: (files: File[]) => void
   onRemoveImage: (index: number) => void
 }
@@ -60,14 +61,19 @@ export function ImageReferenceFields(props: ImageReferenceFieldsProps) {
   const imageReferences = props.value.imageUrls.filter((reference) =>
     getCreationReferenceURL(reference)
   )
-  const uploadDisabled =
-    imageReferences.length >= CREATION_IMAGE_REFERENCE_MAX_COUNT
+  const uploadDisabled = imageReferences.length >= props.limits.maxImages
 
   return (
     <TooltipProvider>
       <FieldGroup className='mt-3 gap-2'>
         <p className='text-muted-foreground text-[11px] leading-4'>
-          {t('Gpt-image2 image reference upload tip')}
+          {t(
+            'Tip: Reference images support PNG, JPEG, WebP, GIF, or AVIF. Up to {{count}} images, {{size}} MB each.',
+            {
+              count: props.limits.maxImages,
+              size: props.limits.maxImageSizeMB,
+            }
+          )}
         </p>
         <Field>
           <div className='flex flex-wrap items-center gap-2'>

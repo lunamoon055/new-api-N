@@ -26,7 +26,39 @@ export type CreationModel = {
   tags?: string[]
   vendor_id?: number
   cost?: CreationModelCost
+  metadata?: CreationModelMetadata
   supported_endpoint_types: string[]
+}
+
+export type CreationModelMetadata = {
+  provider?: string
+  id?: string
+  upstream_model_id?: string
+  name?: string
+  description?: string
+  type?: string
+  category?: string
+  model_type?: string
+  endpoint?: string
+  legacy_endpoint?: string
+  billing?: string
+  resolutions?: string[]
+  ratios?: string[]
+  aspect_ratios?: string[]
+  sizes?: string[]
+  durations?: Array<number | string>
+  max_prompt_length?: number
+  max_images?: number
+  max_videos?: number
+  max_audios?: number
+  max_media_files?: number
+  max_image_size_mb?: number
+  max_video_size_mb?: number
+  max_audio_size_mb?: number
+  min_reference_video_duration_seconds?: number
+  max_reference_video_duration_seconds?: number
+  concurrency_options?: number[]
+  media_inputs?: string[]
 }
 
 export type CreationModelCost = {

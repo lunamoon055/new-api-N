@@ -34,10 +34,10 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
-  CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT,
-  CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT,
+  getCreationVideoReferenceLimits,
   getCreationReferencePreviewURL,
   getCreationReferenceURL,
+  type CreationVideoCapability,
   type CreationVideoReferenceMode,
   type CreationVideoReferences,
 } from './session'
@@ -60,15 +60,22 @@ type VideoReferenceFieldsProps = {
   onRemoveImage: (index: number) => void
   onRemoveVideo: (index: number) => void
   onRemoveAudio: () => void
+  capability?: CreationVideoCapability
 }
 
 export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
   const { t } = useTranslation()
   const [preview, setPreview] = useState<ReferencePreview | null>(null)
   const referenceMode = props.value.referenceMode
-  const showImages = referenceMode === 'image' || referenceMode === 'multimodal'
-  const showVideos = referenceMode === 'video' || referenceMode === 'multimodal'
-  const showAudio = referenceMode === 'multimodal'
+  const limits =
+    props.capability?.referenceLimits ?? getCreationVideoReferenceLimits()
+  const showImages =
+    (referenceMode === 'image' || referenceMode === 'multimodal') &&
+    limits.maxImages > 0
+  const showVideos =
+    (referenceMode === 'video' || referenceMode === 'multimodal') &&
+    limits.maxVideos > 0
+  const showAudio = referenceMode === 'multimodal' && limits.maxAudios > 0
   const imageReferences = showImages
     ? props.value.imageUrls.filter((reference) =>
         getCreationReferenceURL(reference)
@@ -90,13 +97,14 @@ export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
     imageCount: imageReferences.length,
     videoCount: videoReferences.length,
     hasAudio: !!audioReference,
+    limits,
   })
 
   return (
     <TooltipProvider>
       <FieldGroup className='mt-3 gap-2'>
         <p className='text-muted-foreground text-[11px] leading-4'>
-          {t(getReferenceUploadTip(referenceMode))}
+          {getReferenceUploadTip(referenceMode, limits, t)}
         </p>
         <Field>
           <div className='flex flex-wrap items-center gap-2'>
@@ -108,7 +116,7 @@ export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
               {t('Reference assets')}
               <input
                 type='file'
-                accept={getReferenceAccept(referenceMode)}
+                accept={getReferenceAccept(referenceMode, limits)}
                 multiple
                 disabled={uploadDisabled}
                 className='sr-only'
@@ -266,20 +274,55 @@ function ReferencePreviewMedia(props: { preview: ReferencePreview }) {
   return <audio src={preview.url} controls className='w-full' />
 }
 
-function getReferenceAccept(mode: CreationVideoReferenceMode) {
+function getReferenceAccept(
+  mode: CreationVideoReferenceMode,
+  limits: CreationVideoCapability['referenceLimits']
+) {
   if (mode === 'image') return IMAGE_REFERENCE_ACCEPT
   if (mode === 'video') return VIDEO_REFERENCE_ACCEPT
   return [
-    IMAGE_REFERENCE_ACCEPT,
-    VIDEO_REFERENCE_ACCEPT,
-    AUDIO_REFERENCE_ACCEPT,
-  ].join(',')
+    limits.maxImages > 0 ? IMAGE_REFERENCE_ACCEPT : '',
+    limits.maxVideos > 0 ? VIDEO_REFERENCE_ACCEPT : '',
+    limits.maxAudios > 0 ? AUDIO_REFERENCE_ACCEPT : '',
+  ]
+    .filter(Boolean)
+    .join(',')
 }
 
-function getReferenceUploadTip(mode: CreationVideoReferenceMode) {
-  if (mode === 'video') return 'Video reference upload tip'
-  if (mode === 'multimodal') return 'Multimodal reference upload tip'
-  return 'Image reference upload tip'
+function getReferenceUploadTip(
+  mode: CreationVideoReferenceMode,
+  limits: CreationVideoCapability['referenceLimits'],
+  t: (key: string, options?: Record<string, unknown>) => string
+) {
+  if (mode === 'video') {
+    return t(
+      'Tip: Reference videos support MP4. Up to {{count}} videos, {{size}} MB total.',
+      {
+        count: limits.maxVideos,
+        size: limits.maxVideoSizeMB,
+      }
+    )
+  }
+  if (mode === 'multimodal') {
+    return t(
+      'Tip: Reference assets support images, videos, and audio. Images: up to {{imageCount}}, {{imageSize}} MB each. Videos: up to {{videoCount}}, {{videoSize}} MB total. Audio: up to {{audioCount}}, {{audioSize}} MB each.',
+      {
+        imageCount: limits.maxImages,
+        imageSize: limits.maxImageSizeMB,
+        videoCount: limits.maxVideos,
+        videoSize: limits.maxVideoSizeMB,
+        audioCount: limits.maxAudios,
+        audioSize: limits.maxAudioSizeMB,
+      }
+    )
+  }
+  return t(
+    'Tip: Reference images support PNG, JPEG, WebP, GIF, or AVIF. Up to {{count}} images, {{size}} MB each.',
+    {
+      count: limits.maxImages,
+      size: limits.maxImageSizeMB,
+    }
+  )
 }
 
 function getUploadDisabled(props: {
@@ -287,16 +330,17 @@ function getUploadDisabled(props: {
   imageCount: number
   videoCount: number
   hasAudio: boolean
+  limits: CreationVideoCapability['referenceLimits']
 }) {
   if (props.mode === 'image') {
-    return props.imageCount >= CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT
+    return props.imageCount >= props.limits.maxImages
   }
   if (props.mode === 'video') {
-    return props.videoCount >= CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT
+    return props.videoCount >= props.limits.maxVideos
   }
   return (
-    props.imageCount >= CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT &&
-    props.videoCount >= CREATION_VIDEO_VIDEO_REFERENCE_MAX_COUNT &&
-    props.hasAudio
+    props.imageCount >= props.limits.maxImages &&
+    props.videoCount >= props.limits.maxVideos &&
+    (props.limits.maxAudios <= 0 || props.hasAudio)
   )
 }

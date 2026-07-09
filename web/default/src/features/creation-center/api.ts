@@ -150,7 +150,7 @@ export async function submitCreationTask(params: {
   if (params.mode === 'image') {
     const imageOptions = getCreationImageRequestOptions(
       promptWithAssets,
-      params.model.id,
+      params.model,
       params.imageReferences,
       params.imageOptions
     )
@@ -169,7 +169,7 @@ export async function submitCreationTask(params: {
 
   const videoOptions = getCreationVideoRequestOptions(
     params.videoOptions ?? DEFAULT_CREATION_VIDEO_OPTIONS,
-    params.model.id,
+    params.model,
     params.videoReferences
   )
   const { estimateSeconds: _estimateSeconds, ...videoPayload } = videoOptions

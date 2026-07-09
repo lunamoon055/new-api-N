@@ -300,6 +300,47 @@ func TestBuildCreationModelCatalogUsesManualCategories(t *testing.T) {
 	require.Contains(t, catalog.Modes[2].Models[0].Tags, creationModeVideo)
 }
 
+func TestBuildCreationModelCatalogUsesProviderMetadataForMode(t *testing.T) {
+	catalog := buildCreationModelCatalogWithProviderMetadata(
+		[]model.Pricing{
+			{
+				ModelName:              "sd2_full",
+				SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+			},
+			{
+				ModelName:              "sanbao-poster",
+				SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+			},
+		},
+		nil,
+		"",
+		map[string]dto.CreationModelMetadata{
+			"sd2_full": {
+				Provider:    "sanbao",
+				ID:          "sd2_full",
+				Type:        "video",
+				Resolutions: []string{"720p"},
+				Ratios:      []string{"16:9", "9:16"},
+				Durations:   []int{5, 10},
+			},
+			"sanbao-poster": {
+				Provider:     "sanbao",
+				ID:           "sanbao-poster",
+				Type:         "image",
+				AspectRatios: []string{"1:1", "16:9"},
+				MaxImages:    6,
+			},
+		},
+	)
+
+	require.Equal(t, []string{}, creationModelIDs(catalog.Modes[0].Models))
+	require.Equal(t, []string{"sanbao-poster"}, creationModelIDs(catalog.Modes[1].Models))
+	require.Equal(t, []string{"sd2_full"}, creationModelIDs(catalog.Modes[2].Models))
+	require.NotNil(t, catalog.Modes[2].Models[0].Metadata)
+	require.Equal(t, "sanbao", catalog.Modes[2].Models[0].Metadata.Provider)
+	require.Equal(t, []string{"720p"}, catalog.Modes[2].Models[0].Metadata.Resolutions)
+}
+
 func TestBuildCreationModelCatalogUsesManualDescriptions(t *testing.T) {
 	catalog := buildCreationModelCatalogWithCategories([]model.Pricing{
 		{

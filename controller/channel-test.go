@@ -67,7 +67,14 @@ type channelTestUserInfo struct {
 	usingGroup string
 }
 
-const channelTestEndpointOpenAIVideoAsync = "openai-video-async"
+const (
+	channelTestEndpointOpenAIVideoAsync = "openai-video-async"
+	channelTestEndpointSanbaoImage      = "sanbao-image"
+	channelTestEndpointSanbaoVideo      = "sanbao-video"
+	channelTestEndpointSanbaoUpload     = "sanbao-upload"
+	channelTestEndpointSanbaoImagePoll  = "sanbao-image-poll"
+	channelTestEndpointSanbaoVideoPoll  = "sanbao-video-poll"
+)
 
 type channelTestLabRequest struct {
 	Model        string          `json:"model"`
@@ -147,6 +154,20 @@ func resolveChannelTestEndpoint(channel *model.Channel, modelName, endpointType 
 		requestPath = "/v1/video/async-generations"
 		relayFormat = types.RelayFormatTask
 	}
+	switch endpointType {
+	case channelTestEndpointSanbaoImage:
+		requestPath = "/v1/images/generations"
+		relayFormat = types.RelayFormatTask
+	case channelTestEndpointSanbaoVideo, channelTestEndpointSanbaoUpload:
+		requestPath = "/v1/video/async-generations"
+		relayFormat = types.RelayFormatTask
+	case channelTestEndpointSanbaoImagePoll:
+		requestPath = "/v1/images/generations/{task_id}"
+		relayFormat = types.RelayFormatTask
+	case channelTestEndpointSanbaoVideoPoll:
+		requestPath = "/v1/video/async-generations/{task_id}"
+		relayFormat = types.RelayFormatTask
+	}
 
 	return endpointType, requestPath, relayFormat
 }
@@ -202,6 +223,77 @@ func testChannel(channel *model.Channel, requester channelTestUserInfo, testMode
 	return testChannelWithPayload(channel, requester, testModel, endpointType, isStream, nil)
 }
 
+func isChannelTestTaskPollEndpoint(endpointType string) bool {
+	switch strings.TrimSpace(endpointType) {
+	case channelTestEndpointSanbaoImagePoll, channelTestEndpointSanbaoVideoPoll:
+		return true
+	default:
+		return false
+	}
+}
+
+func testChannelTaskPoll(channel *model.Channel, requester channelTestUserInfo, endpointType string, payload json.RawMessage) testResult {
+	taskID := getChannelTestPayloadTaskID(payload)
+	if taskID == "" {
+		err := errors.New("task_id is required for polling template")
+		return testResult{
+			localErr:    err,
+			newAPIError: types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithStatusCode(http.StatusBadRequest)),
+		}
+	}
+
+	requestPath := "/v1/video/async-generations/" + url.PathEscape(taskID)
+	if endpointType == channelTestEndpointSanbaoImagePoll {
+		requestPath = "/v1/images/generations/" + url.PathEscape(taskID)
+	}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, requestPath, nil)
+	c.Params = gin.Params{{Key: "task_id", Value: taskID}}
+	c.Set("task_id", taskID)
+	c.Set("channel", channel.Type)
+	c.Set("base_url", channel.GetBaseURL())
+	prepareChannelTestUserContext(c, channel, requester)
+
+	if taskErr := relay.RelayTaskFetch(c, relayconstant.RelayModeVideoFetchByID); taskErr != nil {
+		err := taskErr.Error
+		if err == nil {
+			err = errors.New(taskErr.Message)
+		}
+		return testResult{
+			context:     c,
+			localErr:    err,
+			newAPIError: types.NewOpenAIError(err, types.ErrorCode(taskErr.Code), taskErr.StatusCode),
+		}
+	}
+
+	result := w.Result()
+	respBody, err := readTestResponseBody(result.Body, false)
+	if err != nil {
+		return testResult{
+			context:     c,
+			localErr:    err,
+			newAPIError: types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError),
+		}
+	}
+	if result.StatusCode >= http.StatusBadRequest {
+		err := fmt.Errorf("polling returned status %d: %s", result.StatusCode, strings.TrimSpace(string(respBody)))
+		return testResult{
+			context:     c,
+			localErr:    err,
+			newAPIError: types.NewOpenAIError(err, types.ErrorCodeBadResponse, result.StatusCode),
+		}
+	}
+	if bodyErr := validateTestResponseBody(respBody, false); bodyErr != nil {
+		return testResult{
+			context:     c,
+			localErr:    bodyErr,
+			newAPIError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+		}
+	}
+	return testResult{context: c}
+}
+
 func testChannelWithPayload(channel *model.Channel, requester channelTestUserInfo, testModel string, endpointType string, isStream bool, payload json.RawMessage) testResult {
 	tik := time.Now()
 	if !supportsChannelConnectionTest(channel.Type) {
@@ -209,6 +301,9 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 		return testResult{
 			localErr: fmt.Errorf("%s channel test is not supported", channelTypeName),
 		}
+	}
+	if isChannelTestTaskPollEndpoint(endpointType) {
+		return testChannelTaskPoll(channel, requester, endpointType, payload)
 	}
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -266,7 +361,7 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 		}
 	}
 
-	info, err := genChannelTestRelayInfo(c, relayFormat, request)
+	info, err := genChannelTestRelayInfo(c, relayFormat, request, payload)
 
 	if err != nil {
 		return testResult{
@@ -677,9 +772,9 @@ func pickChannelTestUsingGroup(channel *model.Channel, fallback string) string {
 	return fallback
 }
 
-func genChannelTestRelayInfo(c *gin.Context, relayFormat types.RelayFormat, request any) (*relaycommon.RelayInfo, error) {
+func genChannelTestRelayInfo(c *gin.Context, relayFormat types.RelayFormat, request any, payload json.RawMessage) (*relaycommon.RelayInfo, error) {
 	if relayFormat == types.RelayFormatTask {
-		if err := seedTaskTestRequestBody(c, request); err != nil {
+		if err := seedTaskTestRequestBody(c, request, payload); err != nil {
 			return nil, err
 		}
 		info, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
@@ -700,12 +795,12 @@ func genChannelTestRelayInfo(c *gin.Context, relayFormat types.RelayFormat, requ
 	return relaycommon.GenRelayInfo(c, relayFormat, relayRequest, nil)
 }
 
-func seedTaskTestRequestBody(c *gin.Context, request any) error {
+func seedTaskTestRequestBody(c *gin.Context, request any, payload json.RawMessage) error {
 	taskReq, ok := request.(relaycommon.TaskSubmitReq)
 	if !ok {
 		return errors.New("request is not a task request")
 	}
-	body, err := common.Marshal(taskReq)
+	body, err := buildChannelTestTaskPayload(taskReq.Model, request, payload)
 	if err != nil {
 		return err
 	}
@@ -719,6 +814,25 @@ func seedTaskTestRequestBody(c *gin.Context, request any) error {
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Set("task_request", taskReq)
 	return nil
+}
+
+func buildChannelTestTaskPayload(modelName string, request any, payload json.RawMessage) ([]byte, error) {
+	payload = bytes.TrimSpace(payload)
+	if len(payload) == 0 || string(payload) == "null" {
+		return common.Marshal(request)
+	}
+	if payload[0] != '{' {
+		return nil, errors.New("request payload must be a JSON object")
+	}
+
+	var raw map[string]any
+	if err := common.Unmarshal(payload, &raw); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(gjson.GetBytes(payload, "model").String()) == "" && strings.TrimSpace(modelName) != "" {
+		raw["model"] = strings.TrimSpace(modelName)
+	}
+	return common.Marshal(raw)
 }
 
 func runTaskChannelTest(c *gin.Context, channel *model.Channel, info *relaycommon.RelayInfo, request any, tik time.Time) testResult {
@@ -984,6 +1098,19 @@ func getChannelTestPayloadModel(payload json.RawMessage) string {
 	return strings.TrimSpace(gjson.GetBytes(payload, "model").String())
 }
 
+func getChannelTestPayloadTaskID(payload json.RawMessage) string {
+	payload = bytes.TrimSpace(payload)
+	if len(payload) == 0 || payload[0] != '{' {
+		return ""
+	}
+	for _, path := range []string{"task_id", "taskId", "id"} {
+		if value := strings.TrimSpace(gjson.GetBytes(payload, path).String()); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func buildChannelTestRequest(model string, endpointType string, channel *model.Channel, isStream bool, relayFormat types.RelayFormat, payload json.RawMessage) (any, error) {
 	payload = bytes.TrimSpace(payload)
 	if len(payload) == 0 || string(payload) == "null" {
@@ -1080,6 +1207,20 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 				Prompt:   "a short product video",
 				Size:     channelTestVideoSize(model),
 				Duration: 4,
+			}
+		}
+		if endpointType == channelTestEndpointSanbaoImage {
+			return relaycommon.TaskSubmitReq{
+				Model:  model,
+				Prompt: "a commercial poster with cinematic light",
+			}
+		}
+		if endpointType == channelTestEndpointSanbaoVideo || endpointType == channelTestEndpointSanbaoUpload {
+			return relaycommon.TaskSubmitReq{
+				Model:      model,
+				Prompt:     "a short product video",
+				Resolution: "720p",
+				Duration:   5,
 			}
 		}
 		switch constant.EndpointType(endpointType) {

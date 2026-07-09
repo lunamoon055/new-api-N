@@ -1051,6 +1051,15 @@ func GetChannelsByType(startIdx int, num int, idSort bool, channelType int) ([]*
 	return channels, err
 }
 
+func GetEnabledChannelsByTypeWithKeys(channelType int) ([]*Channel, error) {
+	var channels []*Channel
+	err := DB.
+		Where("type = ? AND status = ?", channelType, common.ChannelStatusEnabled).
+		Order("priority desc").
+		Find(&channels).Error
+	return channels, err
+}
+
 // Count channels of specific type
 func CountChannelsByType(channelType int) (int64, error) {
 	var count int64

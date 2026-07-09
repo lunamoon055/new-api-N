@@ -28,6 +28,11 @@ export type ChannelTestEndpointType =
   | 'image-generation'
   | 'openai-video'
   | 'openai-video-async'
+  | 'sanbao-image'
+  | 'sanbao-video'
+  | 'sanbao-upload'
+  | 'sanbao-image-poll'
+  | 'sanbao-video-poll'
   | 'embeddings'
 
 export type ChannelTestTemplate = {
@@ -146,6 +151,78 @@ export const CHANNEL_TEST_TEMPLATES: ChannelTestTemplate[] = [
       prompt: 'a mountain at sunrise',
       size: '720x1280',
       duration: 4,
+    },
+  },
+  {
+    endpointType: 'sanbao-image',
+    labelKey: 'Sanbao Image Generation',
+    descriptionKey:
+      'Test Sanbao image generation with aspect ratio, references, quality, and concurrency',
+    defaultModel: 'gpt-image2',
+    supportsStream: false,
+    payload: {
+      model: '{{model}}',
+      prompt: '一张未来城市夜景海报，霓虹灯，电影感，细节丰富',
+      aspect_ratio: '16:9',
+      images: ['https://example.com/reference.png'],
+      quality: 'high',
+      concurrency: 1,
+    },
+  },
+  {
+    endpointType: 'sanbao-video',
+    labelKey: 'Sanbao Video Generation',
+    descriptionKey:
+      'Test Sanbao video generation with ratio, resolution, duration, and references',
+    defaultModel: 'sd2_full',
+    supportsStream: false,
+    payload: {
+      model: '{{model}}',
+      prompt: '@参考图片1 生成一个电影感产品短视频',
+      ratio: '9:16',
+      resolution: '720p',
+      duration: 5,
+      concurrency: 1,
+      reference: 'all',
+      images: ['https://example.com/reference.png'],
+    },
+  },
+  {
+    endpointType: 'sanbao-upload',
+    labelKey: 'Sanbao Reference Upload',
+    descriptionKey:
+      'Submit a Sanbao task that uploads referenced media through the raw upload endpoint',
+    defaultModel: 'sd2_full',
+    supportsStream: false,
+    payload: {
+      model: '{{model}}',
+      prompt: '@参考图片1 使用参考素材生成一个短视频',
+      ratio: '9:16',
+      resolution: '720p',
+      duration: 5,
+      concurrency: 1,
+      reference: 'all',
+      images: ['https://example.com/reference.png'],
+    },
+  },
+  {
+    endpointType: 'sanbao-image-poll',
+    labelKey: 'Sanbao Image Polling',
+    descriptionKey: 'Poll a Sanbao image task by local task id',
+    defaultModel: 'gpt-image2',
+    supportsStream: false,
+    payload: {
+      task_id: 'task_xxx',
+    },
+  },
+  {
+    endpointType: 'sanbao-video-poll',
+    labelKey: 'Sanbao Video Polling',
+    descriptionKey: 'Poll a Sanbao video task by local task id',
+    defaultModel: 'sd2_full',
+    supportsStream: false,
+    payload: {
+      task_id: 'task_xxx',
     },
   },
   {
