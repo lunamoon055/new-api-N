@@ -30,7 +30,13 @@ import {
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
 import { isTokenBasedModel } from '../lib/model-helpers'
-import { formatPrice, formatRequestPrice } from '../lib/price'
+import {
+  formatPrice,
+  formatRequestPrice,
+  getVideoResolutionTierPriceEntries,
+  getVideoResolutionTierShortUnitLabelKey,
+  isVideoResolutionTierModel,
+} from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
 import { ModelPerfBadge, type ModelPerfBadgeData } from './model-perf-badge'
 
@@ -52,6 +58,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const usdExchangeRate = props.usdExchangeRate ?? 1
   const showRechargePrice = props.showRechargePrice ?? false
   const isTokenBased = isTokenBasedModel(props.model)
+  const isVideoTier = isVideoResolutionTierModel(props.model)
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const tags = parseTags(props.model.tags)
   const groups = props.model.enable_groups || []
@@ -73,6 +80,16 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         groupRatioMultiplier: getDynamicDisplayGroupRatio(props.model),
       })
     : null
+  const videoTierEntries = isVideoTier
+    ? getVideoResolutionTierPriceEntries(props.model, {
+        showWithRecharge: showRechargePrice,
+        priceRate,
+        usdExchangeRate,
+      })
+    : []
+  const videoTierUnitLabel = isVideoTier
+    ? t(getVideoResolutionTierShortUnitLabelKey(props.model))
+    : ''
 
   const primaryGroup = groups[0]
   const bottomTags = [...endpoints.slice(0, 2), ...tags.slice(0, 2)]
@@ -108,7 +125,27 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               {props.model.model_name}
             </h3>
             <div className='mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs sm:mt-1 sm:gap-x-3'>
-              {dynamicSummary ? (
+              {isVideoTier ? (
+                <>
+                  {videoTierEntries.slice(0, 2).map((entry) => (
+                    <span
+                      key={entry.resolution}
+                      className='text-muted-foreground whitespace-nowrap'
+                    >
+                      {entry.resolution}{' '}
+                      <span className='text-foreground font-mono font-semibold'>
+                        {entry.formatted}
+                      </span>
+                      /{videoTierUnitLabel}
+                    </span>
+                  ))}
+                  {videoTierEntries.length > 2 && (
+                    <span className='text-muted-foreground/60 whitespace-nowrap'>
+                      +{videoTierEntries.length - 2}
+                    </span>
+                  )}
+                </>
+              ) : dynamicSummary ? (
                 dynamicSummary.isSpecialExpression ? (
                   <span className='min-w-0'>
                     <span className='text-amber-700 dark:text-amber-300'>
@@ -193,8 +230,8 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                       priceRate,
                       usdExchangeRate
                     )}
-                  </span>{' '}
-                  / {t('request')}
+                  </span>
+                  /{t('times')}
                 </span>
               )}
             </div>
@@ -234,9 +271,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               {primaryGroup} {t('Groups')}
             </span>
           )}
-          <span className='text-muted-foreground text-xs font-medium'>
-            {isTokenBased ? t('Token-based') : t('Per Request')}
-          </span>
+          {!isVideoTier && (
+            <span className='text-muted-foreground text-xs font-medium'>
+              {isTokenBased ? t('Token-based') : t('Per Request')}
+            </span>
+          )}
           {isDynamicPricing && (
             <StatusBadge
               label={t('Dynamic Pricing')}
@@ -254,9 +293,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               {item}
             </span>
           ))}
-          <span className='text-muted-foreground/50 text-xs'>
-            {tokenUnitLabel}
-          </span>
+          {!isVideoTier && (
+            <span className='text-muted-foreground/50 text-xs'>
+              {tokenUnitLabel}
+            </span>
+          )}
           {hiddenCount > 0 && (
             <span className='text-muted-foreground/40 text-xs'>
               +{hiddenCount}

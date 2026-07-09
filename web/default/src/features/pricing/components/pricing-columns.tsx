@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/tooltip'
 import { DataTableColumnHeader } from '@/components/data-table/column-header'
 import { GroupBadge } from '@/components/group-badge'
-import { DEFAULT_TOKEN_UNIT, QUOTA_TYPE_VALUES } from '../constants'
+import { DEFAULT_TOKEN_UNIT } from '../constants'
 import {
   getDynamicDisplayGroupRatio,
   getDynamicPricingSummary,
@@ -37,6 +37,9 @@ import { isTokenBasedModel } from '../lib/model-helpers'
 import {
   formatPrice,
   formatRequestPrice,
+  getVideoResolutionTierPriceEntries,
+  getVideoResolutionTierShortUnitLabelKey,
+  isVideoResolutionTierModel,
   stripTrailingZeros,
 } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
@@ -139,10 +142,16 @@ export function usePricingColumns(
       meta: { label: t('Type') },
       header: t('Type'),
       cell: ({ row }) => {
-        const isTokenBased = row.original.quota_type === QUOTA_TYPE_VALUES.TOKEN
+        const model = row.original
+        const isVideoTier = isVideoResolutionTierModel(model)
+        const isTokenBased = isTokenBasedModel(model)
         return (
           <span className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
-            {isTokenBased ? t('Token') : t('Request')}
+            {isVideoTier
+              ? t('Video')
+              : isTokenBased
+                ? t('Token')
+                : t('Request')}
           </span>
         )
       },
@@ -159,6 +168,40 @@ export function usePricingColumns(
       ),
       cell: ({ row }) => {
         const model = row.original
+        const isVideoTier = isVideoResolutionTierModel(model)
+        const videoTierEntries = isVideoTier
+          ? getVideoResolutionTierPriceEntries(model, {
+              showWithRecharge: showRechargePrice,
+              priceRate,
+              usdExchangeRate,
+            }).slice(0, 2)
+          : []
+        const videoTierUnit = isVideoTier
+          ? t(getVideoResolutionTierShortUnitLabelKey(model))
+          : ''
+
+        if (isVideoTier) {
+          return (
+            <div className='min-w-[180px]'>
+              <div className='mt-0.5 space-y-0.5'>
+                {videoTierEntries.map((entry) => (
+                  <div
+                    key={entry.resolution}
+                    className='flex items-center justify-between gap-3 text-xs'
+                  >
+                    <span className='text-muted-foreground'>
+                      {entry.resolution}
+                    </span>
+                    <span className='font-mono tabular-nums'>
+                      {stripTrailingZeros(entry.formatted)}/{videoTierUnit}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        }
+
         const dynamicSummary = getDynamicPricingSummary(model, {
           tokenUnit,
           showRechargePrice,
@@ -267,7 +310,7 @@ export function usePricingColumns(
           <div className='min-w-[100px]'>
             <span className='font-mono text-sm tabular-nums'>{price}</span>
             <div className='text-muted-foreground/50 text-[10px]'>
-              / {t('request')}
+              / {t('times')}
             </div>
           </div>
         )

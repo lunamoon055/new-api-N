@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckSquare, RefreshCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -72,6 +72,7 @@ type UpstreamRatioSyncProps = {
     'billing_setting.billing_mode': string
     'billing_setting.billing_expr': string
     'billing_setting.video_billing_mode': string
+    'billing_setting.video_resolution_prices': string
   }
 }
 
@@ -165,20 +166,15 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
   // would otherwise produce a new array reference each render).
   const channels = useMemo(() => channelsData?.data ?? [], [channelsData?.data])
 
-  useEffect(() => {
-    if (channels.length === 0) return
-    setChannelEndpoints((prev) => {
-      let mutated = false
-      const next = { ...prev }
-      for (const channel of channels) {
-        if (!next[channel.id]) {
-          next[channel.id] = getDefaultEndpointForChannel(channel)
-          mutated = true
-        }
+  const resolvedChannelEndpoints = useMemo(() => {
+    const next = { ...channelEndpoints }
+    for (const channel of channels) {
+      if (!next[channel.id]) {
+        next[channel.id] = getDefaultEndpointForChannel(channel)
       }
-      return mutated ? next : prev
-    })
-  }, [channels])
+    }
+    return next
+  }, [channelEndpoints, channels])
 
   const fetchMutation = useMutation({
     mutationFn: fetchUpstreamRatios,
@@ -262,7 +258,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
       id: ch.id,
       name: ch.name,
       base_url: ch.base_url,
-      endpoint: channelEndpoints[ch.id] || DEFAULT_ENDPOINT,
+      endpoint: resolvedChannelEndpoints[ch.id] || DEFAULT_ENDPOINT,
     }))
 
     fetchMutation.mutate({ upstreams, timeout: 10 })
@@ -354,6 +350,9 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
       'billing_setting.video_billing_mode': parseJsonRecord<string>(
         modelRatios['billing_setting.video_billing_mode']
       ),
+      'billing_setting.video_resolution_prices': parseJsonRecord<
+        Record<string, number>
+      >(modelRatios['billing_setting.video_resolution_prices']),
     }
   }, [modelRatios])
 
@@ -379,7 +378,10 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
 
   const performSync = useCallback(
     async (currentRatios: ParsedRatios): Promise<boolean> => {
-      const finalRatios: Record<string, Record<string, number | string>> = {
+      const finalRatios: Record<
+        string,
+        Record<string, number | string | Record<string, number>>
+      > = {
         ModelRatio: { ...currentRatios.ModelRatio },
         CompletionRatio: { ...currentRatios.CompletionRatio },
         CacheRatio: { ...currentRatios.CacheRatio },
@@ -396,6 +398,9 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         },
         'billing_setting.video_billing_mode': {
           ...currentRatios['billing_setting.video_billing_mode'],
+        },
+        'billing_setting.video_resolution_prices': {
+          ...currentRatios['billing_setting.video_resolution_prices'],
         },
       }
 
@@ -560,7 +565,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         channels={channels}
         selectedChannelIds={selectedChannelIds}
         onSelectedChannelIdsChange={setSelectedChannelIds}
-        channelEndpoints={channelEndpoints}
+        channelEndpoints={resolvedChannelEndpoints}
         onChannelEndpointsChange={setChannelEndpoints}
         onConfirm={handleConfirmChannelSelection}
       />

@@ -294,6 +294,18 @@ func buildCreationModelCost(item model.Pricing, groupRatio float64) *dto.Creatio
 	if groupRatio < 0 {
 		groupRatio = 1
 	}
+	videoBillingMode := billing_setting.GetVideoBillingMode(item.ModelName)
+	if billing_setting.IsVideoResolutionTierMode(videoBillingMode) {
+		if prices, ok := billing_setting.GetVideoResolutionPrices(item.ModelName); ok {
+			return &dto.CreationModelCost{
+				BillingMode:           videoBillingMode,
+				VideoBillingMode:      videoBillingMode,
+				VideoResolutionPrices: buildCreationVideoResolutionPrices(prices, groupRatio),
+				VideoResolutionQuotas: buildCreationVideoResolutionQuotas(prices, groupRatio),
+				GroupRatio:            groupRatio,
+			}
+		}
+	}
 	if item.BillingMode == billing_setting.BillingModeTieredExpr && strings.TrimSpace(item.BillingExpr) != "" {
 		return &dto.CreationModelCost{
 			BillingMode: creationCostModeDynamic,
@@ -319,6 +331,30 @@ func buildCreationModelCost(item model.Pricing, groupRatio float64) *dto.Creatio
 		OutputPricePerMillion: &outputPrice,
 		GroupRatio:            groupRatio,
 	}
+}
+
+func buildCreationVideoResolutionPrices(prices map[string]float64, groupRatio float64) map[string]float64 {
+	result := make(map[string]float64, len(prices))
+	for resolution, price := range prices {
+		normalizedResolution := billing_setting.NormalizeVideoResolution(resolution)
+		if normalizedResolution == "" {
+			continue
+		}
+		result[normalizedResolution] = price * groupRatio
+	}
+	return result
+}
+
+func buildCreationVideoResolutionQuotas(prices map[string]float64, groupRatio float64) map[string]int {
+	result := make(map[string]int, len(prices))
+	for resolution, price := range prices {
+		normalizedResolution := billing_setting.NormalizeVideoResolution(resolution)
+		if normalizedResolution == "" {
+			continue
+		}
+		result[normalizedResolution] = int(price * common.QuotaPerUnit * groupRatio)
+	}
+	return result
 }
 
 func getCreationModelCategories() map[string]string {

@@ -48,6 +48,8 @@ export const QUOTA_TYPES = {
   ALL: 'all',
   TOKEN: 'token',
   REQUEST: 'request',
+  TIERED_SECONDS: 'tiered_seconds',
+  TIERED_REQUEST: 'tiered_request',
 } as const
 
 export type QuotaTypeOption = (typeof QUOTA_TYPES)[keyof typeof QUOTA_TYPES]
@@ -60,6 +62,8 @@ export function getQuotaTypeLabels(
     [QUOTA_TYPES.ALL]: t('All Models'),
     [QUOTA_TYPES.TOKEN]: t('Token-based'),
     [QUOTA_TYPES.REQUEST]: t('Per Request'),
+    [QUOTA_TYPES.TIERED_SECONDS]: t('Tiered by second'),
+    [QUOTA_TYPES.TIERED_REQUEST]: t('Tiered by request'),
   }
 }
 

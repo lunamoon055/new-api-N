@@ -39,6 +39,7 @@ type CreationSidebarProps = {
   mode: CreationMode
   models: CreationModel[]
   selectedModel?: CreationModel
+  selectedResolution?: string
   modeCounts: Record<CreationMode, number>
   loading: boolean
   error: boolean
@@ -140,6 +141,11 @@ export function CreationSidebar(props: CreationSidebarProps) {
                   model={model}
                   mode={props.mode}
                   active={props.selectedModel?.id === model.id}
+                  selectedResolution={
+                    props.selectedModel?.id === model.id
+                      ? props.selectedResolution
+                      : undefined
+                  }
                   onClick={() => props.onModelChange(model)}
                 />
               ))
@@ -208,10 +214,16 @@ function ModelButton(props: {
   model: CreationModel
   mode: CreationMode
   active: boolean
+  selectedResolution?: string
   onClick: () => void
 }) {
   const { t } = useTranslation()
-  const costLabel = formatCreationModelCost(props.model.cost, t, props.mode)
+  const costLabel = formatCreationModelCost(
+    props.model.cost,
+    t,
+    props.mode,
+    props.selectedResolution
+  )
   const tagLabels: Record<string, string> = {
     advanced: t('Advanced'),
     chat: t('Chat'),

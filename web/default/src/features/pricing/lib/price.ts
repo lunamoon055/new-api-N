@@ -24,6 +24,21 @@ import type { PricingModel, TokenUnit, PriceType } from '../types'
 // Price Calculation Utilities
 // ----------------------------------------------------------------------------
 
+const VIDEO_RESOLUTION_PRICE_ORDER = ['480p', '720p', '1080p', '4k'] as const
+
+type VideoResolutionTierPriceOptions = {
+  showWithRecharge?: boolean
+  priceRate?: number
+  usdExchangeRate?: number
+  groupRatioMultiplier?: number
+}
+
+export type VideoResolutionTierPriceEntry = {
+  resolution: string
+  price: number
+  formatted: string
+}
+
 /**
  * Strip trailing zeros from formatted price string while preserving currency symbols
  */
@@ -119,6 +134,87 @@ function calculateTokenPrice(
 
 function hasRatio(value: number | null | undefined): boolean {
   return value !== undefined && value !== null && Number.isFinite(Number(value))
+}
+
+export function isVideoResolutionTierModel(model: PricingModel): boolean {
+  return (
+    (model.video_billing_mode === 'tiered_seconds' ||
+      model.video_billing_mode === 'tiered_request') &&
+    getVideoResolutionPriceKeys(model).length > 0
+  )
+}
+
+export function getVideoResolutionTierUnitLabelKey(
+  model: PricingModel
+): string {
+  return model.video_billing_mode === 'tiered_seconds'
+    ? 'per second'
+    : 'per request'
+}
+
+export function getVideoResolutionTierShortUnitLabelKey(
+  model: PricingModel
+): string {
+  return model.video_billing_mode === 'tiered_seconds' ? 'seconds' : 'times'
+}
+
+export function getVideoResolutionTierModeLabelKey(
+  model: PricingModel
+): string {
+  return model.video_billing_mode === 'tiered_seconds'
+    ? 'Tiered by second'
+    : 'Tiered by request'
+}
+
+function getVideoResolutionPriceKeys(model: PricingModel): string[] {
+  const prices = model.video_resolution_prices ?? {}
+  const orderedKeys = VIDEO_RESOLUTION_PRICE_ORDER.filter((resolution) =>
+    hasRatio(prices[resolution])
+  )
+  const orderedKeySet = new Set<string>(VIDEO_RESOLUTION_PRICE_ORDER)
+  const extraKeys = Object.keys(prices)
+    .filter((resolution) => !orderedKeySet.has(resolution))
+    .filter((resolution) => hasRatio(prices[resolution]))
+    .sort((a, b) => a.localeCompare(b))
+
+  return [...orderedKeys, ...extraKeys]
+}
+
+export function getVideoResolutionTierPriceEntries(
+  model: PricingModel,
+  options: VideoResolutionTierPriceOptions = {}
+): VideoResolutionTierPriceEntry[] {
+  if (!isVideoResolutionTierModel(model)) return []
+
+  const enableGroups = Array.isArray(model.enable_groups)
+    ? model.enable_groups
+    : []
+  const groupRatio = model.group_ratio || {}
+  const multiplier =
+    options.groupRatioMultiplier ?? getMinGroupRatio(enableGroups, groupRatio)
+  const showWithRecharge = options.showWithRecharge ?? false
+  const priceRate = options.priceRate ?? 1
+  const usdExchangeRate = options.usdExchangeRate ?? 1
+
+  return getVideoResolutionPriceKeys(model).map((resolution) => {
+    const basePrice = Number(model.video_resolution_prices?.[resolution] ?? 0)
+    const price = applyRechargeRate(
+      basePrice * multiplier,
+      showWithRecharge,
+      priceRate,
+      usdExchangeRate
+    )
+
+    return {
+      resolution,
+      price,
+      formatted: formatCurrencyFromUSD(price, {
+        digitsLarge: 4,
+        digitsSmall: 4,
+        abbreviate: false,
+      }),
+    }
+  })
 }
 
 /**

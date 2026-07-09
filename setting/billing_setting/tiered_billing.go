@@ -10,27 +10,32 @@ import (
 )
 
 const (
-	BillingModeRatio        = "ratio"
-	BillingModeTieredExpr   = "tiered_expr"
-	BillingModeField        = "billing_mode"
-	BillingExprField        = "billing_expr"
-	VideoBillingModeField   = "video_billing_mode"
-	VideoBillingModeDynamic = "dynamic"
-	VideoBillingModeFixed   = "fixed"
+	BillingModeRatio              = "ratio"
+	BillingModeTieredExpr         = "tiered_expr"
+	BillingModeField              = "billing_mode"
+	BillingExprField              = "billing_expr"
+	VideoBillingModeField         = "video_billing_mode"
+	VideoResolutionPricesField    = "video_resolution_prices"
+	VideoBillingModeDynamic       = "dynamic"
+	VideoBillingModeFixed         = "fixed"
+	VideoBillingModeTieredSeconds = "tiered_seconds"
+	VideoBillingModeTieredRequest = "tiered_request"
 )
 
 // BillingSetting is managed by config.GlobalConfig.Register.
-// DB keys: billing_setting.billing_mode, billing_setting.billing_expr, billing_setting.video_billing_mode
+// DB keys: billing_setting.billing_mode, billing_setting.billing_expr, billing_setting.video_billing_mode, billing_setting.video_resolution_prices
 type BillingSetting struct {
-	BillingMode      map[string]string `json:"billing_mode"`
-	BillingExpr      map[string]string `json:"billing_expr"`
-	VideoBillingMode map[string]string `json:"video_billing_mode"`
+	BillingMode           map[string]string             `json:"billing_mode"`
+	BillingExpr           map[string]string             `json:"billing_expr"`
+	VideoBillingMode      map[string]string             `json:"video_billing_mode"`
+	VideoResolutionPrices map[string]map[string]float64 `json:"video_resolution_prices"`
 }
 
 var billingSetting = BillingSetting{
-	BillingMode:      make(map[string]string),
-	BillingExpr:      make(map[string]string),
-	VideoBillingMode: make(map[string]string),
+	BillingMode:           make(map[string]string),
+	BillingExpr:           make(map[string]string),
+	VideoBillingMode:      make(map[string]string),
+	VideoResolutionPrices: make(map[string]map[string]float64),
 }
 
 func init() {
@@ -52,8 +57,38 @@ func NormalizeVideoBillingMode(mode string) string {
 	switch strings.TrimSpace(mode) {
 	case VideoBillingModeFixed:
 		return VideoBillingModeFixed
+	case VideoBillingModeTieredSeconds:
+		return VideoBillingModeTieredSeconds
+	case VideoBillingModeTieredRequest:
+		return VideoBillingModeTieredRequest
 	default:
 		return VideoBillingModeDynamic
+	}
+}
+
+func IsVideoResolutionTierMode(mode string) bool {
+	switch NormalizeVideoBillingMode(mode) {
+	case VideoBillingModeTieredSeconds, VideoBillingModeTieredRequest:
+		return true
+	default:
+		return false
+	}
+}
+
+func NormalizeVideoResolution(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized = strings.ReplaceAll(normalized, " ", "")
+	switch normalized {
+	case "480", "480p":
+		return "480p"
+	case "720", "720p":
+		return "720p"
+	case "1080", "1080p":
+		return "1080p"
+	case "4k", "2160", "2160p":
+		return "4k"
+	default:
+		return ""
 	}
 }
 
@@ -62,6 +97,22 @@ func GetVideoBillingMode(model string) string {
 		return NormalizeVideoBillingMode(mode)
 	}
 	return VideoBillingModeDynamic
+}
+
+func GetVideoResolutionPrices(model string) (map[string]float64, bool) {
+	prices, ok := billingSetting.VideoResolutionPrices[model]
+	if !ok || len(prices) == 0 {
+		return nil, false
+	}
+	copied := make(map[string]float64, len(prices))
+	for resolution, price := range prices {
+		normalizedResolution := NormalizeVideoResolution(resolution)
+		if normalizedResolution == "" {
+			continue
+		}
+		copied[normalizedResolution] = price
+	}
+	return copied, len(copied) > 0
 }
 
 func GetBillingExpr(model string) (string, bool) {
@@ -81,8 +132,20 @@ func GetVideoBillingModeCopy() map[string]string {
 	return lo.Assign(billingSetting.VideoBillingMode)
 }
 
+func GetVideoResolutionPricesCopy() map[string]map[string]float64 {
+	copied := make(map[string]map[string]float64, len(billingSetting.VideoResolutionPrices))
+	for model, prices := range billingSetting.VideoResolutionPrices {
+		modelPrices := make(map[string]float64, len(prices))
+		for resolution, price := range prices {
+			modelPrices[resolution] = price
+		}
+		copied[model] = modelPrices
+	}
+	return copied
+}
+
 func GetPricingSyncData(base map[string]any) map[string]any {
-	extra := make(map[string]any, 3)
+	extra := make(map[string]any, 4)
 	if modes := GetBillingModeCopy(); len(modes) > 0 {
 		extra[BillingModeField] = modes
 	}
@@ -91,6 +154,9 @@ func GetPricingSyncData(base map[string]any) map[string]any {
 	}
 	if modes := GetVideoBillingModeCopy(); len(modes) > 0 {
 		extra[VideoBillingModeField] = modes
+	}
+	if prices := GetVideoResolutionPricesCopy(); len(prices) > 0 {
+		extra[VideoResolutionPricesField] = prices
 	}
 	return lo.Assign(base, extra)
 }

@@ -30,11 +30,19 @@ export type CreationModel = {
 }
 
 export type CreationModelCost = {
-  billing_mode: 'per_token' | 'per_request' | 'dynamic'
+  billing_mode:
+    | 'per_token'
+    | 'per_request'
+    | 'dynamic'
+    | 'tiered_seconds'
+    | 'tiered_request'
   input_price_per_million?: number
   output_price_per_million?: number
   request_price?: number
   request_quota?: number
+  video_billing_mode?: 'dynamic' | 'fixed' | 'tiered_seconds' | 'tiered_request'
+  video_resolution_prices?: Record<string, number>
+  video_resolution_quotas?: Record<string, number>
   group_ratio?: number
 }
 
@@ -77,11 +85,7 @@ export type CreationCatalogResponse = {
 export type CreationView = 'preview' | 'assets' | 'history'
 
 export type CreationResultStatus =
-  | 'queued'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'unknown'
+  'queued' | 'processing' | 'completed' | 'failed' | 'unknown'
 
 export type CreationResult = {
   mode: CreationMode

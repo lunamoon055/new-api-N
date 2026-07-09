@@ -67,6 +67,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { combineBillingExpr } from '@/features/pricing/lib/billing-expr'
 import { formatPricingNumber } from './pricing-format'
 import { TieredPricingEditor } from './tiered-pricing-editor'
+import {
+  EMPTY_VIDEO_RESOLUTION_PRICE_INPUT,
+  VIDEO_RESOLUTION_PRICE_KEYS,
+  buildVideoResolutionPricingData,
+  formatVideoResolutionPriceInput,
+  hasCompleteVideoResolutionPrices,
+  isVideoResolutionPricingMode,
+  normalizeVideoBillingMode,
+  type VideoBillingMode,
+  type VideoResolutionPriceInput,
+  type VideoResolutionPriceMap,
+  type VideoResolutionPricingMode,
+} from './video-resolution-pricing'
 
 const createModelPricingSchema = (t: (key: string) => string) =>
   z.object({
@@ -79,15 +92,17 @@ const createModelPricingSchema = (t: (key: string) => string) =>
     imageRatio: z.string().optional(),
     audioRatio: z.string().optional(),
     audioCompletionRatio: z.string().optional(),
-    videoBillingMode: z.enum(['dynamic', 'fixed']).optional(),
+    videoBillingMode: z
+      .enum(['dynamic', 'fixed', 'tiered_seconds', 'tiered_request'])
+      .optional(),
   })
 
 type ModelPricingFormValues = z.infer<
   ReturnType<typeof createModelPricingSchema>
 >
 
-type PricingMode = 'per-token' | 'per-request' | 'tiered_expr'
-type VideoBillingMode = 'dynamic' | 'fixed'
+type PricingMode =
+  'per-token' | 'per-request' | 'tiered_expr' | VideoResolutionPricingMode
 type LaneKey =
   | 'completion'
   | 'cache'
@@ -110,6 +125,7 @@ export type ModelRatioData = {
   billingExpr?: string
   requestRuleExpr?: string
   videoBillingMode?: VideoBillingMode
+  videoResolutionPrices?: VideoResolutionPriceMap
 }
 
 type ModelPricingSheetProps = {
@@ -214,10 +230,6 @@ function hasValue(value: unknown): boolean {
   )
 }
 
-function normalizeVideoBillingMode(value: unknown): VideoBillingMode {
-  return value === 'fixed' ? 'fixed' : 'dynamic'
-}
-
 function toNumberOrNull(value: unknown): number | null {
   if (!hasValue(value) && value !== 0) return null
   const num = Number(value)
@@ -277,16 +289,37 @@ function createInitialLaneState(data?: ModelRatioData | null) {
 
 function getModeLabel(mode: PricingMode) {
   if (mode === 'per-request') return 'Per-request'
+  if (mode === 'tiered_seconds') return 'Tiered by second'
+  if (mode === 'tiered_request') return 'Tiered by request'
   if (mode === 'tiered_expr') return 'Expression'
   return 'Per-token'
+}
+
+function getVideoBillingModePreviewLabel(mode: VideoBillingMode) {
+  if (mode === 'tiered_seconds') return 'Tiered by second'
+  if (mode === 'tiered_request') return 'Tiered by request'
+  if (mode === 'fixed') return 'Fixed per request'
+  return 'By duration/spec'
 }
 
 function getModeBadgeVariant(
   mode: PricingMode
 ): 'default' | 'secondary' | 'outline' {
   if (mode === 'per-request') return 'secondary'
+  if (isVideoResolutionPricingMode(mode)) return 'secondary'
   if (mode === 'tiered_expr') return 'default'
   return 'outline'
+}
+
+function formatResolutionPriceSummary(
+  prices: VideoResolutionPriceInput,
+  t: (key: string) => string
+) {
+  const summary = VIDEO_RESOLUTION_PRICE_KEYS.map((resolution) => {
+    const value = prices[resolution]
+    return `${resolution}: ${value ? `$${value}` : t('Empty')}`
+  }).join('\n')
+  return summary || t('Empty')
 }
 
 function buildPreviewRows(
@@ -295,6 +328,7 @@ function buildPreviewRows(
   billingExpr: string,
   requestRuleExpr: string,
   videoBillingMode: VideoBillingMode,
+  videoResolutionPrices: VideoResolutionPriceInput,
   promptPrice: string,
   lanePrices: Record<LaneKey, string>,
   laneEnabled: Record<LaneKey, boolean>,
@@ -313,6 +347,22 @@ function buildPreviewRows(
     ]
   }
 
+  if (isVideoResolutionPricingMode(mode)) {
+    return [
+      {
+        key: 'videoBillingMode',
+        label: t('Video billing mode'),
+        value: t(getVideoBillingModePreviewLabel(mode)),
+      },
+      {
+        key: 'videoResolutionPrices',
+        label: t('Video resolution prices'),
+        value: formatResolutionPriceSummary(videoResolutionPrices, t),
+        multiline: true,
+      },
+    ]
+  }
+
   if (mode === 'per-request') {
     return [
       {
@@ -322,8 +372,8 @@ function buildPreviewRows(
       },
       {
         key: 'videoBillingMode',
-        label: 'billing_setting.video_billing_mode',
-        value: videoBillingMode,
+        label: t('Video billing mode'),
+        value: t(getVideoBillingModePreviewLabel(videoBillingMode)),
       },
     ]
   }
@@ -435,6 +485,10 @@ export function ModelPricingEditorPanel({
   const [laneEnabled, setLaneEnabled] = useState<Record<LaneKey, boolean>>({
     ...EMPTY_LANE_ENABLED,
   })
+  const [videoResolutionPrices, setVideoResolutionPrices] =
+    useState<VideoResolutionPriceInput>({
+      ...EMPTY_VIDEO_RESOLUTION_PRICE_INPUT,
+    })
   const [billingExpr, setBillingExpr] = useState('')
   const [requestRuleExpr, setRequestRuleExpr] = useState('')
   const [previewOpen, setPreviewOpen] = useState(true)
@@ -473,11 +527,16 @@ export function ModelPricingEditorPanel({
         videoBillingMode: normalizeVideoBillingMode(editData.videoBillingMode),
       })
       setPricingMode(
-        editData.billingMode === 'tiered_expr'
-          ? 'tiered_expr'
-          : editData.price
-            ? 'per-request'
-            : 'per-token'
+        isVideoResolutionPricingMode(editData.videoBillingMode)
+          ? editData.videoBillingMode
+          : editData.billingMode === 'tiered_expr'
+            ? 'tiered_expr'
+            : editData.price
+              ? 'per-request'
+              : 'per-token'
+      )
+      setVideoResolutionPrices(
+        formatVideoResolutionPriceInput(editData.videoResolutionPrices)
       )
       setBillingExpr(editData.billingExpr || '')
       setRequestRuleExpr(editData.requestRuleExpr || '')
@@ -495,6 +554,7 @@ export function ModelPricingEditorPanel({
         videoBillingMode: 'dynamic',
       })
       setPricingMode('per-token')
+      setVideoResolutionPrices({ ...EMPTY_VIDEO_RESOLUTION_PRICE_INPUT })
       setBillingExpr('')
       setRequestRuleExpr('')
     }
@@ -625,6 +685,17 @@ export function ModelPricingEditorPanel({
     }
   }
 
+  const handleVideoResolutionPriceChange = (
+    resolution: keyof VideoResolutionPriceInput,
+    value: string
+  ) => {
+    if (!numericDraftRegex.test(value)) return
+    setVideoResolutionPrices((current) => ({
+      ...current,
+      [resolution]: value,
+    }))
+  }
+
   const watchedValues = form.watch()
   const currentVideoBillingMode = normalizeVideoBillingMode(
     watchedValues.videoBillingMode
@@ -637,6 +708,7 @@ export function ModelPricingEditorPanel({
         billingExpr,
         requestRuleExpr,
         currentVideoBillingMode,
+        videoResolutionPrices,
         promptPrice,
         lanePrices,
         laneEnabled,
@@ -651,6 +723,7 @@ export function ModelPricingEditorPanel({
       requestRuleExpr,
       t,
       currentVideoBillingMode,
+      videoResolutionPrices,
       watchedValues,
     ]
   )
@@ -697,8 +770,25 @@ export function ModelPricingEditorPanel({
       nextWarnings.push(t('Audio output price requires an audio input price.'))
     }
 
+    if (
+      isVideoResolutionPricingMode(pricingMode) &&
+      !hasCompleteVideoResolutionPrices(videoResolutionPrices)
+    ) {
+      nextWarnings.push(
+        t('Resolution prices for 480p, 720p, 1080p, and 4K are required.')
+      )
+    }
+
     return nextWarnings
-  }, [editData, laneEnabled, lanePrices, pricingMode, promptPrice, t])
+  }, [
+    editData,
+    laneEnabled,
+    lanePrices,
+    pricingMode,
+    promptPrice,
+    t,
+    videoResolutionPrices,
+  ])
 
   const handleSubmit = (values: ModelPricingFormValues) => {
     if (
@@ -722,6 +812,30 @@ export function ModelPricingEditorPanel({
       form.setError('audioRatio', {
         message: t('Audio output price requires an audio input price.'),
       })
+      return
+    }
+
+    if (
+      isVideoResolutionPricingMode(pricingMode) &&
+      !hasCompleteVideoResolutionPrices(videoResolutionPrices)
+    ) {
+      form.setError('price', {
+        message: t(
+          'Resolution prices for 480p, 720p, 1080p, and 4K are required.'
+        ),
+      })
+      return
+    }
+
+    if (isVideoResolutionPricingMode(pricingMode)) {
+      const data = buildVideoResolutionPricingData(
+        values.name.trim(),
+        pricingMode,
+        videoResolutionPrices
+      )
+      onSave(data)
+      form.reset()
+      onCancel?.()
       return
     }
 
@@ -820,10 +934,16 @@ export function ModelPricingEditorPanel({
               />
 
               <Tabs value={pricingMode} onValueChange={handleModeChange}>
-                <TabsList className='grid w-full grid-cols-3'>
+                <TabsList className='grid w-full grid-cols-5'>
                   <TabsTrigger value='per-token'>{t('Per-token')}</TabsTrigger>
                   <TabsTrigger value='per-request'>
                     {t('Per-request')}
+                  </TabsTrigger>
+                  <TabsTrigger value='tiered_seconds'>
+                    {t('Tiered by second')}
+                  </TabsTrigger>
+                  <TabsTrigger value='tiered_request'>
+                    {t('Tiered by request')}
                   </TabsTrigger>
                   <TabsTrigger value='tiered_expr'>
                     {t('Expression')}
@@ -955,6 +1075,28 @@ export function ModelPricingEditorPanel({
                 </TabsContent>
 
                 <TabsContent
+                  value='tiered_seconds'
+                  className='flex flex-col gap-5'
+                >
+                  <VideoResolutionPricingFields
+                    mode='tiered_seconds'
+                    prices={videoResolutionPrices}
+                    onChange={handleVideoResolutionPriceChange}
+                  />
+                </TabsContent>
+
+                <TabsContent
+                  value='tiered_request'
+                  className='flex flex-col gap-5'
+                >
+                  <VideoResolutionPricingFields
+                    mode='tiered_request'
+                    prices={videoResolutionPrices}
+                    onChange={handleVideoResolutionPriceChange}
+                  />
+                </TabsContent>
+
+                <TabsContent
                   value='tiered_expr'
                   className='flex flex-col gap-5'
                 >
@@ -991,17 +1133,17 @@ export function ModelPricingEditorPanel({
                     {previewRows.map((row) => (
                       <div
                         key={row.key}
-                        className='grid grid-cols-[140px_1fr] gap-3 border-b px-3 py-2 text-sm last:border-b-0'
+                        className='flex min-w-0 flex-col gap-1 border-b px-3 py-2.5 text-sm last:border-b-0'
                       >
-                        <span className='text-muted-foreground text-xs'>
+                        <span className='text-muted-foreground min-w-0 text-xs leading-5 [overflow-wrap:anywhere] break-words whitespace-normal'>
                           {row.label}
                         </span>
                         <span
                           className={cn(
-                            'min-w-0',
+                            'min-w-0 [overflow-wrap:anywhere]',
                             row.multiline
                               ? 'font-mono text-xs leading-5 break-words whitespace-pre-wrap'
-                              : 'truncate'
+                              : 'leading-5 break-words whitespace-normal'
                           )}
                         >
                           {row.value}
@@ -1103,5 +1245,52 @@ function PriceLane(props: {
           : t('Disabled lanes are omitted on save.')}
       </FieldDescription>
     </Field>
+  )
+}
+
+function VideoResolutionPricingFields(props: {
+  mode: VideoResolutionPricingMode
+  prices: VideoResolutionPriceInput
+  onChange: (resolution: keyof VideoResolutionPriceInput, value: string) => void
+}) {
+  const { t } = useTranslation()
+  const unitLabel =
+    props.mode === 'tiered_seconds' ? t('per second') : t('per request')
+
+  return (
+    <FieldGroup>
+      <Field>
+        <FieldLabel>{t('Resolution tier pricing')}</FieldLabel>
+        <FieldDescription>
+          {props.mode === 'tiered_seconds'
+            ? t(
+                'Charge the selected resolution price for every generated second.'
+              )
+            : t(
+                'Charge the selected resolution price once per generated request.'
+              )}
+        </FieldDescription>
+      </Field>
+
+      <div className='grid gap-3 sm:grid-cols-2'>
+        {VIDEO_RESOLUTION_PRICE_KEYS.map((resolution) => (
+          <Field key={resolution} className='rounded-lg border p-3'>
+            <FieldLabel>{resolution}</FieldLabel>
+            <InputGroup>
+              <InputGroupAddon>$</InputGroupAddon>
+              <InputGroupInput
+                inputMode='decimal'
+                value={props.prices[resolution]}
+                placeholder='0.01'
+                onChange={(event) =>
+                  props.onChange(resolution, event.target.value)
+                }
+              />
+              <InputGroupAddon align='inline-end'>{unitLabel}</InputGroupAddon>
+            </InputGroup>
+          </Field>
+        ))}
+      </div>
+    </FieldGroup>
   )
 }

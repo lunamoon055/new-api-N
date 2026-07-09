@@ -54,9 +54,15 @@ function createMemoryStorage(): CreationHistoryStorage {
 }
 
 describe('creation center session helpers', () => {
-  it('shows only the final quota for fixed-price video model costs', () => {
-    const t = (key: string) => key
+  const t = (key: string) =>
+    (
+      {
+        seconds: '秒',
+        times: '次',
+      } as Record<string, string>
+    )[key] ?? key
 
+  it('shows only the final quota for fixed-price video model costs', () => {
     const label = formatCreationModelCost(
       {
         billing_mode: 'per_request',
@@ -68,26 +74,83 @@ describe('creation center session helpers', () => {
       'video'
     )
 
-    expect(label).toBe(formatQuota(3.6))
+    expect(label).toBe(`${formatQuota(3.6)}/次`)
     expect(label).not.toContain('per request')
     expect(label).not.toContain('·')
   })
 
-  it('keeps detailed fixed-price labels for non-video model costs', () => {
-    const t = (key: string) => key
-
+  it('formats fixed-price image model costs as a compact per-request quota', () => {
     const label = formatCreationModelCost(
       {
         billing_mode: 'per_request',
         request_price: 0.0000072,
         request_quota: 3.6,
+        group_ratio: 0.9,
       },
       t,
       'image'
     )
 
-    expect(label).toContain('per request')
-    expect(label).toContain('·')
+    expect(label).toBe(`${formatQuota(3.6)}/次`)
+    expect(label).not.toContain('per request')
+    expect(label).not.toContain('Group')
+  })
+
+  it('shows selected video resolution tier quota with per-request unit', () => {
+    const label = formatCreationModelCost(
+      {
+        billing_mode: 'tiered_request',
+        video_billing_mode: 'tiered_request',
+        video_resolution_quotas: {
+          '480p': 6250,
+          '720p': 12500,
+        },
+        group_ratio: 1.25,
+      },
+      t,
+      'video',
+      '720p'
+    )
+
+    expect(label).toBe(`${formatQuota(12500)}/次 · 720p`)
+  })
+
+  it('shows selected video resolution tier quota with per-second unit', () => {
+    const label = formatCreationModelCost(
+      {
+        billing_mode: 'tiered_seconds',
+        video_billing_mode: 'tiered_seconds',
+        video_resolution_quotas: {
+          '480p': 0.45,
+          '720p': 0.9,
+        },
+      },
+      t,
+      'video',
+      '720p'
+    )
+
+    expect(label).toBe(`${formatQuota(0.9)}/秒 · 720p`)
+  })
+
+  it('summarizes video resolution tiers without showing tier mode names', () => {
+    const label = formatCreationModelCost(
+      {
+        billing_mode: 'tiered_seconds',
+        video_billing_mode: 'tiered_seconds',
+        video_resolution_quotas: {
+          '480p': 6250,
+          '720p': 12500,
+        },
+      },
+      t,
+      'video'
+    )
+
+    expect(label).toBe(
+      `480p ${formatQuota(6250)}/秒 · 720p ${formatQuota(12500)}/秒`
+    )
+    expect(label).not.toContain('Tiered by second')
   })
 
   it('maps video controls to async media request fields', () => {

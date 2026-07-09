@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { EXCLUDED_GROUPS, QUOTA_TYPE_VALUES } from '../constants'
 import type { PricingModel } from '../types'
+import { isVideoResolutionTierModel } from './price'
 
 // ----------------------------------------------------------------------------
 // Model Helper Utilities
@@ -50,5 +51,8 @@ export function replaceModelInPath(path: string, modelName: string): string {
  * Check if model is token-based pricing
  */
 export function isTokenBasedModel(model: PricingModel): boolean {
-  return model.quota_type === QUOTA_TYPE_VALUES.TOKEN
+  return (
+    model.quota_type === QUOTA_TYPE_VALUES.TOKEN &&
+    !isVideoResolutionTierModel(model)
+  )
 }

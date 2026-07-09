@@ -177,15 +177,20 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 			modelPrice = defaultPrice
 			usePrice = true
 		} else {
-			var ratioSuccess bool
-			var matchName string
-			modelRatio, ratioSuccess, matchName = ratio_setting.GetModelRatio(info.OriginModelName)
-			acceptUnsetRatio := false
-			if info.UserSetting.AcceptUnsetRatioModel {
-				acceptUnsetRatio = true
-			}
-			if !ratioSuccess && !acceptUnsetRatio {
-				return types.PriceData{}, modelPriceNotConfiguredError(matchName, info.UserId)
+			if hasVideoResolutionTierPriceConfig(info.OriginModelName) {
+				modelPrice = 0
+				usePrice = true
+			} else {
+				var ratioSuccess bool
+				var matchName string
+				modelRatio, ratioSuccess, matchName = ratio_setting.GetModelRatio(info.OriginModelName)
+				acceptUnsetRatio := false
+				if info.UserSetting.AcceptUnsetRatioModel {
+					acceptUnsetRatio = true
+				}
+				if !ratioSuccess && !acceptUnsetRatio {
+					return types.PriceData{}, modelPriceNotConfiguredError(matchName, info.UserId)
+				}
 			}
 		}
 	}
@@ -231,11 +236,22 @@ func HasModelBillingConfig(modelName string) bool {
 	if _, ok, _ := ratio_setting.GetModelRatio(modelName); ok {
 		return true
 	}
+	if hasVideoResolutionTierPriceConfig(modelName) {
+		return true
+	}
 	if billing_setting.GetBillingMode(modelName) != billing_setting.BillingModeTieredExpr {
 		return false
 	}
 	expr, ok := billing_setting.GetBillingExpr(modelName)
 	return ok && strings.TrimSpace(expr) != ""
+}
+
+func hasVideoResolutionTierPriceConfig(modelName string) bool {
+	if !billing_setting.IsVideoResolutionTierMode(billing_setting.GetVideoBillingMode(modelName)) {
+		return false
+	}
+	_, ok := billing_setting.GetVideoResolutionPrices(modelName)
+	return ok
 }
 
 func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {

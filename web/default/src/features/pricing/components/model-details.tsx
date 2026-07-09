@@ -61,7 +61,13 @@ import {
 import { parseTags } from '../lib/filters'
 import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
 import { inferModelMetadata } from '../lib/model-metadata'
-import { formatFixedPrice, formatGroupPrice } from '../lib/price'
+import {
+  formatFixedPrice,
+  formatGroupPrice,
+  getVideoResolutionTierPriceEntries,
+  getVideoResolutionTierShortUnitLabelKey,
+  isVideoResolutionTierModel,
+} from '../lib/price'
 import type {
   Modality,
   ModelCapability,
@@ -276,6 +282,12 @@ function ModelHeader(props: { model: PricingModel }) {
     model.billing_mode === 'tiered_expr' &&
     Boolean(model.billing_expr) &&
     getDynamicPricingTiers(model).length === 0
+  const isVideoTier = isVideoResolutionTierModel(model)
+  const pricingTypeLabel = isVideoTier
+    ? t('Video')
+    : model.quota_type === QUOTA_TYPE_VALUES.TOKEN
+      ? t('Token-based')
+      : t('Per Request')
 
   return (
     <header className='pb-4'>
@@ -298,11 +310,7 @@ function ModelHeader(props: { model: PricingModel }) {
           <span className='text-muted-foreground'>{model.vendor_name}</span>
         )}
         <span className='text-muted-foreground/30'>·</span>
-        <span className='text-muted-foreground/70'>
-          {model.quota_type === QUOTA_TYPE_VALUES.TOKEN
-            ? t('Token-based')
-            : t('Per Request')}
-        </span>
+        <span className='text-muted-foreground/70'>{pricingTypeLabel}</span>
         {model.billing_mode === 'tiered_expr' && model.billing_expr && (
           <>
             <span className='text-muted-foreground/30'>·</span>
@@ -348,6 +356,7 @@ function PriceSection(props: {
 }) {
   const { t } = useTranslation()
   const isTokenBased = isTokenBasedModel(props.model)
+  const isVideoTier = isVideoResolutionTierModel(props.model)
   const tokenUnitLabel = props.tokenUnit === 'K' ? '1K' : '1M'
   const baseGroupKey = '_base'
   const baseGroupRatioMap = { [baseGroupKey]: 1 }
@@ -358,6 +367,42 @@ function PriceSection(props: {
     usdExchangeRate: props.usdExchangeRate,
     groupRatioMultiplier: 1,
   })
+
+  if (isVideoTier) {
+    const videoTierUnit = t(
+      getVideoResolutionTierShortUnitLabelKey(props.model)
+    )
+    const videoTierEntries = getVideoResolutionTierPriceEntries(props.model, {
+      showWithRecharge: props.showRechargePrice,
+      priceRate: props.priceRate,
+      usdExchangeRate: props.usdExchangeRate,
+      groupRatioMultiplier: 1,
+    })
+
+    return (
+      <section>
+        <SectionTitle>{t('Base Price')}</SectionTitle>
+        <div className='grid grid-cols-2 gap-2'>
+          {videoTierEntries.map((entry) => (
+            <div
+              key={entry.resolution}
+              className='bg-muted/20 rounded-lg border p-3'
+            >
+              <div className='text-muted-foreground text-xs'>
+                {entry.resolution}
+              </div>
+              <div className='text-foreground mt-1 font-mono text-base font-semibold tabular-nums'>
+                {entry.formatted}
+                <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
+                  /{videoTierUnit}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    )
+  }
 
   const primaryPriceTypes: { label: string; type: PriceType }[] = [
     { label: t('Input'), type: 'input' },
@@ -492,6 +537,9 @@ function PriceSection(props: {
               props.usdExchangeRate,
               baseGroupRatioMap
             )}
+            <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
+              /{t('times')}
+            </span>
           </span>
         </div>
       </section>
@@ -607,6 +655,7 @@ function GroupPricingSection(props: {
   )
 
   const isTokenBased = isTokenBasedModel(props.model)
+  const isVideoTier = isVideoResolutionTierModel(props.model)
   const tokenUnitLabel = props.tokenUnit === 'K' ? '1K' : '1M'
 
   const extraPriceTypes = useMemo(() => {
@@ -643,6 +692,83 @@ function GroupPricingSection(props: {
 
   const thClass =
     'text-muted-foreground py-2 text-[10px] font-medium tracking-wider uppercase'
+
+  if (isVideoTier) {
+    const videoTierUnit = t(
+      getVideoResolutionTierShortUnitLabelKey(props.model)
+    )
+    const videoTierBaseEntries = getVideoResolutionTierPriceEntries(
+      props.model,
+      {
+        showWithRecharge: showRechargePrice,
+        priceRate: props.priceRate,
+        usdExchangeRate: props.usdExchangeRate,
+        groupRatioMultiplier: 1,
+      }
+    )
+
+    return (
+      <section>
+        <SectionTitle>{t('Pricing by Group')}</SectionTitle>
+        <AutoGroupChain model={props.model} autoGroups={props.autoGroups} />
+        <div className='-mx-4 overflow-x-auto sm:mx-0'>
+          <Table className='text-sm'>
+            <TableHeader>
+              <TableRow className='hover:bg-transparent'>
+                <TableHead className={thClass}>{t('Group')}</TableHead>
+                <TableHead className={thClass}>{t('Ratio')}</TableHead>
+                {videoTierBaseEntries.map((entry) => (
+                  <TableHead
+                    key={entry.resolution}
+                    className={`${thClass} text-right`}
+                  >
+                    {entry.resolution}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {availableGroups.map((group) => {
+                const ratio = props.groupRatio[group] || 1
+                const priceByResolution = new Map(
+                  getVideoResolutionTierPriceEntries(props.model, {
+                    showWithRecharge: showRechargePrice,
+                    priceRate: props.priceRate,
+                    usdExchangeRate: props.usdExchangeRate,
+                    groupRatioMultiplier: ratio,
+                  }).map((entry) => [entry.resolution, entry.formatted])
+                )
+
+                return (
+                  <TableRow key={group}>
+                    <TableCell className='py-2.5'>
+                      <GroupBadge group={group} size='sm' />
+                    </TableCell>
+                    <TableCell className='text-muted-foreground py-2.5 font-mono text-xs'>
+                      {ratio}x
+                    </TableCell>
+                    {videoTierBaseEntries.map((entry) => (
+                      <TableCell
+                        key={entry.resolution}
+                        className='py-2.5 text-right font-mono'
+                      >
+                        {priceByResolution.get(entry.resolution)
+                          ? `${priceByResolution.get(entry.resolution)}/${videoTierUnit}`
+                          : '-'}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+          <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
+            {t('Prices shown per')} {videoTierUnit}
+          </p>
+        </div>
+      </section>
+    )
+  }
 
   if (isDynamicPricingModel(props.model)) {
     const dynamicTiers = getDynamicPricingTiers(props.model)

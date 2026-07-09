@@ -60,3 +60,39 @@ func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	require.Equal(t, billing_setting.BillingModeTieredExpr, info.TieredBillingSnapshot.BillingMode)
 	require.Equal(t, common.QuotaPerUnit, info.TieredBillingSnapshot.QuotaPerUnit)
 }
+
+func TestModelPriceHelperPerCallAllowsVideoResolutionTierPricing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	saved := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		saved[key] = value
+		return nil
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
+	})
+
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.video_billing_mode":      `{"video-resolution-only":"tiered_seconds"}`,
+		"billing_setting.video_resolution_prices": `{"video-resolution-only":{"480p":0.01,"720p":0.02,"1080p":0.04,"4k":0.08}}`,
+	}))
+	require.Equal(t, billing_setting.VideoBillingModeTieredSeconds, billing_setting.GetVideoBillingMode("video-resolution-only"))
+	_, hasResolutionPrices := billing_setting.GetVideoResolutionPrices("video-resolution-only")
+	require.True(t, hasResolutionPrices)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Set("group", "default")
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "video-resolution-only",
+		UserGroup:       "default",
+		UsingGroup:      "default",
+	}
+
+	priceData, err := ModelPriceHelperPerCall(ctx, info)
+	require.NoError(t, err)
+	require.True(t, priceData.UsePrice)
+	require.Equal(t, 0.0, priceData.ModelPrice)
+}

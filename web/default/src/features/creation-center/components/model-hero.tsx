@@ -24,13 +24,19 @@ import type { CreationMode, CreationModel } from '../types'
 type ModelHeroProps = {
   mode: CreationMode
   model?: CreationModel
+  selectedResolution?: string
 }
 
 export function ModelHero(props: ModelHeroProps) {
   const { t } = useTranslation()
   const title = props.model?.id || t('Select a model')
   const costLabel = props.model
-    ? formatCreationModelCost(props.model.cost, t, props.mode)
+    ? formatCreationModelCost(
+        props.model.cost,
+        t,
+        props.mode,
+        props.selectedResolution
+      )
     : undefined
   const fallback =
     props.mode === 'chat'

@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -389,6 +390,47 @@ func TestBuildCreationModelCatalogAddsCostSummary(t *testing.T) {
 	payload, err := common.Marshal(catalog)
 	require.NoError(t, err)
 	require.NotContains(t, string(payload), "billing_expr")
+}
+
+func TestBuildCreationModelCatalogAddsVideoResolutionTierCost(t *testing.T) {
+	saved := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		saved[key] = value
+		return nil
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
+	})
+
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.video_billing_mode":      `{"video-tiered-model":"tiered_request"}`,
+		"billing_setting.video_resolution_prices": `{"video-tiered-model":{"480p":0.01,"720p":0.02}}`,
+	}))
+
+	catalog := buildCreationModelCatalog([]model.Pricing{
+		{
+			ModelName:              "video-tiered-model",
+			ModelRatio:             337.5,
+			CompletionRatio:        1,
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAIVideo},
+		},
+	}, nil, "", 1.25)
+
+	videoCost := catalog.Modes[2].Models[0].Cost
+	require.NotNil(t, videoCost)
+
+	payload, err := common.Marshal(videoCost)
+	require.NoError(t, err)
+	payloadText := string(payload)
+
+	require.Contains(t, payloadText, `"billing_mode":"tiered_request"`)
+	require.Contains(t, payloadText, `"video_billing_mode":"tiered_request"`)
+	require.Contains(t, payloadText, `"480p":0.0125`)
+	require.Contains(t, payloadText, `"720p":0.025`)
+	require.Contains(t, payloadText, `"480p":6250`)
+	require.Contains(t, payloadText, `"720p":12500`)
+	require.NotContains(t, payloadText, "input_price_per_million")
+	require.NotContains(t, payloadText, "output_price_per_million")
 }
 
 func TestBuildCreationModelCatalogKeepsExplicitZeroCostFields(t *testing.T) {

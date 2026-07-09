@@ -48,6 +48,44 @@ func TestApplyTaskOtherRatiosToQuotaFixedKeepsPerRequestQuota(t *testing.T) {
 	}
 }
 
+func TestApplyTaskOtherRatiosToQuotaTieredSecondsUsesOnlySeconds(t *testing.T) {
+	priceData := types.PriceData{
+		Quota:       20,
+		UsePrice:    true,
+		OtherRatios: map[string]float64{"seconds": 8, "resolution": 2},
+	}
+
+	if err := applyTaskOtherRatiosToQuota(&priceData, billing_setting.VideoBillingModeTieredSeconds, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if priceData.Quota != 160 {
+		t.Fatalf("expected tiered seconds mode to multiply quota by seconds only, got %d", priceData.Quota)
+	}
+	if !priceData.AppliedOtherRatios {
+		t.Fatal("expected tiered seconds mode to mark seconds ratio as applied")
+	}
+}
+
+func TestApplyTaskOtherRatiosToQuotaTieredRequestKeepsResolutionPriceQuota(t *testing.T) {
+	priceData := types.PriceData{
+		Quota:       20,
+		UsePrice:    true,
+		OtherRatios: map[string]float64{"seconds": 8, "resolution": 2},
+	}
+
+	if err := applyTaskOtherRatiosToQuota(&priceData, billing_setting.VideoBillingModeTieredRequest, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if priceData.Quota != 20 {
+		t.Fatalf("expected tiered request mode to keep resolution price quota, got %d", priceData.Quota)
+	}
+	if priceData.AppliedOtherRatios {
+		t.Fatal("expected tiered request mode not to mark other ratios as applied")
+	}
+}
+
 func TestApplyTaskOtherRatiosToQuotaFixedRequiresModelPrice(t *testing.T) {
 	priceData := types.PriceData{
 		Quota:       100,

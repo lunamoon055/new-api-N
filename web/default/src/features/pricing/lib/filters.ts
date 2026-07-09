@@ -24,6 +24,11 @@ import {
   ENDPOINT_TYPES,
 } from '../constants'
 import type { PricingModel } from '../types'
+import { isTokenBasedModel } from './model-helpers'
+import {
+  getVideoResolutionTierPriceEntries,
+  isVideoResolutionTierModel,
+} from './price'
 
 // ----------------------------------------------------------------------------
 // Filter Utilities
@@ -78,11 +83,32 @@ export function filterByQuotaType(
   quotaType: string
 ): PricingModel[] {
   if (quotaType === QUOTA_TYPES.ALL) return models
-  const targetType =
-    quotaType === QUOTA_TYPES.TOKEN
-      ? QUOTA_TYPE_VALUES.TOKEN
-      : QUOTA_TYPE_VALUES.REQUEST
-  return models.filter((m) => m.quota_type === targetType)
+
+  if (quotaType === QUOTA_TYPES.TIERED_SECONDS) {
+    return models.filter(
+      (model) =>
+        isVideoResolutionTierModel(model) &&
+        model.video_billing_mode === 'tiered_seconds'
+    )
+  }
+
+  if (quotaType === QUOTA_TYPES.TIERED_REQUEST) {
+    return models.filter(
+      (model) =>
+        isVideoResolutionTierModel(model) &&
+        model.video_billing_mode === 'tiered_request'
+    )
+  }
+
+  if (quotaType === QUOTA_TYPES.TOKEN) {
+    return models.filter(isTokenBasedModel)
+  }
+
+  return models.filter(
+    (model) =>
+      model.quota_type === QUOTA_TYPE_VALUES.REQUEST &&
+      !isVideoResolutionTierModel(model)
+  )
 }
 
 /**
@@ -102,7 +128,12 @@ export function filterByEndpointType(
  * Get model price for sorting
  */
 function getModelPrice(model: PricingModel): number {
-  return model.quota_type === 0 ? model.model_ratio : model.model_price || 0
+  if (isVideoResolutionTierModel(model)) {
+    const entries = getVideoResolutionTierPriceEntries(model)
+    return Math.min(...entries.map((entry) => entry.price))
+  }
+
+  return isTokenBasedModel(model) ? model.model_ratio : model.model_price || 0
 }
 
 /**

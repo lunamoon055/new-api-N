@@ -23,7 +23,8 @@ import type { CreationMode, CreationModelCost } from './types'
 export function formatCreationModelCost(
   cost: CreationModelCost | undefined,
   t: (key: string) => string,
-  mode?: CreationMode
+  mode?: CreationMode,
+  selectedResolution?: string
 ) {
   if (!cost) return t('Pricing pending')
   const groupSuffix =
@@ -35,18 +36,16 @@ export function formatCreationModelCost(
     case 'dynamic':
       return `${t('Dynamic pricing')}${groupSuffix}`
     case 'per_request': {
-      if (mode === 'video' && cost.request_quota != null) {
-        return formatQuota(cost.request_quota)
+      const unit = t('times')
+      if (cost.request_quota != null) {
+        return `${formatQuota(cost.request_quota)}/${unit}`
       }
       const requestPrice = formatCurrencyFromUSD(cost.request_price, {
         digitsLarge: 4,
         digitsSmall: 6,
         abbreviate: false,
       })
-      const requestQuota = cost.request_quota
-        ? ` · ${formatQuota(cost.request_quota)}`
-        : ''
-      return `${requestPrice} ${t('per request')}${requestQuota}${groupSuffix}`
+      return `${requestPrice}/${unit}`
     }
     case 'per_token': {
       const inputPrice = formatCurrencyFromUSD(cost.input_price_per_million, {
@@ -61,9 +60,101 @@ export function formatCreationModelCost(
       })
       return `${t('Input')} ${inputPrice}/1M · ${t('Output')} ${outputPrice}/1M${groupSuffix}`
     }
+    case 'tiered_seconds':
+    case 'tiered_request':
+      return formatVideoResolutionTierCost(cost, t, mode, selectedResolution)
   }
 }
 
 function formatCostNumber(value: number) {
   return Number.parseFloat(value.toFixed(6)).toString()
+}
+
+const videoResolutionOrder = ['480p', '720p', '1080p', '4k']
+
+function formatVideoResolutionTierCost(
+  cost: CreationModelCost,
+  t: (key: string) => string,
+  mode: CreationMode | undefined,
+  selectedResolution: string | undefined
+) {
+  const normalizedResolution = normalizeVideoResolution(selectedResolution)
+  const unit = getVideoResolutionCostUnit(cost, t)
+  if (mode === 'video' && normalizedResolution) {
+    const quota = cost.video_resolution_quotas?.[normalizedResolution]
+    if (quota != null) {
+      return `${formatQuota(quota)}/${unit} · ${normalizedResolution}`
+    }
+
+    const price = cost.video_resolution_prices?.[normalizedResolution]
+    if (price != null) {
+      return `${formatCurrencyFromUSD(price, {
+        digitsLarge: 4,
+        digitsSmall: 6,
+        abbreviate: false,
+      })}/${unit} · ${normalizedResolution}`
+    }
+  }
+
+  const summary = getVideoResolutionCostEntries(cost)
+    .map(({ resolution, quota, price }) => {
+      if (quota != null) return `${resolution} ${formatQuota(quota)}/${unit}`
+      return `${resolution} ${formatCurrencyFromUSD(price, {
+        digitsLarge: 4,
+        digitsSmall: 6,
+        abbreviate: false,
+      })}/${unit}`
+    })
+    .join(' · ')
+
+  return summary || t('Pricing pending')
+}
+
+function getVideoResolutionCostUnit(
+  cost: CreationModelCost,
+  t: (key: string) => string
+) {
+  return cost.billing_mode === 'tiered_seconds' ? t('seconds') : t('times')
+}
+
+function getVideoResolutionCostEntries(cost: CreationModelCost) {
+  const resolutions = [
+    ...videoResolutionOrder,
+    ...Object.keys(cost.video_resolution_quotas ?? {}),
+    ...Object.keys(cost.video_resolution_prices ?? {}),
+  ]
+  const seen = new Set<string>()
+
+  return resolutions.flatMap((resolution) => {
+    const normalizedResolution = normalizeVideoResolution(resolution)
+    if (!normalizedResolution || seen.has(normalizedResolution)) return []
+    seen.add(normalizedResolution)
+
+    const quota = cost.video_resolution_quotas?.[normalizedResolution]
+    const price = cost.video_resolution_prices?.[normalizedResolution]
+    if (quota == null && price == null) return []
+
+    return [{ resolution: normalizedResolution, quota, price }]
+  })
+}
+
+function normalizeVideoResolution(value?: string) {
+  const normalized = value?.trim().toLowerCase().replace(/\s+/g, '')
+  switch (normalized) {
+    case '480':
+    case '480p':
+      return '480p'
+    case '720':
+    case '720p':
+      return '720p'
+    case '1080':
+    case '1080p':
+      return '1080p'
+    case '2160':
+    case '2160p':
+    case '4k':
+      return '4k'
+    default:
+      return undefined
+  }
 }

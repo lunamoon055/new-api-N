@@ -194,10 +194,25 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		}
 	}
 
+	videoBillingMode := billing_setting.GetVideoBillingMode(modelName)
+	if billing_setting.IsVideoResolutionTierMode(videoBillingMode) {
+		resolutionPrices, ok := billing_setting.GetVideoResolutionPrices(modelName)
+		if !ok {
+			return nil, service.TaskErrorWrapperLocal(
+				fmt.Errorf("video resolution prices for model %s are not configured", modelName),
+				"invalid_billing_config",
+				http.StatusBadRequest,
+			)
+		}
+		if err := applyVideoResolutionTierPrice(c, info, &info.PriceData, videoBillingMode, resolutionPrices); err != nil {
+			return nil, service.TaskErrorWrapperLocal(err, "invalid_billing_config", http.StatusBadRequest)
+		}
+	}
+
 	// 6. 将 OtherRatios 应用到基础额度。固定视频计费模式会保留参数但不叠加倍率。
 	if err := applyTaskOtherRatiosToQuota(
 		&info.PriceData,
-		billing_setting.GetVideoBillingMode(modelName),
+		videoBillingMode,
 		common.StringsContains(constant.TaskPricePatches, modelName),
 	); err != nil {
 		return nil, service.TaskErrorWrapperLocal(err, "invalid_billing_config", http.StatusBadRequest)

@@ -120,6 +120,33 @@ func withTieredBillingConfig(t *testing.T, modes map[string]string, exprs map[st
 	model.InvalidatePricingCache()
 }
 
+func withVideoResolutionBillingConfig(t *testing.T, modes map[string]string, prices map[string]map[string]float64) {
+	t.Helper()
+
+	saved := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		if strings.HasPrefix(key, "billing_setting.") {
+			saved[key] = value
+		}
+		return nil
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
+		model.InvalidatePricingCache()
+	})
+
+	modeBytes, err := common.Marshal(modes)
+	require.NoError(t, err)
+	priceBytes, err := common.Marshal(prices)
+	require.NoError(t, err)
+
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.video_billing_mode":      string(modeBytes),
+		"billing_setting.video_resolution_prices": string(priceBytes),
+	}))
+	model.InvalidatePricingCache()
+}
+
 func withSelfUseModeDisabled(t *testing.T) {
 	t.Helper()
 
@@ -241,4 +268,31 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 	require.NotContains(t, ids, "zz-token-tiered-empty-expr-model")
 	require.NotContains(t, ids, "zz-token-tiered-missing-expr-model")
 	require.NotContains(t, ids, "zz-token-unpriced-model")
+}
+
+func TestPricingIncludesVideoResolutionTierMetadata(t *testing.T) {
+	withVideoResolutionBillingConfig(t, map[string]string{
+		"zz-video-tiered-model": "tiered_request",
+	}, map[string]map[string]float64{
+		"zz-video-tiered-model": {
+			"480p": 0.05,
+			"720p": 0.1,
+		},
+	})
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&model.Ability{
+		Group:     "default",
+		Model:     "zz-video-tiered-model",
+		ChannelId: 1,
+		Enabled:   true,
+	}).Error)
+
+	pricingByName := pricingByModelName(model.GetPricing())
+	videoPricing, ok := pricingByName["zz-video-tiered-model"]
+	require.True(t, ok)
+	require.Equal(t, "tiered_request", videoPricing.VideoBillingMode)
+	require.Equal(t, map[string]float64{
+		"480p": 0.05,
+		"720p": 0.1,
+	}, videoPricing.VideoResolutionPrices)
 }

@@ -36,6 +36,8 @@ import {
   getQuotaTypeLabels,
 } from '../constants'
 import { parseTags } from '../lib/filters'
+import { isTokenBasedModel } from '../lib/model-helpers'
+import { isVideoResolutionTierModel } from '../lib/price'
 import type { PricingModel, PricingVendor } from '../types'
 
 type FilterOption = {
@@ -199,12 +201,35 @@ export function PricingSidebar(props: PricingSidebarProps) {
     {
       value: QUOTA_TYPES.TOKEN,
       label: quotaTypeLabels[QUOTA_TYPES.TOKEN],
-      count: countBy(props.models, (model) => model.quota_type === 0),
+      count: countBy(props.models, isTokenBasedModel),
     },
     {
       value: QUOTA_TYPES.REQUEST,
       label: quotaTypeLabels[QUOTA_TYPES.REQUEST],
-      count: countBy(props.models, (model) => model.quota_type === 1),
+      count: countBy(
+        props.models,
+        (model) => model.quota_type === 1 && !isVideoResolutionTierModel(model)
+      ),
+    },
+    {
+      value: QUOTA_TYPES.TIERED_SECONDS,
+      label: quotaTypeLabels[QUOTA_TYPES.TIERED_SECONDS],
+      count: countBy(
+        props.models,
+        (model) =>
+          isVideoResolutionTierModel(model) &&
+          model.video_billing_mode === 'tiered_seconds'
+      ),
+    },
+    {
+      value: QUOTA_TYPES.TIERED_REQUEST,
+      label: quotaTypeLabels[QUOTA_TYPES.TIERED_REQUEST],
+      count: countBy(
+        props.models,
+        (model) =>
+          isVideoResolutionTierModel(model) &&
+          model.video_billing_mode === 'tiered_request'
+      ),
     },
   ]
 

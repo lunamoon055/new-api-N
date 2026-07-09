@@ -177,6 +177,7 @@ export function ModelMutateDrawer({
       'billing_setting.billing_mode': '{}',
       'billing_setting.billing_expr': '{}',
       'billing_setting.video_billing_mode': '{}',
+      'billing_setting.video_resolution_prices': '{}',
       'tool_price_setting.prices': '{}',
       TopupGroupRatio: '',
       GroupRatio: '',

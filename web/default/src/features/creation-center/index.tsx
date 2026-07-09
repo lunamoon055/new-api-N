@@ -859,6 +859,9 @@ export function CreationCenter() {
             mode={mode}
             models={models}
             selectedModel={selectedModel}
+            selectedResolution={
+              mode === 'video' ? videoOptions.resolution : undefined
+            }
             modeCounts={modeCounts}
             loading={catalogQuery.isLoading}
             error={catalogQuery.isError}
@@ -880,7 +883,13 @@ export function CreationCenter() {
 
           <section className='flex min-w-0 flex-col gap-4 p-3 md:p-5'>
             <div className='grid min-h-[36rem] flex-1 gap-4 xl:grid-cols-[minmax(20rem,0.86fr)_minmax(24rem,1.14fr)]'>
-              <ModelHero mode={mode} model={selectedModel} />
+              <ModelHero
+                mode={mode}
+                model={selectedModel}
+                selectedResolution={
+                  mode === 'video' ? videoOptions.resolution : undefined
+                }
+              />
               <CreationPreview
                 mode={mode}
                 model={selectedModel}

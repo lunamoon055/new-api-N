@@ -47,6 +47,7 @@ type ModelFormValues = {
   BillingMode: string
   BillingExpr: string
   VideoBillingMode: string
+  VideoResolutionPrices: string
 }
 
 type ModelRatioFormProps = {
@@ -114,11 +115,14 @@ export const ModelRatioForm = memo(function ModelRatioForm({
               billingMode={form.watch('BillingMode')}
               billingExpr={form.watch('BillingExpr')}
               videoBillingMode={form.watch('VideoBillingMode')}
+              videoResolutionPrices={form.watch('VideoResolutionPrices')}
               onChange={(field, value) => {
                 const fieldMap: Record<string, keyof ModelFormValues> = {
                   'billing_setting.billing_mode': 'BillingMode',
                   'billing_setting.billing_expr': 'BillingExpr',
                   'billing_setting.video_billing_mode': 'VideoBillingMode',
+                  'billing_setting.video_resolution_prices':
+                    'VideoResolutionPrices',
                 }
                 const formField =
                   fieldMap[field] || (field as keyof ModelFormValues)
@@ -310,6 +314,25 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormDescription>
                     {t(
                       'Ratio applied to audio completions for streaming models.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='VideoResolutionPrices'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Video resolution prices')}</FormLabel>
+                  <FormControl>
+                    <Textarea rows={6} {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'JSON map of model → resolution price map for tiered video billing.'
                     )}
                   </FormDescription>
                   <FormMessage />

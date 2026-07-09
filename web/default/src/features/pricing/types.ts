@@ -55,6 +55,10 @@ export type PricingModel = {
   billing_expr?: string
   /** Pricing version returned by backend, useful for cache busting */
   pricing_version?: string
+  /** Video billing mode used by async video models. */
+  video_billing_mode?: 'dynamic' | 'fixed' | 'tiered_seconds' | 'tiered_request'
+  /** Per-resolution USD prices for tiered video billing. */
+  video_resolution_prices?: Record<string, number>
   /**
    * Optional model metadata fields. These are not yet returned by the backend
    * and are populated client-side from {@link inferModelMetadata}.

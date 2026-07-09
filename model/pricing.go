@@ -35,6 +35,8 @@ type Pricing struct {
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
 	BillingMode            string                  `json:"billing_mode,omitempty"`
 	BillingExpr            string                  `json:"billing_expr,omitempty"`
+	VideoBillingMode       string                  `json:"video_billing_mode,omitempty"`
+	VideoResolutionPrices  map[string]float64      `json:"video_resolution_prices,omitempty"`
 	PricingVersion         string                  `json:"pricing_version,omitempty"`
 }
 
@@ -335,6 +337,12 @@ func updatePricing() {
 			if expr, ok := billing_setting.GetBillingExpr(model); ok && strings.TrimSpace(expr) != "" {
 				pricing.BillingMode = billingMode
 				pricing.BillingExpr = expr
+			}
+		}
+		if videoBillingMode := billing_setting.GetVideoBillingMode(model); billing_setting.IsVideoResolutionTierMode(videoBillingMode) {
+			if resolutionPrices, ok := billing_setting.GetVideoResolutionPrices(model); ok {
+				pricing.VideoBillingMode = videoBillingMode
+				pricing.VideoResolutionPrices = resolutionPrices
 			}
 		}
 		pricingMap = append(pricingMap, pricing)
