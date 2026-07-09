@@ -212,6 +212,43 @@ func TestFetchTaskUsesSanbaoVideoEndpoint(t *testing.T) {
 	require.Equal(t, "/openapi/v1/videos/task_upstream", gotPath)
 }
 
+func TestFetchTaskTrimsOpenAPIBasePath(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{"id":"task_upstream","status":"processing"}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	adaptor := &TaskAdaptor{}
+	resp, err := adaptor.FetchTask(server.URL+"/openapi/v1", "sk-test", map[string]any{
+		"task_id": "task_upstream",
+		"action":  "generate",
+	}, "")
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	_ = resp.Body.Close()
+	require.Equal(t, "/openapi/v1/videos/task_upstream", gotPath)
+}
+
+func TestInitTrimsOpenAPIBasePath(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(&relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl: "https://sanbaobeauty.com/openapi/v1/",
+		},
+	})
+
+	uri, err := adaptor.BuildRequestURL(&relaycommon.RelayInfo{
+		RequestURLPath: "/pg/video/async-generations",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "https://sanbaobeauty.com/openapi/v1/videos", uri)
+}
+
 func TestFetchTaskUsesSanbaoImageEndpointForImageAction(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

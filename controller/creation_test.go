@@ -341,6 +341,39 @@ func TestBuildCreationModelCatalogUsesProviderMetadataForMode(t *testing.T) {
 	require.Equal(t, []string{"720p"}, catalog.Modes[2].Models[0].Metadata.Resolutions)
 }
 
+func TestParseSanbaoCreationModelCapabilitiesIndexesDisplayName(t *testing.T) {
+	capabilities, err := parseSanbaoCreationModelCapabilities([]byte(`{
+		"data": [
+			{
+				"id": "sd2_9img_limited_special",
+				"name": "SD2.0-9图-限时特价",
+				"type": "video",
+				"resolutions": ["720p"],
+				"ratios": ["16:9", "9:16", "1:1"],
+				"durations": [5, 10],
+				"max_images": 9,
+				"max_videos": 3,
+				"max_audios": 3
+			}
+		]
+	}`))
+
+	require.NoError(t, err)
+	metadata, ok := capabilities[normalizeCreationModelMetadataKey("SD2.0-9图-限时特价")]
+	require.True(t, ok)
+	require.Equal(t, "sanbao", metadata.Provider)
+	require.Equal(t, "sd2_9img_limited_special", metadata.UpstreamModelID)
+	require.Equal(t, []string{"16:9", "9:16", "1:1"}, metadata.Ratios)
+}
+
+func TestNormalizeSanbaoCreationBaseURLTrimsOpenAPIPath(t *testing.T) {
+	require.Equal(
+		t,
+		"https://sanbaobeauty.com",
+		normalizeSanbaoCreationBaseURL("https://sanbaobeauty.com/openapi/v1/"),
+	)
+}
+
 func TestBuildCreationModelCatalogUsesManualDescriptions(t *testing.T) {
 	catalog := buildCreationModelCatalogWithCategories([]model.Pricing{
 		{

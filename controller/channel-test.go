@@ -156,10 +156,10 @@ func resolveChannelTestEndpoint(channel *model.Channel, modelName, endpointType 
 	}
 	switch endpointType {
 	case channelTestEndpointSanbaoImage:
-		requestPath = "/v1/images/generations"
+		requestPath = "/pg/images/generations"
 		relayFormat = types.RelayFormatTask
 	case channelTestEndpointSanbaoVideo, channelTestEndpointSanbaoUpload:
-		requestPath = "/v1/video/async-generations"
+		requestPath = "/pg/video/async-generations"
 		relayFormat = types.RelayFormatTask
 	case channelTestEndpointSanbaoImagePoll:
 		requestPath = "/v1/images/generations/{task_id}"

@@ -472,7 +472,7 @@ func fetchSanbaoCreationModelCapabilities(ctx context.Context, channel *model.Ch
 	reqCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, strings.TrimRight(channel.GetBaseURL(), "/")+"/openapi/v1/models", nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, normalizeSanbaoCreationBaseURL(channel.GetBaseURL())+"/openapi/v1/models", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -521,6 +521,9 @@ func parseSanbaoCreationModelCapabilities(body []byte) (map[string]dto.CreationM
 			item.UpstreamModelID = id
 		}
 		result[normalizeCreationModelMetadataKey(id)] = item
+		if name := strings.TrimSpace(item.Name); name != "" {
+			result[normalizeCreationModelMetadataKey(name)] = item
+		}
 	}
 	return result, nil
 }
@@ -585,6 +588,14 @@ func getCreationModelModeFromProviderMetadata(metadata dto.CreationModelMetadata
 
 func normalizeCreationModelMetadataKey(modelName string) string {
 	return strings.ToLower(strings.TrimSpace(modelName))
+}
+
+func normalizeSanbaoCreationBaseURL(value string) string {
+	baseURL := strings.TrimRight(strings.TrimSpace(value), "/")
+	if strings.HasSuffix(baseURL, "/openapi/v1") {
+		return strings.TrimSuffix(baseURL, "/openapi/v1")
+	}
+	return baseURL
 }
 
 func cloneCreationModelMetadataMap(src map[string]dto.CreationModelMetadata) map[string]dto.CreationModelMetadata {

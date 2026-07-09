@@ -69,7 +69,7 @@ func TestResolveChannelTestEndpointUsesSanbaoImageTemplate(t *testing.T) {
 	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, "gpt-image2", channelTestEndpointSanbaoImage)
 
 	require.Equal(t, channelTestEndpointSanbaoImage, endpointType)
-	require.Equal(t, "/v1/images/generations", requestPath)
+	require.Equal(t, "/pg/images/generations", requestPath)
 	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
 }
 
@@ -82,7 +82,7 @@ func TestResolveChannelTestEndpointUsesSanbaoVideoTemplate(t *testing.T) {
 	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, "sd2_full", channelTestEndpointSanbaoVideo)
 
 	require.Equal(t, channelTestEndpointSanbaoVideo, endpointType)
-	require.Equal(t, "/v1/video/async-generations", requestPath)
+	require.Equal(t, "/pg/video/async-generations", requestPath)
 	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
 }
 
@@ -95,7 +95,7 @@ func TestResolveChannelTestEndpointUsesSanbaoUploadTemplate(t *testing.T) {
 	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, "sd2_full", channelTestEndpointSanbaoUpload)
 
 	require.Equal(t, channelTestEndpointSanbaoUpload, endpointType)
-	require.Equal(t, "/v1/video/async-generations", requestPath)
+	require.Equal(t, "/pg/video/async-generations", requestPath)
 	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
 }
 

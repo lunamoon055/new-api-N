@@ -122,7 +122,7 @@ type sanbaoTask struct {
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.ChannelType = info.ChannelType
-	a.baseURL = strings.TrimRight(info.ChannelBaseUrl, "/")
+	a.baseURL = normalizeSanbaoBaseURL(info.ChannelBaseUrl)
 	a.apiKey = info.ApiKey
 }
 
@@ -229,7 +229,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	if isImageFetchRequest(body) {
 		endpoint = imageEndpoint
 	}
-	uri := fmt.Sprintf("%s%s/%s", strings.TrimRight(baseUrl, "/"), endpoint, taskID)
+	uri := fmt.Sprintf("%s%s/%s", normalizeSanbaoBaseURL(baseUrl), endpoint, taskID)
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err
@@ -623,6 +623,14 @@ func normalizeContentType(value string) string {
 		value = value[:separator]
 	}
 	return strings.TrimSpace(value)
+}
+
+func normalizeSanbaoBaseURL(value string) string {
+	baseURL := strings.TrimRight(strings.TrimSpace(value), "/")
+	if strings.HasSuffix(baseURL, "/openapi/v1") {
+		return strings.TrimSuffix(baseURL, "/openapi/v1")
+	}
+	return baseURL
 }
 
 func parseSanbaoTask(body []byte) (sanbaoTask, error) {
