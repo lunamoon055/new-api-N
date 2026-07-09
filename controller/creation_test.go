@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/textproto"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -382,6 +383,20 @@ func TestShouldAttachSanbaoCreationMetadataForCompatibleChannelModels(t *testing
 	require.True(t, shouldAttachSanbaoCreationMetadata("gpt-image2-1K", constant.ChannelTypeOpenAI, imageMetadata))
 	require.True(t, shouldAttachSanbaoCreationMetadata("gpt-image2", constant.ChannelTypeSanbao, imageMetadata))
 	require.False(t, shouldAttachSanbaoCreationMetadata("gpt-image2", constant.ChannelTypeOpenAI, imageMetadata))
+}
+
+func TestApplySanbaoCreationTaskRelayContextForCompatibleBaseURL(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	common.SetContextKey(ctx, constant.ContextKeyChannelType, constant.ChannelTypeOpenAI)
+	common.SetContextKey(ctx, constant.ContextKeyChannelBaseUrl, "https://sanbaobeauty.com/openapi/v1")
+
+	require.True(t, shouldUseSanbaoCreationTaskRelay(ctx))
+	applySanbaoCreationTaskRelayContext(ctx)
+
+	require.Equal(t, constant.ChannelTypeSanbao, ctx.GetInt("channel_type"))
+	require.Equal(t, strconv.Itoa(constant.ChannelTypeSanbao), ctx.GetString("platform"))
+	require.Equal(t, constant.ChannelTypeSanbao, common.GetContextKeyInt(ctx, constant.ContextKeyChannelType))
 }
 
 func TestNormalizeSanbaoCreationBaseURLTrimsOpenAPIPath(t *testing.T) {

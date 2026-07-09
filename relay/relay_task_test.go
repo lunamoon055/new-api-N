@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -61,4 +62,10 @@ func TestTaskModel2DtoIncludesPromptFromTaskProperties(t *testing.T) {
 	dto := TaskModel2Dto(task)
 
 	require.Equal(t, "a cinematic product video", dto.Prompt)
+}
+
+func TestIsTaskSubmitSuccessStatusAcceptsAny2xx(t *testing.T) {
+	require.True(t, isTaskSubmitSuccessStatus(http.StatusOK))
+	require.True(t, isTaskSubmitSuccessStatus(http.StatusCreated))
+	require.False(t, isTaskSubmitSuccessStatus(http.StatusBadRequest))
 }

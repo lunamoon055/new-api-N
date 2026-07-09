@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -118,7 +119,9 @@ func CreationRelayImage(c *gin.Context) {
 		return
 	}
 
-	if common.GetContextKeyInt(c, constant.ContextKeyChannelType) == constant.ChannelTypeSanbao {
+	if shouldUseSanbaoCreationTaskRelay(c) {
+		applySanbaoCreationTaskRelayContext(c)
+		c.Request.URL.Path = "/pg/images/generations"
 		RelayTask(c)
 		return
 	}
@@ -130,6 +133,11 @@ func CreationRelayTask(c *gin.Context) {
 	if newAPIError := setupCreationRelayContext(c, "creation-video"); newAPIError != nil {
 		respondCreationRelayError(c, newAPIError)
 		return
+	}
+
+	if shouldUseSanbaoCreationTaskRelay(c) {
+		applySanbaoCreationTaskRelayContext(c)
+		c.Request.URL.Path = "/pg/video/async-generations"
 	}
 
 	RelayTask(c)
@@ -646,6 +654,21 @@ func isLikelySanbaoChannel(channel *model.Channel) bool {
 		return true
 	}
 	return strings.Contains(strings.ToLower(strings.TrimSpace(channel.GetBaseURL())), sanbaoProviderHost)
+}
+
+func shouldUseSanbaoCreationTaskRelay(c *gin.Context) bool {
+	if common.GetContextKeyInt(c, constant.ContextKeyChannelType) == constant.ChannelTypeSanbao {
+		return true
+	}
+	baseURL := common.GetContextKeyString(c, constant.ContextKeyChannelBaseUrl)
+	return strings.Contains(strings.ToLower(strings.TrimSpace(baseURL)), sanbaoProviderHost)
+}
+
+func applySanbaoCreationTaskRelayContext(c *gin.Context) {
+	channelType := constant.ChannelTypeSanbao
+	c.Set("channel_type", channelType)
+	c.Set("platform", strconv.Itoa(channelType))
+	common.SetContextKey(c, constant.ContextKeyChannelType, channelType)
 }
 
 func getProviderCreationModelMetadata(modelName string, metadata map[string]dto.CreationModelMetadata) (dto.CreationModelMetadata, bool) {

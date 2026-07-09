@@ -616,7 +616,7 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 	var httpResp *http.Response
 	if resp != nil {
 		httpResp = resp.(*http.Response)
-		if httpResp.StatusCode != http.StatusOK {
+		if !isChannelTestSuccessStatus(httpResp.StatusCode) {
 			err := service.RelayErrorHandler(c.Request.Context(), httpResp, true)
 			common.SysError(fmt.Sprintf(
 				"channel test bad response: channel_id=%d name=%s type=%d model=%s endpoint_type=%s status=%d err=%v",
@@ -940,7 +940,7 @@ func runTaskChannelTest(c *gin.Context, channel *model.Channel, endpointType str
 			newAPIError: types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
 		}
 	}
-	if resp != nil && resp.StatusCode != http.StatusOK {
+	if resp != nil && !isChannelTestSuccessStatus(resp.StatusCode) {
 		err := service.RelayErrorHandler(c.Request.Context(), resp, true)
 		return testResult{
 			context:     c,
@@ -980,6 +980,10 @@ func runTaskChannelTest(c *gin.Context, channel *model.Channel, endpointType str
 		Other:          service.GenerateTextOtherInfo(c, info, priceData.ModelRatio, priceData.GroupRatioInfo.GroupRatio, priceData.CompletionRatio, 0, priceData.CacheRatio, priceData.ModelPrice, priceData.GroupRatioInfo.GroupSpecialRatio),
 	})
 	return testResult{context: c}
+}
+
+func isChannelTestSuccessStatus(statusCode int) bool {
+	return statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices
 }
 
 func resolveChannelTestTaskChannelType(channel *model.Channel, endpointType string) int {

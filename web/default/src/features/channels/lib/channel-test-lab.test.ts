@@ -35,7 +35,7 @@ describe('Sanbao channel test templates', () => {
     assert.equal(template.supportsStream, false)
     assert.equal(payload.model, 'image_custom')
     assert.equal(payload.aspect_ratio, '16:9')
-    assert.deepEqual(payload.images, ['https://example.com/reference.png'])
+    assert.deepEqual(payload.images, [])
   })
 
   test('provides Sanbao video, upload, and polling templates', () => {
@@ -54,9 +54,9 @@ describe('Sanbao channel test templates', () => {
 
     assert.equal(videoPayload.model, 'sd2_full')
     assert.equal(videoPayload.ratio, '9:16')
-    assert.equal(videoPayload.reference, 'all')
-    assert.ok(Array.isArray(videoPayload.images))
-    assert.ok(Array.isArray(uploadPayload.images))
+    assert.equal(videoPayload.reference, undefined)
+    assert.deepEqual(videoPayload.images, [])
+    assert.deepEqual(uploadPayload.images, [])
     assert.equal(pollPayload.task_id, 'task_xxx')
   })
 })
