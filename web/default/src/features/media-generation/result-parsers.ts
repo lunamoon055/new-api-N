@@ -26,6 +26,8 @@ export type MediaTaskStatus =
 
 export type ParsedImageGenerationResult = {
   id?: string
+  taskId?: string
+  status?: MediaTaskStatus
   imageUrl?: string
   revisedPrompt?: string
 }
@@ -42,14 +44,32 @@ export function parseImageGenerationResult(
   raw: unknown
 ): ParsedImageGenerationResult {
   const data = asRecord(raw)
+  const envelopeData = asRecord(data.data)
+  const source =
+    Object.keys(envelopeData).length && !Array.isArray(data.data)
+      ? envelopeData
+      : data
   const firstImage = Array.isArray(data.data) ? asRecord(data.data[0]) : {}
+  const sourceData = asRecord(source.data)
+  const nestedData = asRecord(sourceData.data)
   const b64 = getString(firstImage, 'b64_json')
   const imageUrl =
     getString(firstImage, 'url') ||
+    getImageURL(source) ||
+    getImageURL(sourceData) ||
+    getImageURL(nestedData) ||
     (b64 ? `data:image/png;base64,${b64}` : undefined)
+  const status = getString(source, 'status') || getString(data, 'status')
+  const taskId =
+    getString(source, 'task_id') ||
+    getString(data, 'task_id') ||
+    getString(source, 'id') ||
+    getString(data, 'id')
 
   return {
-    id: getString(data, 'id'),
+    id: getString(source, 'id') || getString(data, 'id'),
+    taskId,
+    status: normalizeMediaTaskStatus(status),
     imageUrl,
     revisedPrompt: getString(firstImage, 'revised_prompt'),
   }
@@ -126,4 +146,31 @@ export function asRecord(value: unknown): Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {}
+}
+
+function getImageURL(data: Record<string, unknown>) {
+  return (
+    getString(data, 'result_url') ||
+    getString(data, 'image_url') ||
+    getString(data, 'url') ||
+    getString(data, 'output_url') ||
+    getFirstImageArrayURL(data.images) ||
+    getFirstImageArrayURL(data.data)
+  )
+}
+
+function getFirstImageArrayURL(value: unknown) {
+  if (!Array.isArray(value)) return undefined
+
+  for (const item of value) {
+    if (typeof item === 'string' && item.trim()) return item
+    const image = asRecord(item)
+    const url =
+      getString(image, 'url') ||
+      getString(image, 'image_url') ||
+      getString(image, 'download_url')
+    if (url) return url
+  }
+
+  return undefined
 }

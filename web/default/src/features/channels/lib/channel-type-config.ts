@@ -134,6 +134,21 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       baseUrl: 'Default: https://api.replicate.com',
     },
   },
+  58: {
+    id: 58,
+    name: CHANNEL_TYPES[58],
+    icon: 'openai',
+    defaultBaseUrl: 'https://sanbaobeauty.com',
+    hints: {
+      baseUrl: 'Default: https://sanbaobeauty.com',
+      key: 'Format: sk_sanbao_...',
+      models: 'Use model IDs from Sanbao OpenAPI',
+    },
+    validation: {
+      keyFormat: /^sk_sanbao_/,
+      keyMinLength: 16,
+    },
+  },
 }
 
 /**

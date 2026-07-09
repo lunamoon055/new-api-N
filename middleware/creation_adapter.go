@@ -33,3 +33,14 @@ func CreationVideoAsyncFetchConvert() func(c *gin.Context) {
 		c.Next()
 	}
 }
+
+func CreationImageAsyncFetchConvert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		taskID := c.Param("task_id")
+		c.Request.Method = http.MethodGet
+		c.Request.URL.Path = "/v1/images/generations/" + taskID
+		c.Set("task_id", taskID)
+		c.Set("relay_mode", relayconstant.RelayModeVideoFetchByID)
+		c.Next()
+	}
+}

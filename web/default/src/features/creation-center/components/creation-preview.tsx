@@ -191,7 +191,33 @@ function ResultPreview(props: {
             className='mx-auto max-h-[31rem] w-auto max-w-full rounded-lg object-contain'
           />
         ) : (
-          <EmptyMediaResult title={t('Image task returned no image URL')} />
+          <EmptyMediaResult
+            title={
+              props.result.status === 'completed'
+                ? t('Image task returned no image URL')
+                : t('Image task is waiting for a result')
+            }
+          />
+        )}
+        <div className='text-muted-foreground mt-4 space-y-1 text-xs leading-5'>
+          <div>
+            {props.result.model} · {statusLabel}
+          </div>
+          {props.result.taskId && <div>{props.result.taskId}</div>}
+        </div>
+        {props.result.taskId && (
+          <Button
+            variant='outline'
+            size='sm'
+            className='mt-4'
+            onClick={props.onRefreshTask}
+            disabled={props.refreshingTask}
+          >
+            <RefreshCw
+              className={cn('size-4', props.refreshingTask && 'animate-spin')}
+            />
+            {t('Refresh status')}
+          </Button>
         )}
         {props.result.outputText && (
           <p className='text-muted-foreground mx-auto mt-3 max-w-xl text-xs leading-5'>

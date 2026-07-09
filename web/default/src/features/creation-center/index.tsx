@@ -27,6 +27,7 @@ import { PublicLayout } from '@/components/layout'
 import {
   getCreationCatalog,
   getCreationErrorMessage,
+  getCreationImageTask,
   getCreationVideoTask,
   saveCreationModelCategories,
   saveCreationModelDescriptions,
@@ -734,8 +735,8 @@ export function CreationCenter() {
       })
       if (nextResult.status === 'failed') {
         toast.error(nextResult.error || t('Creation task failed.'))
-      } else if (nextResult.mode === 'video') {
-        toast.success(t('Video task submitted. Refresh its status later.'))
+      } else if (nextResult.taskId && nextResult.status !== 'completed') {
+        toast.success(t('Task submitted. Refresh its status later.'))
       } else {
         toast.success(t('Creation task completed.'))
       }
@@ -771,14 +772,25 @@ export function CreationCenter() {
     }
   }
 
-  const refreshVideoTask = async () => {
-    if (!result?.taskId || result.mode !== 'video') return
+  const refreshMediaTask = async () => {
+    if (
+      !result?.taskId ||
+      (result.mode !== 'image' && result.mode !== 'video')
+    ) {
+      return
+    }
     setRefreshingTask(true)
     try {
-      const nextResult = await getCreationVideoTask({
-        taskId: result.taskId,
-        model: result.model,
-      })
+      const nextResult =
+        result.mode === 'image'
+          ? await getCreationImageTask({
+              taskId: result.taskId,
+              model: result.model,
+            })
+          : await getCreationVideoTask({
+              taskId: result.taskId,
+              model: result.model,
+            })
       const enrichedResult = {
         ...nextResult,
         createdAt: result.createdAt,
@@ -903,7 +915,7 @@ export function CreationCenter() {
                 onViewChange={setView}
                 onSelectHistory={selectHistoryItem}
                 onClearHistory={clearHistory}
-                onRefreshTask={refreshVideoTask}
+                onRefreshTask={refreshMediaTask}
                 onRemoveAsset={removeAsset}
               />
             </div>

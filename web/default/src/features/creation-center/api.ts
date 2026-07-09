@@ -214,6 +214,20 @@ export async function getCreationVideoTask(params: {
   return parseVideoResult(response.data, params.model)
 }
 
+export async function getCreationImageTask(params: {
+  taskId: string
+  model: string
+}): Promise<CreationResult> {
+  const response = await api.get(
+    `/api/creation/images/generations/${encodeURIComponent(params.taskId)}`,
+    { skipErrorHandler: true, disableDuplicate: true } as Record<
+      string,
+      unknown
+    >
+  )
+  return parseImageResult(response.data, params.model)
+}
+
 export function getCreationErrorMessage(error: unknown): string {
   if (isRecord(error)) {
     const response = error.response
@@ -256,7 +270,8 @@ function parseImageResult(raw: unknown, model: string): CreationResult {
     mode: 'image',
     model,
     id: result.id,
-    status: result.imageUrl ? 'completed' : 'unknown',
+    taskId: result.taskId,
+    status: result.imageUrl ? 'completed' : result.status || 'unknown',
     imageUrl: result.imageUrl,
     outputText: result.revisedPrompt,
     raw,

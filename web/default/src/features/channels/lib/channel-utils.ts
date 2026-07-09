@@ -42,6 +42,7 @@ const UNSUPPORTED_CHANNEL_CONNECTION_TEST_TYPES = new Set([
   52, // Vidu
   54, // DoubaoVideo
   55, // Sora
+  58, // Sanbao
 ])
 
 export function supportsChannelConnectionTest(type: number): boolean {
@@ -116,6 +117,7 @@ export function getChannelTypeIcon(type: number): string {
     55: 'OpenAI', // Sora
     54: 'Doubao', // DoubaoVideo
     56: 'Replicate', // Replicate
+    58: 'OpenAI', // Sanbao
 
     // Tools & Platforms
     37: 'Dify', // Dify

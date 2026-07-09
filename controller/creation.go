@@ -96,6 +96,11 @@ func CreationRelayImage(c *gin.Context) {
 		return
 	}
 
+	if common.GetContextKeyInt(c, constant.ContextKeyChannelType) == constant.ChannelTypeSanbao {
+		RelayTask(c)
+		return
+	}
+
 	Relay(c, types.RelayFormatOpenAIImage)
 }
 
