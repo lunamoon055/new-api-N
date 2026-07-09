@@ -233,6 +233,16 @@ func TestFetchTaskTrimsOpenAPIBasePath(t *testing.T) {
 	require.Equal(t, "/openapi/v1/videos/task_upstream", gotPath)
 }
 
+func TestNormalizeSanbaoBaseURLTrimsKnownAPIPaths(t *testing.T) {
+	for _, baseURL := range []string{
+		"https://sanbaobeauty.com/openapi/v1/",
+		"https://sanbaobeauty.com/openapi",
+		"https://sanbaobeauty.com/v1",
+	} {
+		require.Equal(t, "https://sanbaobeauty.com", normalizeSanbaoBaseURL(baseURL))
+	}
+}
+
 func TestInitTrimsOpenAPIBasePath(t *testing.T) {
 	adaptor := &TaskAdaptor{}
 	adaptor.Init(&relaycommon.RelayInfo{

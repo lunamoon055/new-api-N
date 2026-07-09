@@ -99,6 +99,38 @@ func TestResolveChannelTestEndpointUsesSanbaoUploadTemplate(t *testing.T) {
 	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
 }
 
+func TestResolveChannelTestEndpointUsesSanbaoVideoForSanbaoBaseURL(t *testing.T) {
+	baseURL := "https://sanbaobeauty.com"
+	channel := &model.Channel{
+		Type:    constant.ChannelTypeOpenAI,
+		BaseURL: &baseURL,
+		Models:  "sd2_seconds_no_real_person",
+	}
+
+	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, "sd2_seconds_no_real_person", "")
+
+	require.Equal(t, channelTestEndpointSanbaoVideo, endpointType)
+	require.Equal(t, "/pg/video/async-generations", requestPath)
+	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
+	require.Equal(t, constant.ChannelTypeSanbao, resolveChannelTestTaskChannelType(channel, endpointType))
+}
+
+func TestResolveChannelTestEndpointUsesSanbaoImageForSanbaoBaseURL(t *testing.T) {
+	baseURL := "https://sanbaobeauty.com/openapi/v1"
+	channel := &model.Channel{
+		Type:    constant.ChannelTypeOpenAI,
+		BaseURL: &baseURL,
+		Models:  "gpt-image2-1K",
+	}
+
+	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, "gpt-image2-1K", string(constant.EndpointTypeImageGeneration))
+
+	require.Equal(t, channelTestEndpointSanbaoImage, endpointType)
+	require.Equal(t, "/pg/images/generations", requestPath)
+	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
+	require.Equal(t, constant.ChannelTypeSanbao, resolveChannelTestTaskChannelType(channel, endpointType))
+}
+
 func TestBuildTestRequestUsesVideoPayloadForOpenAIVideoEndpoint(t *testing.T) {
 	request := buildTestRequest("video-2.0-fast", string(constant.EndpointTypeOpenAIVideo), &model.Channel{}, false)
 

@@ -366,12 +366,32 @@ func TestParseSanbaoCreationModelCapabilitiesIndexesDisplayName(t *testing.T) {
 	require.Equal(t, []string{"16:9", "9:16", "1:1"}, metadata.Ratios)
 }
 
+func TestShouldAttachSanbaoCreationMetadataForCompatibleChannelModels(t *testing.T) {
+	videoMetadata := dto.CreationModelMetadata{
+		Provider: "sanbao",
+		ID:       "sd2_seconds_no_real_person",
+		Type:     "video",
+	}
+	imageMetadata := dto.CreationModelMetadata{
+		Provider: "sanbao",
+		ID:       "gpt-image2-1K",
+		Type:     "image",
+	}
+
+	require.True(t, shouldAttachSanbaoCreationMetadata("SD2.0-按秒-过不了真人", constant.ChannelTypeOpenAI, videoMetadata))
+	require.True(t, shouldAttachSanbaoCreationMetadata("gpt-image2-1K", constant.ChannelTypeOpenAI, imageMetadata))
+	require.True(t, shouldAttachSanbaoCreationMetadata("gpt-image2", constant.ChannelTypeSanbao, imageMetadata))
+	require.False(t, shouldAttachSanbaoCreationMetadata("gpt-image2", constant.ChannelTypeOpenAI, imageMetadata))
+}
+
 func TestNormalizeSanbaoCreationBaseURLTrimsOpenAPIPath(t *testing.T) {
-	require.Equal(
-		t,
-		"https://sanbaobeauty.com",
-		normalizeSanbaoCreationBaseURL("https://sanbaobeauty.com/openapi/v1/"),
-	)
+	for _, baseURL := range []string{
+		"https://sanbaobeauty.com/openapi/v1/",
+		"https://sanbaobeauty.com/openapi",
+		"https://sanbaobeauty.com/v1",
+	} {
+		require.Equal(t, "https://sanbaobeauty.com", normalizeSanbaoCreationBaseURL(baseURL))
+	}
 }
 
 func TestBuildCreationModelCatalogUsesManualDescriptions(t *testing.T) {

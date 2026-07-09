@@ -1060,6 +1060,20 @@ func GetEnabledChannelsByTypeWithKeys(channelType int) ([]*Channel, error) {
 	return channels, err
 }
 
+func GetEnabledChannelsByBaseURLHostWithKeys(host string) ([]*Channel, error) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return nil, nil
+	}
+
+	var channels []*Channel
+	err := DB.
+		Where("status = ? AND LOWER(base_url) LIKE ?", common.ChannelStatusEnabled, "%"+host+"%").
+		Order("priority desc").
+		Find(&channels).Error
+	return channels, err
+}
+
 // Count channels of specific type
 func CountChannelsByType(channelType int) (int64, error) {
 	var count int64

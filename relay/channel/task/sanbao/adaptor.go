@@ -627,8 +627,11 @@ func normalizeContentType(value string) string {
 
 func normalizeSanbaoBaseURL(value string) string {
 	baseURL := strings.TrimRight(strings.TrimSpace(value), "/")
-	if strings.HasSuffix(baseURL, "/openapi/v1") {
-		return strings.TrimSuffix(baseURL, "/openapi/v1")
+	lowerBaseURL := strings.ToLower(baseURL)
+	for _, suffix := range []string{"/openapi/v1", "/openapi", "/v1"} {
+		if strings.HasSuffix(lowerBaseURL, suffix) {
+			return strings.TrimRight(baseURL[:len(baseURL)-len(suffix)], "/")
+		}
 	}
 	return baseURL
 }

@@ -35,7 +35,10 @@ const (
 	creationCostModePerToken   = "per_token"
 )
 
-const sanbaoCreationModelCapabilitiesTTL = 5 * time.Minute
+const (
+	sanbaoCreationModelCapabilitiesTTL = 5 * time.Minute
+	sanbaoProviderHost                 = "sanbaobeauty.com"
+)
 
 var creationModeOrder = []string{
 	creationModeChat,
@@ -390,7 +393,7 @@ func getCreationProviderModelMetadata(ctx context.Context, pricing []model.Prici
 
 	needsSanbaoMetadata := false
 	for _, item := range pricing {
-		if owners[item.ModelName] == constant.ChannelTypeSanbao {
+		if owners[item.ModelName] == constant.ChannelTypeSanbao || isLikelySanbaoModelName(item.ModelName) {
 			needsSanbaoMetadata = true
 			break
 		}
@@ -406,10 +409,10 @@ func getCreationProviderModelMetadata(ctx context.Context, pricing []model.Prici
 
 	result := make(map[string]dto.CreationModelMetadata)
 	for _, item := range pricing {
-		if owners[item.ModelName] != constant.ChannelTypeSanbao {
-			continue
-		}
 		if metadata, ok := sanbaoCapabilities[normalizeCreationModelMetadataKey(item.ModelName)]; ok {
+			if !shouldAttachSanbaoCreationMetadata(item.ModelName, owners[item.ModelName], metadata) {
+				continue
+			}
 			result[normalizeCreationModelMetadataKey(item.ModelName)] = metadata
 		}
 	}
@@ -431,11 +434,12 @@ func getSanbaoCreationModelCapabilities(ctx context.Context) map[string]dto.Crea
 	channels, err := model.GetEnabledChannelsByTypeWithKeys(constant.ChannelTypeSanbao)
 	if err != nil {
 		common.SysLog(fmt.Sprintf("get Sanbao channels failed: %v", err))
-		return nil
 	}
-	if len(channels) == 0 {
-		return nil
+	hostChannels, hostErr := model.GetEnabledChannelsByBaseURLHostWithKeys(sanbaoProviderHost)
+	if hostErr != nil {
+		common.SysLog(fmt.Sprintf("get Sanbao base url channels failed: %v", hostErr))
 	}
+	channels = mergeSanbaoCreationChannels(channels, hostChannels)
 
 	var capabilities map[string]dto.CreationModelMetadata
 	for _, channel := range channels {
@@ -447,6 +451,14 @@ func getSanbaoCreationModelCapabilities(ctx context.Context) map[string]dto.Crea
 			}
 		}
 		applySanbaoModelMappingAliases(capabilities, channel)
+	}
+	if len(capabilities) == 0 {
+		var err error
+		capabilities, err = fetchPublicSanbaoCreationModelCapabilities(ctx, "")
+		if err != nil {
+			common.SysLog(fmt.Sprintf("fetch public Sanbao model capabilities failed: %v", err))
+			return nil
+		}
 	}
 
 	sanbaoCreationModelCapabilitiesCache.Lock()
@@ -495,6 +507,37 @@ func fetchSanbaoCreationModelCapabilities(ctx context.Context, channel *model.Ch
 	return parseSanbaoCreationModelCapabilities(body)
 }
 
+func fetchPublicSanbaoCreationModelCapabilities(ctx context.Context, baseURL string) (map[string]dto.CreationModelMetadata, error) {
+	baseURL = normalizeSanbaoCreationBaseURL(baseURL)
+	if baseURL == "" {
+		baseURL = "https://" + sanbaoProviderHost
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, baseURL+"/api/public/openapi-models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("Sanbao public /models returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return parseSanbaoCreationModelCapabilities(body)
+}
+
 func parseSanbaoCreationModelCapabilities(body []byte) (map[string]dto.CreationModelMetadata, error) {
 	var payload struct {
 		Data []dto.CreationModelMetadata `json:"data"`
@@ -526,6 +569,24 @@ func parseSanbaoCreationModelCapabilities(body []byte) (map[string]dto.CreationM
 		}
 	}
 	return result, nil
+}
+
+func mergeSanbaoCreationChannels(groups ...[]*model.Channel) []*model.Channel {
+	result := make([]*model.Channel, 0)
+	seen := make(map[int]struct{})
+	for _, group := range groups {
+		for _, channel := range group {
+			if channel == nil {
+				continue
+			}
+			if _, ok := seen[channel.Id]; ok {
+				continue
+			}
+			seen[channel.Id] = struct{}{}
+			result = append(result, channel)
+		}
+	}
+	return result
 }
 
 func applySanbaoModelMappingAliases(capabilities map[string]dto.CreationModelMetadata, channel *model.Channel) {
@@ -560,6 +621,33 @@ func applySanbaoModelMappingAliases(capabilities map[string]dto.CreationModelMet
 	}
 }
 
+func shouldAttachSanbaoCreationMetadata(modelName string, ownerChannelType int, metadata dto.CreationModelMetadata) bool {
+	if ownerChannelType == constant.ChannelTypeSanbao {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(metadata.Provider), "sanbao") && isLikelySanbaoModelName(modelName) {
+		return true
+	}
+	return false
+}
+
+func isLikelySanbaoModelName(modelName string) bool {
+	key := normalizeCreationModelMetadataKey(modelName)
+	return strings.HasPrefix(key, "sd2") ||
+		strings.HasPrefix(key, "grok_video") ||
+		strings.HasPrefix(key, "gpt-image2-")
+}
+
+func isLikelySanbaoChannel(channel *model.Channel) bool {
+	if channel == nil {
+		return false
+	}
+	if channel.Type == constant.ChannelTypeSanbao {
+		return true
+	}
+	return strings.Contains(strings.ToLower(strings.TrimSpace(channel.GetBaseURL())), sanbaoProviderHost)
+}
+
 func getProviderCreationModelMetadata(modelName string, metadata map[string]dto.CreationModelMetadata) (dto.CreationModelMetadata, bool) {
 	if len(metadata) == 0 {
 		return dto.CreationModelMetadata{}, false
@@ -592,8 +680,11 @@ func normalizeCreationModelMetadataKey(modelName string) string {
 
 func normalizeSanbaoCreationBaseURL(value string) string {
 	baseURL := strings.TrimRight(strings.TrimSpace(value), "/")
-	if strings.HasSuffix(baseURL, "/openapi/v1") {
-		return strings.TrimSuffix(baseURL, "/openapi/v1")
+	lowerBaseURL := strings.ToLower(baseURL)
+	for _, suffix := range []string{"/openapi/v1", "/openapi", "/v1"} {
+		if strings.HasSuffix(lowerBaseURL, suffix) {
+			return strings.TrimRight(baseURL[:len(baseURL)-len(suffix)], "/")
+		}
 	}
 	return baseURL
 }

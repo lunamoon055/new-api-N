@@ -85,6 +85,17 @@ type channelTestLabRequest struct {
 
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
 	normalized := strings.TrimSpace(endpointType)
+	if isLikelySanbaoChannel(channel) && !isChannelTestSanbaoEndpoint(normalized) {
+		if normalized == "" ||
+			normalized == string(constant.EndpointTypeImageGeneration) ||
+			normalized == string(constant.EndpointTypeOpenAIVideo) ||
+			normalized == channelTestEndpointOpenAIVideoAsync {
+			if isLikelySanbaoImageModel(modelName) {
+				return channelTestEndpointSanbaoImage
+			}
+			return channelTestEndpointSanbaoVideo
+		}
+	}
 	if normalized != "" {
 		return normalized
 	}
@@ -114,6 +125,23 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 		return string(constant.EndpointTypeOpenAIResponse)
 	}
 	return normalized
+}
+
+func isChannelTestSanbaoEndpoint(endpointType string) bool {
+	switch strings.TrimSpace(endpointType) {
+	case channelTestEndpointSanbaoImage,
+		channelTestEndpointSanbaoVideo,
+		channelTestEndpointSanbaoUpload,
+		channelTestEndpointSanbaoImagePoll,
+		channelTestEndpointSanbaoVideoPoll:
+		return true
+	default:
+		return false
+	}
+}
+
+func isLikelySanbaoImageModel(modelName string) bool {
+	return strings.Contains(normalizeCreationModelMetadataKey(modelName), "gpt-image2")
 }
 
 func resolveChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) (string, string, types.RelayFormat) {
@@ -351,6 +379,9 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 			newAPIError: newAPIError,
 		}
 	}
+	if relayFormat == types.RelayFormatTask {
+		applyChannelTestTaskChannelType(c, nil, resolveChannelTestTaskChannelType(channel, endpointType))
+	}
 
 	request, buildErr := buildChannelTestRequest(testModel, endpointType, channel, isStream, relayFormat, payload)
 	if buildErr != nil {
@@ -416,7 +447,7 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 		}
 	}
 	if info.RelayMode == relayconstant.RelayModeVideoSubmit {
-		return runTaskChannelTest(c, channel, info, request, tik)
+		return runTaskChannelTest(c, channel, endpointType, info, request, tik)
 	}
 	adaptor := relay.GetAdaptor(apiType)
 	if adaptor == nil {
@@ -835,7 +866,7 @@ func buildChannelTestTaskPayload(modelName string, request any, payload json.Raw
 	return common.Marshal(raw)
 }
 
-func runTaskChannelTest(c *gin.Context, channel *model.Channel, info *relaycommon.RelayInfo, request any, tik time.Time) testResult {
+func runTaskChannelTest(c *gin.Context, channel *model.Channel, endpointType string, info *relaycommon.RelayInfo, request any, tik time.Time) testResult {
 	taskReq, ok := request.(relaycommon.TaskSubmitReq)
 	if !ok {
 		return testResult{
@@ -845,12 +876,12 @@ func runTaskChannelTest(c *gin.Context, channel *model.Channel, info *relaycommo
 		}
 	}
 	c.Set("task_request", taskReq)
-	c.Set("channel_type", channel.Type)
-	c.Set("platform", strconv.Itoa(channel.Type))
+	taskChannelType := resolveChannelTestTaskChannelType(channel, endpointType)
+	applyChannelTestTaskChannelType(c, info, taskChannelType)
 
-	adaptor := relay.GetTaskAdaptor(constant.TaskPlatform(strconv.Itoa(channel.Type)))
+	adaptor := relay.GetTaskAdaptor(constant.TaskPlatform(strconv.Itoa(taskChannelType)))
 	if adaptor == nil {
-		err := fmt.Errorf("invalid task api platform: %d", channel.Type)
+		err := fmt.Errorf("invalid task api platform: %d", taskChannelType)
 		return testResult{
 			context:     c,
 			localErr:    err,
@@ -949,6 +980,29 @@ func runTaskChannelTest(c *gin.Context, channel *model.Channel, info *relaycommo
 		Other:          service.GenerateTextOtherInfo(c, info, priceData.ModelRatio, priceData.GroupRatioInfo.GroupRatio, priceData.CompletionRatio, 0, priceData.CacheRatio, priceData.ModelPrice, priceData.GroupRatioInfo.GroupSpecialRatio),
 	})
 	return testResult{context: c}
+}
+
+func resolveChannelTestTaskChannelType(channel *model.Channel, endpointType string) int {
+	if isChannelTestSanbaoEndpoint(endpointType) || isLikelySanbaoChannel(channel) {
+		return constant.ChannelTypeSanbao
+	}
+	if channel == nil {
+		return constant.ChannelTypeUnknown
+	}
+	return channel.Type
+}
+
+func applyChannelTestTaskChannelType(c *gin.Context, info *relaycommon.RelayInfo, channelType int) {
+	c.Set("channel_type", channelType)
+	c.Set("platform", strconv.Itoa(channelType))
+	common.SetContextKey(c, constant.ContextKeyChannelType, channelType)
+	if info == nil || info.ChannelMeta == nil {
+		return
+	}
+	info.ChannelMeta.ChannelType = channelType
+	if apiType, ok := common.ChannelType2APIType(channelType); ok {
+		info.ChannelMeta.ApiType = apiType
+	}
 }
 
 func buildTestLogOther(c *gin.Context, info *relaycommon.RelayInfo, priceData types.PriceData, usage *dto.Usage, tieredResult *billingexpr.TieredResult) map[string]interface{} {
