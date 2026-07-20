@@ -84,6 +84,7 @@ export function ImageReferenceFields(props: ImageReferenceFieldsProps) {
               <Upload data-icon='inline-start' />
               {t('Reference images')}
               <input
+                id='creation-reference-upload'
                 type='file'
                 accept={IMAGE_REFERENCE_ACCEPT}
                 multiple

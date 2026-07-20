@@ -114,8 +114,6 @@ export type CreationCatalogResponse = {
   data?: CreationModelCatalog
 }
 
-export type CreationView = 'preview' | 'assets' | 'history'
-
 export type CreationResultStatus =
   'queued' | 'processing' | 'completed' | 'failed' | 'unknown'
 

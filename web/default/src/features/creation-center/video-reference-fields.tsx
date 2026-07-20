@@ -115,6 +115,7 @@ export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
               <Upload data-icon='inline-start' />
               {t('Reference assets')}
               <input
+                id='creation-reference-upload'
                 type='file'
                 accept={getReferenceAccept(referenceMode, limits)}
                 multiple

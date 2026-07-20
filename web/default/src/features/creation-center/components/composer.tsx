@@ -22,7 +22,7 @@ import {
   FileImage,
   FileVideo,
   RefreshCw,
-  Send,
+  Sparkles,
   Trash2,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -152,253 +152,266 @@ export function Composer(props: ComposerProps) {
   }
 
   return (
-    <section className='bg-card rounded-lg border p-3'>
-      <div className='flex min-w-0 items-start gap-3'>
-        <div className='min-w-0 flex-1'>
-          <div className='relative'>
-            <Textarea
-              ref={textareaRef}
-              aria-label={t('Prompt')}
-              value={props.prompt}
-              maxLength={5000}
-              onChange={(event) => {
-                props.onPromptChange(event.target.value)
-                updateMentionTrigger(
-                  event.target.value,
-                  event.target.selectionStart
-                )
-              }}
-              onClick={(event) =>
-                updateMentionTrigger(
-                  event.currentTarget.value,
-                  event.currentTarget.selectionStart
-                )
-              }
-              onKeyUp={(event) =>
-                updateMentionTrigger(
-                  event.currentTarget.value,
-                  event.currentTarget.selectionStart
-                )
-              }
-              onKeyDown={(event) => {
-                if (event.key === 'Escape' && mentionTrigger) {
+    <section className='overflow-visible rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#101820]'>
+      <div className='flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-white/10'>
+        <div className='flex min-w-0 items-center gap-2'>
+          <Sparkles className='size-4 shrink-0 text-cyan-700 dark:text-cyan-300' />
+          <span className='truncate text-sm font-semibold'>{t('Prompt')}</span>
+        </div>
+        <span className='text-muted-foreground text-xs tabular-nums'>
+          {props.prompt.length}/5000
+        </span>
+      </div>
+
+      <div className='p-3'>
+        <div className='flex min-w-0 items-start gap-3'>
+          <div className='min-w-0 flex-1'>
+            <div className='relative'>
+              <Textarea
+                ref={textareaRef}
+                aria-label={t('Prompt')}
+                value={props.prompt}
+                maxLength={5000}
+                onChange={(event) => {
+                  props.onPromptChange(event.target.value)
+                  updateMentionTrigger(
+                    event.target.value,
+                    event.target.selectionStart
+                  )
+                }}
+                onClick={(event) =>
+                  updateMentionTrigger(
+                    event.currentTarget.value,
+                    event.currentTarget.selectionStart
+                  )
+                }
+                onKeyUp={(event) =>
+                  updateMentionTrigger(
+                    event.currentTarget.value,
+                    event.currentTarget.selectionStart
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape' && mentionTrigger) {
+                    event.preventDefault()
+                    setMentionTrigger(null)
+                    return
+                  }
+                  if (
+                    event.key === 'Enter' &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing &&
+                    showReferenceMentions
+                  ) {
+                    event.preventDefault()
+                    insertReferenceMention(mentionSuggestions[0])
+                    return
+                  }
+                  if (
+                    event.key !== 'Enter' ||
+                    event.shiftKey ||
+                    event.nativeEvent.isComposing
+                  ) {
+                    return
+                  }
                   event.preventDefault()
-                  setMentionTrigger(null)
-                  return
-                }
-                if (
-                  event.key === 'Enter' &&
-                  !event.shiftKey &&
-                  !event.nativeEvent.isComposing &&
-                  showReferenceMentions
-                ) {
-                  event.preventDefault()
-                  insertReferenceMention(mentionSuggestions[0])
-                  return
-                }
-                if (
-                  event.key !== 'Enter' ||
-                  event.shiftKey ||
-                  event.nativeEvent.isComposing
-                ) {
-                  return
-                }
-                event.preventDefault()
-                if (canSubmit) props.onSubmit()
-              }}
-              placeholder={t(
-                'Describe the task you want the selected model to complete...'
+                  if (canSubmit) props.onSubmit()
+                }}
+                placeholder={t(
+                  'Describe the task you want the selected model to complete...'
+                )}
+                className='min-h-24 resize-none rounded-md border-slate-200 bg-slate-50 px-3 py-2 shadow-none focus-visible:border-cyan-500/50 focus-visible:ring-2 focus-visible:ring-cyan-500/20 dark:border-white/10 dark:bg-[#0b1118]'
+              />
+              {showReferenceMentions && (
+                <div className='bg-popover text-popover-foreground absolute top-full right-0 left-0 z-20 mt-1 max-h-48 overflow-auto rounded-lg border p-1 shadow-md'>
+                  {mentionSuggestions.map((item) => (
+                    <button
+                      key={item.id}
+                      type='button'
+                      className='hover:bg-accent hover:text-accent-foreground flex min-h-10 w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors'
+                      aria-label={item.label}
+                      onMouseDown={(event) => {
+                        event.preventDefault()
+                        insertReferenceMention(item)
+                      }}
+                    >
+                      {getReferenceMentionIcon(item.kind)}
+                      <span className='min-w-0 flex-1 truncate'>
+                        {item.label}
+                      </span>
+                      <span className='text-muted-foreground shrink-0 text-xs'>
+                        @{item.token}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               )}
-              className='min-h-20 resize-none border-0 px-0 py-1 shadow-none focus-visible:ring-0'
-            />
-            {showReferenceMentions && (
-              <div className='bg-popover text-popover-foreground absolute top-full right-0 left-0 z-20 mt-1 max-h-48 overflow-auto rounded-lg border p-1 shadow-md'>
-                {mentionSuggestions.map((item) => (
+            </div>
+            {!!props.assets.length && (
+              <div className='mt-2 flex flex-wrap gap-1.5'>
+                {props.assets.map((asset, index) => (
                   <button
-                    key={item.id}
+                    key={asset.id}
                     type='button'
-                    className='hover:bg-accent hover:text-accent-foreground flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors'
-                    aria-label={item.label}
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                      insertReferenceMention(item)
-                    }}
+                    onClick={() => props.onRemoveAsset(index)}
+                    className='bg-muted text-muted-foreground hover:bg-muted/80 inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors'
+                    aria-label={`${t('Remove asset')}: ${asset.name}`}
                   >
-                    {getReferenceMentionIcon(item.kind)}
-                    <span className='min-w-0 flex-1 truncate'>
-                      {item.label}
-                    </span>
-                    <span className='text-muted-foreground shrink-0 text-xs'>
-                      @{item.token}
-                    </span>
+                    <FileImage className='size-3 shrink-0' />
+                    <span className='truncate'>{asset.name}</span>
+                    <Trash2 className='size-3 shrink-0' />
                   </button>
                 ))}
               </div>
             )}
-          </div>
-          {!!props.assets.length && (
-            <div className='mt-2 flex flex-wrap gap-1.5'>
-              {props.assets.map((asset, index) => (
-                <button
-                  key={asset.id}
-                  type='button'
-                  onClick={() => props.onRemoveAsset(index)}
-                  className='bg-muted text-muted-foreground hover:bg-muted/80 inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors'
-                  aria-label={`${t('Remove asset')}: ${asset.name}`}
-                >
-                  <FileImage className='size-3 shrink-0' />
-                  <span className='truncate'>{asset.name}</span>
-                  <Trash2 className='size-3 shrink-0' />
-                </button>
-              ))}
-            </div>
-          )}
-          <div className='text-muted-foreground text-right text-[11px]'>
-            {props.prompt.length}/5000
-          </div>
-          {props.mode === 'video' && props.videoCapabilities && (
-            <VideoReferenceFields
-              value={props.videoReferences}
-              onFilesSelected={props.onVideoReferenceFilesSelected}
-              onRemoveImage={props.onRemoveVideoReferenceImage}
-              onRemoveVideo={props.onRemoveVideoReferenceVideo}
-              onRemoveAudio={props.onRemoveVideoReferenceAudio}
-              capability={props.videoCapabilities}
-            />
-          )}
-          {props.mode === 'image' && props.imageReferencesSupported && (
-            <ImageReferenceFields
-              value={props.imageReferences}
-              limits={props.imageReferenceLimits}
-              onFilesSelected={props.onImageReferenceFilesSelected}
-              onRemoveImage={props.onRemoveImageReferenceImage}
-            />
-          )}
-        </div>
-        <Button
-          size='icon-lg'
-          aria-label={t('Submit')}
-          onClick={props.onSubmit}
-          disabled={!canSubmit}
-        >
-          {props.submitting ? (
-            <RefreshCw data-icon='inline-start' className='animate-spin' />
-          ) : (
-            <Send data-icon='inline-start' />
-          )}
-        </Button>
-      </div>
-      {props.mode === 'image' && props.imageReferencesSupported && (
-        <>
-          <Separator className='my-3' />
-          <div className='grid gap-3 sm:grid-cols-3'>
-            <ComposerSelectGroup
-              label={t('Aspect ratio')}
-              value={props.imageOptions.aspectRatio}
-              options={props.imageAspectRatioOptions.map((value) => ({
-                value,
-                label: value,
-              }))}
-              onChange={(value) =>
-                props.onImageOptionsChange({
-                  ...props.imageOptions,
-                  aspectRatio: value as CreationImageAspectRatio,
-                })
-              }
-            />
-          </div>
-        </>
-      )}
-      {props.mode === 'video' && (
-        <>
-          <Separator className='my-3' />
-          <div
-            className={cn(
-              'grid gap-3',
-              props.videoCapabilities?.showResolution === false
-                ? 'sm:grid-cols-3'
-                : props.videoCapabilities
-                  ? 'sm:grid-cols-4'
-                  : 'sm:grid-cols-2'
-            )}
-          >
-            {!!props.videoCapabilities?.referenceModes.length && (
-              <ComposerSelectGroup
-                label={t('Reference mode')}
-                value={props.videoReferences.referenceMode}
-                options={props.videoCapabilities.referenceModes.map(
-                  (value) => ({
-                    value,
-                    label: getReferenceModeLabel(value, t),
-                  })
-                )}
-                onChange={(value) =>
-                  props.onVideoReferencesChange(
-                    normalizeCreationVideoReferences(
-                      {
-                        ...props.videoReferences,
-                        referenceMode: value as CreationVideoReferenceMode,
-                      },
-                      props.model
-                    )
-                  )
-                }
+            {props.mode === 'video' && props.videoCapabilities && (
+              <VideoReferenceFields
+                value={props.videoReferences}
+                onFilesSelected={props.onVideoReferenceFilesSelected}
+                onRemoveImage={props.onRemoveVideoReferenceImage}
+                onRemoveVideo={props.onRemoveVideoReferenceVideo}
+                onRemoveAudio={props.onRemoveVideoReferenceAudio}
+                capability={props.videoCapabilities}
               />
             )}
-            {!!props.videoCapabilities?.aspectRatios.length && (
+            {props.mode === 'image' && props.imageReferencesSupported && (
+              <ImageReferenceFields
+                value={props.imageReferences}
+                limits={props.imageReferenceLimits}
+                onFilesSelected={props.onImageReferenceFilesSelected}
+                onRemoveImage={props.onRemoveImageReferenceImage}
+              />
+            )}
+          </div>
+          <Button
+            size='lg'
+            className='shrink-0 self-start bg-cyan-600 text-white hover:bg-cyan-500 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400'
+            aria-label={t('Submit')}
+            onClick={props.onSubmit}
+            disabled={!canSubmit}
+          >
+            {props.submitting ? (
+              <RefreshCw data-icon='inline-start' className='animate-spin' />
+            ) : (
+              <Sparkles data-icon='inline-start' />
+            )}
+            {t('Generation')}
+          </Button>
+        </div>
+        {props.mode === 'image' && props.imageReferencesSupported && (
+          <>
+            <Separator className='my-3' />
+            <div className='grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 dark:border-white/10 dark:bg-white/[0.035]'>
               <ComposerSelectGroup
                 label={t('Aspect ratio')}
-                value={props.videoOptions.aspectRatio ?? '9:16'}
-                options={props.videoCapabilities.aspectRatios.map((value) => ({
+                value={props.imageOptions.aspectRatio}
+                options={props.imageAspectRatioOptions.map((value) => ({
                   value,
                   label: value,
                 }))}
                 onChange={(value) =>
-                  props.onVideoOptionsChange({
-                    ...props.videoOptions,
-                    aspectRatio: value as CreationAspectRatio,
+                  props.onImageOptionsChange({
+                    ...props.imageOptions,
+                    aspectRatio: value as CreationImageAspectRatio,
                   })
                 }
               />
-            )}
-            {props.videoCapabilities?.showResolution !== false && (
+            </div>
+          </>
+        )}
+        {props.mode === 'video' && (
+          <>
+            <Separator className='my-3' />
+            <div
+              className={cn(
+                'grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.035]',
+                props.videoCapabilities?.showResolution === false
+                  ? 'sm:grid-cols-3'
+                  : props.videoCapabilities
+                    ? 'sm:grid-cols-4'
+                    : 'sm:grid-cols-2'
+              )}
+            >
+              {!!props.videoCapabilities?.referenceModes.length && (
+                <ComposerSelectGroup
+                  label={t('Reference mode')}
+                  value={props.videoReferences.referenceMode}
+                  options={props.videoCapabilities.referenceModes.map(
+                    (value) => ({
+                      value,
+                      label: getReferenceModeLabel(value, t),
+                    })
+                  )}
+                  onChange={(value) =>
+                    props.onVideoReferencesChange(
+                      normalizeCreationVideoReferences(
+                        {
+                          ...props.videoReferences,
+                          referenceMode: value as CreationVideoReferenceMode,
+                        },
+                        props.model
+                      )
+                    )
+                  }
+                />
+              )}
+              {!!props.videoCapabilities?.aspectRatios.length && (
+                <ComposerSelectGroup
+                  label={t('Aspect ratio')}
+                  value={props.videoOptions.aspectRatio ?? '9:16'}
+                  options={props.videoCapabilities.aspectRatios.map(
+                    (value) => ({
+                      value,
+                      label: value,
+                    })
+                  )}
+                  onChange={(value) =>
+                    props.onVideoOptionsChange({
+                      ...props.videoOptions,
+                      aspectRatio: value as CreationAspectRatio,
+                    })
+                  }
+                />
+              )}
+              {props.videoCapabilities?.showResolution !== false && (
+                <ComposerSelectGroup
+                  label={t('Resolution')}
+                  value={props.videoOptions.resolution}
+                  options={props.resolutionOptions}
+                  onChange={(value) =>
+                    props.onVideoOptionsChange({
+                      ...props.videoOptions,
+                      resolution: value as CreationResolution,
+                    })
+                  }
+                />
+              )}
               <ComposerSelectGroup
-                label={t('Resolution')}
-                value={props.videoOptions.resolution}
-                options={props.resolutionOptions}
+                label={t('Video duration')}
+                value={props.videoOptions.duration}
+                options={props.durationOptions}
                 onChange={(value) =>
                   props.onVideoOptionsChange({
                     ...props.videoOptions,
-                    resolution: value as CreationResolution,
+                    duration: value as CreationDuration,
                   })
                 }
               />
-            )}
-            <ComposerSelectGroup
-              label={t('Video duration')}
-              value={props.videoOptions.duration}
-              options={props.durationOptions}
-              onChange={(value) =>
-                props.onVideoOptionsChange({
-                  ...props.videoOptions,
-                  duration: value as CreationDuration,
-                })
-              }
-            />
-          </div>
-        </>
-      )}
-      <div className='text-muted-foreground mt-3 flex flex-wrap items-center justify-end gap-2 rounded-lg border px-3 py-2 text-xs'>
-        {!props.authenticated && (
-          <span className='mr-auto'>
-            {t('Sign in before submitting a real creation task.')}
-          </span>
+            </div>
+          </>
         )}
-        <span className='text-muted-foreground'>
-          {t('Session')} #{props.sessionNumber} · {props.assets.length}{' '}
-          {t('assets')}
-        </span>
-        <span>{t('Press Enter to send, Shift+Enter for newline.')}</span>
+        <div className='text-muted-foreground mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-2 text-[11px] dark:border-white/10'>
+          {!props.authenticated && (
+            <span className='mr-auto'>
+              {t('Sign in before submitting a real creation task.')}
+            </span>
+          )}
+          <span>
+            {t('Session')} #{props.sessionNumber} · {props.assets.length}{' '}
+            {t('assets')}
+          </span>
+          <span>{t('Press Enter to send, Shift+Enter for newline.')}</span>
+        </div>
       </div>
     </section>
   )

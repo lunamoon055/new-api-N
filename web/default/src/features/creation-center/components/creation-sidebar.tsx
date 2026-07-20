@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useMemo, useState } from 'react'
 import {
   Bot,
   FileText,
@@ -23,13 +24,16 @@ import {
   Image,
   MessageSquare,
   Plus,
+  Search,
   Settings2,
+  Sparkles,
   Video,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CREATION_MODES } from '../constants'
 import { formatCreationModelCost } from '../cost'
@@ -55,19 +59,37 @@ type CreationSidebarProps = {
 
 export function CreationSidebar(props: CreationSidebarProps) {
   const { t } = useTranslation()
+  const [query, setQuery] = useState('')
+  const filteredModels = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase()
+    if (!normalizedQuery) return props.models
+    return props.models.filter((model) =>
+      [model.id, model.description, ...(model.tags ?? [])].some((value) =>
+        value?.toLocaleLowerCase().includes(normalizedQuery)
+      )
+    )
+  }, [props.models, query])
 
   return (
-    <aside className='border-border/70 bg-background/90 flex flex-col border-r'>
-      <div className='space-y-4 border-b p-4'>
-        <div>
-          <h1 className='text-lg font-semibold'>{t('Creation Center')}</h1>
-          <p className='text-muted-foreground mt-1 text-xs leading-5'>
-            {t(
-              'Create chat, image, and video tasks with the models configured in your workspace.'
-            )}
-          </p>
+    <aside className='flex min-w-0 flex-col border-b border-slate-200 bg-white/95 lg:sticky lg:top-16 lg:h-[calc(100svh-4rem)] lg:border-r lg:border-b-0 dark:border-white/10 dark:bg-[#0b1118]'>
+      <div className='flex flex-col gap-3 border-b border-slate-200 p-4 dark:border-white/10'>
+        <div className='flex items-start gap-3'>
+          <span className='flex size-9 shrink-0 items-center justify-center rounded-md border border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'>
+            <Sparkles className='size-4' />
+          </span>
+          <div className='min-w-0'>
+            <h1 className='text-base font-semibold'>{t('Creation Center')}</h1>
+            <p className='text-muted-foreground mt-0.5 text-xs leading-5'>
+              {t(
+                'Create chat, image, and video tasks with the models configured in your workspace.'
+              )}
+            </p>
+          </div>
         </div>
-        <div className='grid grid-cols-3 gap-2' role='tablist'>
+        <div
+          className='grid grid-cols-3 gap-1 rounded-md border border-slate-200 bg-slate-100/80 p-1 dark:border-white/10 dark:bg-white/[0.035]'
+          role='tablist'
+        >
           {CREATION_MODES.map((item) => (
             <ModeButton
               key={item}
@@ -80,83 +102,90 @@ export function CreationSidebar(props: CreationSidebarProps) {
         </div>
         <div className='grid grid-cols-2 gap-2'>
           <Button variant='outline' size='sm' onClick={props.onHistory}>
-            <History />
+            <History data-icon='inline-start' />
             {t('History')}
           </Button>
           <Button variant='outline' size='sm' onClick={props.onNewSession}>
-            <Plus />
+            <Plus data-icon='inline-start' />
             {t('New session')}
           </Button>
         </div>
       </div>
 
-      <div className='p-4'>
-        <div>
-          <div className='mb-2 flex items-center justify-between gap-2'>
-            <div className='text-muted-foreground text-xs font-medium'>
-              {t('Available models')}
+      <div className='flex min-h-0 flex-1 flex-col p-3 lg:p-4'>
+        <div className='mb-2 flex items-center justify-between gap-2'>
+          <div className='text-muted-foreground text-xs font-medium'>
+            {t('Available models')}
+          </div>
+          {(props.canManageCategories || props.canManageDescriptions) && (
+            <div className='flex justify-end gap-1'>
+              {props.canManageCategories && (
+                <Button
+                  variant='ghost'
+                  size='icon-xs'
+                  aria-label={t('Manage categories')}
+                  onClick={props.onManageCategories}
+                >
+                  <Settings2 />
+                </Button>
+              )}
+              {props.canManageDescriptions && (
+                <Button
+                  variant='ghost'
+                  size='icon-xs'
+                  aria-label={t('Manage descriptions')}
+                  onClick={props.onManageDescriptions}
+                >
+                  <FileText />
+                </Button>
+              )}
             </div>
-            {(props.canManageCategories || props.canManageDescriptions) && (
-              <div className='flex flex-wrap justify-end gap-1'>
-                {props.canManageCategories && (
-                  <Button
-                    variant='ghost'
-                    size='xs'
-                    className='h-6 px-1.5 text-[11px]'
-                    onClick={props.onManageCategories}
-                  >
-                    <Settings2 className='size-3.5' />
-                    {t('Manage categories')}
-                  </Button>
-                )}
-                {props.canManageDescriptions && (
-                  <Button
-                    variant='ghost'
-                    size='xs'
-                    className='h-6 px-1.5 text-[11px]'
-                    onClick={props.onManageDescriptions}
-                  >
-                    <FileText className='size-3.5' />
-                    {t('Manage descriptions')}
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-          <div className='space-y-2'>
-            {props.loading ? (
-              <ModelSkeletons />
-            ) : props.error ? (
-              <SidebarNotice>
-                {t('Unable to load model catalog.')}
-              </SidebarNotice>
-            ) : props.models.length === 0 ? (
-              <SidebarNotice>
-                {t('No models are configured for this creation type.')}
-              </SidebarNotice>
-            ) : (
-              props.models.map((model) => (
-                <ModelButton
-                  key={model.id}
-                  model={model}
-                  mode={props.mode}
-                  active={props.selectedModel?.id === model.id}
-                  selectedResolution={
-                    props.selectedModel?.id === model.id
-                      ? props.selectedResolution
-                      : undefined
-                  }
-                  onClick={() => props.onModelChange(model)}
-                />
-              ))
-            )}
-          </div>
+          )}
+        </div>
+        <div className='relative mb-3'>
+          <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2' />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('Search models')}
+            aria-label={t('Search models')}
+            className='h-9 rounded-md border-slate-200 bg-slate-50 pl-8 text-xs shadow-none dark:border-white/10 dark:bg-white/[0.035]'
+          />
+        </div>
+        <div className='no-scrollbar flex min-h-0 gap-2 overflow-x-auto pb-1 lg:flex-1 lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto lg:pr-1 lg:pb-0'>
+          {props.loading ? (
+            <ModelSkeletons />
+          ) : props.error ? (
+            <SidebarNotice>{t('Unable to load model catalog.')}</SidebarNotice>
+          ) : filteredModels.length === 0 ? (
+            <SidebarNotice>
+              {t('No models are configured for this creation type.')}
+            </SidebarNotice>
+          ) : (
+            filteredModels.map((model) => (
+              <ModelButton
+                key={model.id}
+                model={model}
+                mode={props.mode}
+                active={props.selectedModel?.id === model.id}
+                selectedResolution={
+                  props.selectedModel?.id === model.id
+                    ? props.selectedResolution
+                    : undefined
+                }
+                onClick={() => props.onModelChange(model)}
+              />
+            ))
+          )}
         </div>
       </div>
 
-      <div className='mt-auto border-t p-4'>
-        <div className='bg-muted/50 rounded-lg border p-3'>
-          <div className='text-xs font-medium'>{t('Browsing mode')}</div>
+      <div className='mt-auto hidden border-t border-slate-200 p-4 lg:block dark:border-white/10'>
+        <div className='rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.035]'>
+          <div className='flex items-center gap-2 text-xs font-medium'>
+            <span className='size-1.5 rounded-full bg-cyan-500' />
+            {t('Browsing mode')}
+          </div>
           <p className='text-muted-foreground mt-1 text-xs leading-5'>
             {t(
               'The model catalog is synced with live configuration. Sign in before submitting a real task.'
@@ -195,17 +224,19 @@ function ModeButton(props: {
       aria-selected={props.active}
       onClick={props.onClick}
       className={cn(
-        'flex h-16 flex-col items-center justify-center gap-1 rounded-lg border text-xs transition-colors',
+        'flex min-h-11 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors',
         props.active
-          ? 'border-primary/40 bg-primary/10 text-primary'
-          : 'border-border bg-card text-muted-foreground hover:bg-muted'
+          ? 'bg-white text-cyan-700 shadow-sm dark:bg-white/10 dark:text-cyan-300'
+          : 'text-muted-foreground hover:text-foreground hover:bg-white/70 dark:hover:bg-white/[0.06]'
       )}
     >
       <Icon className='size-4' />
-      <span>
-        {label}
-        {props.count > 0 ? ` ${props.count}` : ''}
-      </span>
+      <span>{label}</span>
+      {props.count > 0 && (
+        <span className='bg-muted text-muted-foreground rounded px-1 text-[10px] tabular-nums'>
+          {props.count}
+        </span>
+      )}
     </button>
   )
 }
@@ -241,10 +272,10 @@ function ModelButton(props: {
       type='button'
       onClick={props.onClick}
       className={cn(
-        'w-full rounded-lg border p-3 text-left transition-colors',
+        'group min-w-[15rem] rounded-md border bg-slate-50 p-3 text-left transition-colors lg:w-full lg:min-w-0 dark:bg-white/[0.035]',
         props.active
-          ? 'border-primary/45 bg-primary/8'
-          : 'border-border bg-card hover:bg-muted'
+          ? 'border-cyan-500/60 bg-cyan-500/[0.07] ring-1 ring-cyan-500/15'
+          : 'border-slate-200 hover:border-cyan-500/30 hover:bg-cyan-500/[0.03] dark:border-white/10'
       )}
     >
       <div className='flex items-start gap-2.5'>
@@ -252,8 +283,8 @@ function ModelButton(props: {
           className={cn(
             'flex size-8 shrink-0 items-center justify-center rounded-lg',
             props.active
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted text-muted-foreground'
+              ? 'bg-cyan-600 text-white dark:bg-cyan-500 dark:text-slate-950'
+              : 'bg-muted text-muted-foreground group-hover:text-foreground'
           )}
         >
           <Bot className='size-4' />
@@ -267,7 +298,7 @@ function ModelButton(props: {
           </span>
         </span>
       </div>
-      <span className='text-primary mt-2 block truncate text-[11px] font-medium'>
+      <span className='mt-2 block truncate text-[11px] font-medium text-cyan-700 tabular-nums dark:text-cyan-300'>
         {t('Consumption')}: {costLabel}
       </span>
       {!!visibleTags.length && (
@@ -290,16 +321,16 @@ function ModelButton(props: {
 function ModelSkeletons() {
   return (
     <>
-      <Skeleton className='h-[5.25rem] w-full' />
-      <Skeleton className='h-[5.25rem] w-full' />
-      <Skeleton className='h-[5.25rem] w-full' />
+      <Skeleton className='h-[5.25rem] min-w-[15rem] lg:w-full lg:min-w-0' />
+      <Skeleton className='h-[5.25rem] min-w-[15rem] lg:w-full lg:min-w-0' />
+      <Skeleton className='h-[5.25rem] min-w-[15rem] lg:w-full lg:min-w-0' />
     </>
   )
 }
 
 function SidebarNotice(props: { children: React.ReactNode }) {
   return (
-    <div className='text-muted-foreground rounded-lg border border-dashed px-3 py-5 text-center text-xs leading-5'>
+    <div className='text-muted-foreground min-w-[15rem] rounded-md border border-dashed px-3 py-5 text-center text-xs leading-5 lg:min-w-0'>
       {props.children}
     </div>
   )

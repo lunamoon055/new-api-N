@@ -36,6 +36,10 @@ import {
 } from './api'
 import { getCreationCategoryRows } from './category-rows'
 import { Composer } from './components/composer'
+import {
+  CreationInspector,
+  type CreationInspectorView,
+} from './components/creation-inspector'
 import { CreationPreview } from './components/creation-preview'
 import { CreationSidebar } from './components/creation-sidebar'
 import { ModelHero } from './components/model-hero'
@@ -81,7 +85,6 @@ import type {
   CreationModelCategories,
   CreationModelDescriptions,
   CreationResult,
-  CreationView,
 } from './types'
 import {
   getReferenceAudioMime,
@@ -102,7 +105,8 @@ export function CreationCenter() {
   const [selectedByMode, setSelectedByMode] = useState<
     Partial<Record<CreationMode, string>>
   >({})
-  const [view, setView] = useState<CreationView>('preview')
+  const [inspectorView, setInspectorView] =
+    useState<CreationInspectorView>('assets')
   const [prompt, setPrompt] = useState('')
   const [assets, setAssets] = useState<CreationAsset[]>([])
   const [categoryOpen, setCategoryOpen] = useState(false)
@@ -337,7 +341,7 @@ export function CreationCenter() {
 
   const selectMode = (nextMode: CreationMode) => {
     setMode(nextMode)
-    setView('preview')
+    setInspectorView('assets')
     setResult(undefined)
   }
 
@@ -354,7 +358,7 @@ export function CreationCenter() {
       imageUrls: [],
       videoUrls: [],
     })
-    setView('preview')
+    setInspectorView('assets')
     setResult(undefined)
     setSessionNumber((current) => current + 1)
     toast.success(t('A new creation session is ready.'))
@@ -702,7 +706,7 @@ export function CreationCenter() {
     }
 
     setSubmitting(true)
-    setView('preview')
+    setInspectorView('task')
     const createdAt = Date.now()
     const videoRequestOptions =
       mode === 'video'
@@ -882,7 +886,7 @@ export function CreationCenter() {
         normalizeCreationVideoOptions(item.videoOptions, item.model)
       )
     }
-    setView('preview')
+    setInspectorView('task')
   }
 
   const clearHistory = () => {
@@ -893,10 +897,24 @@ export function CreationCenter() {
     toast.success(t('Creation history cleared.'))
   }
 
+  const requestReferenceUpload = () => {
+    document.getElementById('creation-reference-upload')?.click()
+  }
+
+  const canUploadReferences =
+    mode === 'image'
+      ? imageReferencesSupported
+      : mode === 'video'
+        ? !!videoCapabilities &&
+          (videoCapabilities.referenceLimits.maxImages > 0 ||
+            videoCapabilities.referenceLimits.maxVideos > 0 ||
+            videoCapabilities.referenceLimits.maxAudios > 0)
+        : false
+
   return (
     <PublicLayout showMainContainer={false}>
-      <main className='dark:bg-background dark:text-foreground min-h-svh bg-[#f3f7fd] pt-16 text-slate-900'>
-        <div className='grid min-h-[calc(100svh-4rem)] lg:grid-cols-[19rem_minmax(0,1fr)]'>
+      <main className='text-foreground min-h-svh bg-slate-100/80 pt-16 dark:bg-[#080d12]'>
+        <div className='grid min-h-[calc(100svh-4rem)] lg:grid-cols-[18rem_minmax(0,1fr)]'>
           <CreationSidebar
             mode={mode}
             models={models}
@@ -917,70 +935,92 @@ export function CreationCenter() {
               }))
               setResult(undefined)
             }}
-            onHistory={() => setView('history')}
+            onHistory={() => setInspectorView('history')}
             onNewSession={startNewSession}
             onManageCategories={() => setCategoryOpen(true)}
             onManageDescriptions={() => setDescriptionOpen(true)}
           />
 
-          <section className='flex min-w-0 flex-col gap-4 p-3 md:p-5'>
-            <div className='grid min-h-[36rem] flex-1 gap-4 xl:grid-cols-[minmax(20rem,0.86fr)_minmax(24rem,1.14fr)]'>
-              <ModelHero
-                mode={mode}
-                model={selectedModel}
-                selectedResolution={
-                  mode === 'video' ? videoOptions.resolution : undefined
-                }
-              />
+          <section className='flex min-w-0 flex-col p-3 md:p-4 xl:p-5'>
+            <div className='mx-auto grid w-full max-w-[120rem] flex-1 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]'>
+              <div className='xl:col-span-2'>
+                <ModelHero
+                  mode={mode}
+                  model={selectedModel}
+                  selectedResolution={
+                    mode === 'video' ? videoOptions.resolution : undefined
+                  }
+                />
+              </div>
               <CreationPreview
+                className='xl:col-start-1 xl:row-start-2'
                 mode={mode}
                 model={selectedModel}
-                view={view}
-                assets={assets}
-                historyItems={historyItems}
                 result={result}
                 now={previewNow}
                 submitting={submitting}
                 refreshingTask={refreshingTask}
-                onViewChange={setView}
+                onRefreshTask={refreshMediaTask}
+              />
+
+              <div className='xl:col-start-1 xl:row-start-3'>
+                <Composer
+                  prompt={prompt}
+                  assets={assets}
+                  authenticated={!!auth.user}
+                  mode={mode}
+                  model={selectedModel}
+                  imageOptions={imageOptions}
+                  imageReferences={imageReferences}
+                  imageReferencesSupported={imageReferencesSupported}
+                  imageAspectRatioOptions={imageAspectRatioOptions}
+                  imageReferenceLimits={imageReferenceLimits}
+                  videoOptions={videoOptions}
+                  videoReferences={videoReferences}
+                  videoCapabilities={videoCapabilities}
+                  resolutionOptions={resolutionOptions}
+                  durationOptions={durationOptions}
+                  submitting={submitting}
+                  sessionNumber={sessionNumber}
+                  onPromptChange={setPrompt}
+                  onImageOptionsChange={setImageOptions}
+                  onImageReferenceFilesSelected={addImageReferenceFiles}
+                  onRemoveImageReferenceImage={removeImageReferenceImage}
+                  onVideoOptionsChange={setVideoOptions}
+                  onVideoReferencesChange={setVideoReferences}
+                  onVideoReferenceFilesSelected={addVideoReferenceFiles}
+                  onRemoveVideoReferenceImage={removeVideoReferenceImage}
+                  onRemoveVideoReferenceVideo={removeVideoReferenceVideo}
+                  onRemoveVideoReferenceAudio={removeVideoReferenceAudio}
+                  onRemoveAsset={removeAsset}
+                  onSubmit={submit}
+                />
+              </div>
+
+              <CreationInspector
+                className='xl:sticky xl:top-20 xl:col-start-2 xl:row-span-2 xl:row-start-2 xl:h-[calc(100svh-6rem)]'
+                mode={mode}
+                value={inspectorView}
+                assets={assets}
+                imageReferences={imageReferences}
+                videoReferences={videoReferences}
+                historyItems={historyItems}
+                result={result}
+                now={previewNow}
+                refreshingTask={refreshingTask}
+                canUploadReferences={canUploadReferences}
+                onValueChange={setInspectorView}
+                onRequestUpload={requestReferenceUpload}
                 onSelectHistory={selectHistoryItem}
                 onClearHistory={clearHistory}
                 onRefreshTask={refreshMediaTask}
                 onRemoveAsset={removeAsset}
+                onRemoveImageReference={removeImageReferenceImage}
+                onRemoveVideoReferenceImage={removeVideoReferenceImage}
+                onRemoveVideoReferenceVideo={removeVideoReferenceVideo}
+                onRemoveVideoReferenceAudio={removeVideoReferenceAudio}
               />
             </div>
-
-            <Composer
-              prompt={prompt}
-              assets={assets}
-              authenticated={!!auth.user}
-              mode={mode}
-              model={selectedModel}
-              imageOptions={imageOptions}
-              imageReferences={imageReferences}
-              imageReferencesSupported={imageReferencesSupported}
-              imageAspectRatioOptions={imageAspectRatioOptions}
-              imageReferenceLimits={imageReferenceLimits}
-              videoOptions={videoOptions}
-              videoReferences={videoReferences}
-              videoCapabilities={videoCapabilities}
-              resolutionOptions={resolutionOptions}
-              durationOptions={durationOptions}
-              submitting={submitting}
-              sessionNumber={sessionNumber}
-              onPromptChange={setPrompt}
-              onImageOptionsChange={setImageOptions}
-              onImageReferenceFilesSelected={addImageReferenceFiles}
-              onRemoveImageReferenceImage={removeImageReferenceImage}
-              onVideoOptionsChange={setVideoOptions}
-              onVideoReferencesChange={setVideoReferences}
-              onVideoReferenceFilesSelected={addVideoReferenceFiles}
-              onRemoveVideoReferenceImage={removeVideoReferenceImage}
-              onRemoveVideoReferenceVideo={removeVideoReferenceVideo}
-              onRemoveVideoReferenceAudio={removeVideoReferenceAudio}
-              onRemoveAsset={removeAsset}
-              onSubmit={submit}
-            />
           </section>
         </div>
       </main>

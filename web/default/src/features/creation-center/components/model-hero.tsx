@@ -16,8 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Sparkles } from 'lucide-react'
+import { Bot, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Badge } from '@/components/ui/badge'
 import { formatCreationModelCost } from '../cost'
 import type { CreationMode, CreationModel } from '../types'
 
@@ -46,29 +47,59 @@ export function ModelHero(props: ModelHeroProps) {
             'Choose an image model and add references before composing a prompt.'
           )
         : t('Choose a video model and prepare a prompt for the next step.')
+  const modeLabel =
+    props.mode === 'chat'
+      ? t('Chat')
+      : props.mode === 'image'
+        ? t('Image')
+        : t('Video')
+  const visibleTags =
+    props.model?.tags?.filter((tag) => tag !== 'async').slice(0, 3) ?? []
 
   return (
-    <section className='bg-card flex min-h-[22rem] items-center justify-center rounded-lg border p-6 text-center'>
-      <div className='max-w-lg'>
-        <div className='bg-primary text-primary-foreground mx-auto flex size-16 items-center justify-center rounded-lg shadow-sm'>
-          <Sparkles className='size-7' />
-        </div>
-        <div className='text-primary mt-5 flex items-center justify-center gap-2 text-[11px] font-medium'>
-          <span className='bg-primary/30 h-px w-10' />
-          {t('Current model')}
-          <span className='bg-primary/30 h-px w-10' />
-        </div>
-        <h2 className='mt-3 text-2xl font-semibold break-words'>{title}</h2>
-        <p className='text-muted-foreground mt-3 text-sm leading-6'>
-          {props.model?.description || fallback}
-        </p>
-        {costLabel && (
-          <div className='text-primary bg-primary/10 mx-auto mt-4 inline-flex max-w-full items-center rounded-full px-3 py-1 text-xs font-medium'>
-            <span className='truncate'>
-              {t('Consumption')}: {costLabel}
+    <section className='min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#101820]'>
+      <div className='flex min-w-0 flex-col gap-3 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between'>
+        <div className='flex min-w-0 items-center gap-3'>
+          <div className='relative flex size-9 shrink-0 items-center justify-center rounded-md border border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'>
+            <Bot className='size-4' />
+            <span className='absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-sm border-2 border-white bg-cyan-600 text-white dark:border-[#101820] dark:bg-cyan-400 dark:text-slate-950'>
+              <Sparkles className='size-2.5' />
             </span>
           </div>
-        )}
+          <div className='min-w-0'>
+            <div className='flex min-w-0 items-center gap-2'>
+              <span className='text-muted-foreground shrink-0 text-[11px] font-medium'>
+                {t('Current model')}
+              </span>
+              <span className='h-3 w-px bg-slate-200 dark:bg-white/10' />
+              <h2 className='truncate text-sm font-semibold'>{title}</h2>
+            </div>
+            <p className='text-muted-foreground mt-0.5 line-clamp-1 max-w-3xl text-[11px] leading-4'>
+              {props.model?.description || fallback}
+            </p>
+          </div>
+        </div>
+
+        <div className='flex shrink-0 flex-wrap items-center gap-2 sm:justify-end'>
+          <Badge
+            variant='outline'
+            className='border-cyan-500/25 bg-cyan-500/[0.06] text-cyan-700 dark:text-cyan-300'
+          >
+            {modeLabel}
+          </Badge>
+          {visibleTags.map((tag) => (
+            <Badge key={tag} variant='outline'>
+              {tag}
+            </Badge>
+          ))}
+          {costLabel && (
+            <Badge variant='outline' className='max-w-full tabular-nums'>
+              <span className='truncate'>
+                {t('Consumption')}: {costLabel}
+              </span>
+            </Badge>
+          )}
+        </div>
       </div>
     </section>
   )

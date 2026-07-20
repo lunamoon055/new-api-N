@@ -16,89 +16,63 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  Clock3,
-  FileImage,
-  Image,
-  MessageSquare,
-  RefreshCw,
-  Timer,
-  Trash2,
-  Video,
-} from 'lucide-react'
+import { Image, MessageSquare, RefreshCw, Timer, Video } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
 import {
   formatCreationCountdown,
   getCreationCountdownSeconds,
   getCreationTimedOut,
-  type CreationHistoryItem,
 } from '../session'
-import type {
-  CreationAsset,
-  CreationMode,
-  CreationModel,
-  CreationResult,
-  CreationView,
-} from '../types'
+import type { CreationMode, CreationModel, CreationResult } from '../types'
 
 type CreationPreviewProps = {
+  className?: string
   mode: CreationMode
   model?: CreationModel
-  view: CreationView
-  assets: CreationAsset[]
-  historyItems: CreationHistoryItem[]
   result?: CreationResult
   now: number
   submitting: boolean
   refreshingTask: boolean
-  onViewChange: (view: CreationView) => void
-  onSelectHistory: (item: CreationHistoryItem) => void
-  onClearHistory: () => void
   onRefreshTask: () => void
-  onRemoveAsset: (index: number) => void
 }
 
 export function CreationPreview(props: CreationPreviewProps) {
   const { t } = useTranslation()
 
   return (
-    <section className='bg-card flex min-h-[22rem] min-w-0 flex-col rounded-lg border'>
-      <div className='flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3'>
-        <h2 className='text-sm font-semibold'>{t('Creation workspace')}</h2>
-        <div className='flex gap-1'>
-          {(['preview', 'assets', 'history'] as CreationView[]).map((item) => (
-            <Button
-              key={item}
-              variant={props.view === item ? 'secondary' : 'ghost'}
-              size='xs'
-              onClick={() => props.onViewChange(item)}
-            >
-              {item === 'preview'
-                ? t('Preview')
-                : item === 'assets'
-                  ? t('Assets')
-                  : t('History')}
-            </Button>
-          ))}
+    <section
+      className={cn(
+        'min-h-[28rem] min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#101820]',
+        props.className
+      )}
+    >
+      <div className='flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-2 dark:border-white/10'>
+        <div className='min-w-0'>
+          <h2 className='text-sm font-semibold'>{t('Preview')}</h2>
+          {props.model && (
+            <p className='text-muted-foreground mt-0.5 truncate text-xs'>
+              {props.model.id}
+            </p>
+          )}
         </div>
+        {props.result && (
+          <span className='text-muted-foreground rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium dark:border-white/10 dark:bg-white/[0.035]'>
+            {getStatusLabel(props.result.status, t)}
+          </span>
+        )}
       </div>
 
-      <div className='flex min-h-0 flex-1 items-center justify-center p-4'>
-        {props.view === 'assets' ? (
-          <AssetPreview
-            assets={props.assets}
-            onRemoveAsset={props.onRemoveAsset}
-          />
-        ) : props.view === 'history' ? (
-          <HistoryPreview
-            items={props.historyItems}
-            onClearHistory={props.onClearHistory}
-            onSelectHistory={props.onSelectHistory}
-          />
-        ) : props.submitting ? (
+      <div className='flex min-h-[calc(28rem-3rem)] items-center justify-center bg-slate-50/70 p-4 sm:p-6 dark:bg-[#0b1118]'>
+        {props.submitting ? (
           <SubmittingPreview mode={props.mode} />
         ) : props.result ? (
           <ResultPreview
@@ -188,7 +162,7 @@ function ResultPreview(props: {
           <img
             src={props.result.imageUrl}
             alt={t('Generated image')}
-            className='mx-auto max-h-[31rem] w-auto max-w-full rounded-lg object-contain'
+            className='mx-auto max-h-[48rem] w-auto max-w-full rounded-md object-contain'
           />
         ) : (
           <EmptyMediaResult
@@ -234,7 +208,7 @@ function ResultPreview(props: {
         <video
           controls
           src={props.result.videoUrl}
-          className='mx-auto max-h-[31rem] w-auto max-w-full rounded-lg'
+          className='mx-auto max-h-[48rem] w-auto max-w-full rounded-md bg-black'
         />
       ) : (
         <EmptyMediaResult title={t('Video task is waiting for a result')} />
@@ -292,9 +266,14 @@ function ResultPreview(props: {
 
 function EmptyMediaResult(props: { title: string }) {
   return (
-    <div className='bg-muted/40 text-muted-foreground flex min-h-56 items-center justify-center rounded-lg border border-dashed px-6 text-sm'>
-      {props.title}
-    </div>
+    <Empty className='bg-background/60 min-h-56 rounded-lg border'>
+      <EmptyHeader>
+        <EmptyMedia variant='icon'>
+          <Image />
+        </EmptyMedia>
+        <EmptyTitle>{props.title}</EmptyTitle>
+      </EmptyHeader>
+    </Empty>
   )
 }
 
@@ -329,10 +308,6 @@ function formatCreationResolution(resolution?: string) {
   }
 }
 
-function formatCreationTime(value: number) {
-  return new Date(value).toLocaleString()
-}
-
 function EmptyPreview(props: { mode: CreationMode; model?: CreationModel }) {
   const { t } = useTranslation()
   const Icon =
@@ -349,122 +324,20 @@ function EmptyPreview(props: { mode: CreationMode; model?: CreationModel }) {
         : t('No video task yet')
 
   return (
-    <div className='max-w-md text-center'>
-      <div className='bg-muted text-muted-foreground mx-auto flex size-14 items-center justify-center rounded-lg'>
-        <Icon className='size-6' />
-      </div>
-      <h3 className='mt-4 text-sm font-semibold'>{title}</h3>
-      <p className='text-muted-foreground mt-2 text-xs leading-5'>
-        {props.model
-          ? t(
-              'Write a prompt below, add reference images for video if needed, and sign in before submitting a real task.'
-            )
-          : t('Select a configured model from the sidebar to begin.')}
-      </p>
-    </div>
-  )
-}
-
-function AssetPreview(props: {
-  assets: CreationAsset[]
-  onRemoveAsset: (index: number) => void
-}) {
-  const { t } = useTranslation()
-
-  if (!props.assets.length) {
-    return (
-      <div className='text-muted-foreground text-center text-xs'>
-        {t('No assets have been added to this session.')}
-      </div>
-    )
-  }
-
-  return (
-    <div className='grid w-full gap-2 sm:grid-cols-2'>
-      {props.assets.map((asset, index) => (
-        <div
-          key={asset.id}
-          className='bg-muted/40 flex min-w-0 items-center gap-3 rounded-lg border p-3'
-        >
-          <FileImage className='text-primary size-4 shrink-0' />
-          <span className='min-w-0 flex-1 truncate text-xs'>{asset.name}</span>
-          <Button
-            type='button'
-            variant='ghost'
-            size='icon-xs'
-            className='ml-auto shrink-0'
-            aria-label={`${t('Remove asset')}: ${asset.name}`}
-            onClick={() => props.onRemoveAsset(index)}
-          >
-            <Trash2 className='size-3.5' />
-          </Button>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function HistoryPreview(props: {
-  items: CreationHistoryItem[]
-  onClearHistory: () => void
-  onSelectHistory: (item: CreationHistoryItem) => void
-}) {
-  const { t } = useTranslation()
-
-  if (props.items.length) {
-    return (
-      <div className='flex h-full w-full flex-col gap-3'>
-        <div className='flex items-center justify-between gap-3'>
-          <div>
-            <h3 className='text-sm font-semibold'>{t('History')}</h3>
-            <p className='text-muted-foreground mt-1 text-xs'>
-              {t('History is saved in this browser.')}
-            </p>
-          </div>
-          <Button variant='ghost' size='sm' onClick={props.onClearHistory}>
-            <Trash2 className='size-4' />
-            {t('Clear history')}
-          </Button>
-        </div>
-        <div className='min-h-0 flex-1 space-y-2 overflow-auto pr-1'>
-          {props.items.map((item) => (
-            <button
-              key={item.id}
-              type='button'
-              onClick={() => props.onSelectHistory(item)}
-              className='border-border bg-muted/30 hover:bg-muted flex w-full min-w-0 flex-col gap-2 rounded-lg border p-3 text-left transition-colors'
-            >
-              <span className='flex min-w-0 items-center justify-between gap-2'>
-                <span className='min-w-0 truncate text-xs font-semibold'>
-                  {item.model}
-                </span>
-                <Badge variant='secondary' className='shrink-0 text-[10px]'>
-                  {getStatusLabel(item.result.status, t)}
-                </Badge>
-              </span>
-              <span className='text-muted-foreground line-clamp-2 text-xs leading-5'>
-                {item.prompt}
-              </span>
-              <span className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]'>
-                <span>{formatCreationTime(item.createdAt)}</span>
-                {item.result.taskId && <span>{item.result.taskId}</span>}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className='max-w-md text-center'>
-      <Clock3 className='text-muted-foreground mx-auto size-8' />
-      <h3 className='mt-3 text-sm font-semibold'>
-        {t('No session history yet')}
-      </h3>
-      <p className='text-muted-foreground mt-2 text-xs leading-5'>
-        {t('Completed creation tasks will appear here after you submit tasks.')}
-      </p>
-    </div>
+    <Empty className='max-w-md'>
+      <EmptyHeader>
+        <EmptyMedia variant='icon' className='size-12'>
+          <Icon className='size-5' />
+        </EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>
+          {props.model
+            ? t(
+                'Write a prompt below, add reference images for video if needed, and sign in before submitting a real task.'
+              )
+            : t('Select a configured model from the sidebar to begin.')}
+        </EmptyDescription>
+      </EmptyHeader>
+    </Empty>
   )
 }
