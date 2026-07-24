@@ -32,7 +32,7 @@ import { ROLE } from '@/lib/roles'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getErrorLogCount } from '@/features/dashboard/api'
+import { getFailedTaskCount } from '@/features/dashboard/api'
 import { getDefaultDays } from '@/features/dashboard/lib/filters'
 import { calculateDashboardStats } from '@/features/dashboard/lib/stats'
 import type {
@@ -141,11 +141,11 @@ export function RequestResultOverview(props: RequestResultOverviewProps) {
     queryKey: [
       'dashboard',
       'model-result-overview',
-      'failure-count',
+      'task-failure-count',
       isAdmin ? 'admin' : 'self',
       requestParams,
     ],
-    queryFn: () => getErrorLogCount(requestParams, isAdmin),
+    queryFn: () => getFailedTaskCount(requestParams, isAdmin),
     staleTime: 60 * 1000,
     retry: false,
   })

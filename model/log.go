@@ -424,35 +424,6 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	return logs, total, err
 }
 
-func countErrorLogs(tx *gorm.DB, startTimestamp int64, endTimestamp int64) (int64, error) {
-	if startTimestamp != 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
-	}
-
-	var total int64
-	err := tx.Model(&Log{}).Where("type = ?", LogTypeError).Count(&total).Error
-	return total, err
-}
-
-func CountAllErrorLogs(startTimestamp int64, endTimestamp int64, username string) (int64, error) {
-	tx := LOG_DB
-	if username != "" {
-		tx = tx.Where("username = ?", username)
-	}
-	return countErrorLogs(tx, startTimestamp, endTimestamp)
-}
-
-func CountUserErrorLogs(userId int, startTimestamp int64, endTimestamp int64) (int64, error) {
-	return countErrorLogs(
-		LOG_DB.Where("user_id = ?", userId),
-		startTimestamp,
-		endTimestamp,
-	)
-}
-
 type Stat struct {
 	Quota int `json:"quota"`
 	Rpm   int `json:"rpm"`

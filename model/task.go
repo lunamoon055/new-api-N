@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
+	"gorm.io/gorm"
 )
 
 type TaskStatus string
@@ -450,6 +451,36 @@ func TaskBulkUpdateByID(ids []int64, params map[string]any) error {
 type TaskQuotaUsage struct {
 	Mode  string  `json:"mode"`
 	Count float64 `json:"count"`
+}
+
+func countFailedTasks(tx *gorm.DB, startTimestamp int64, endTimestamp int64) (int64, error) {
+	if startTimestamp != 0 {
+		tx = tx.Where("submit_time >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("submit_time <= ?", endTimestamp)
+	}
+
+	var total int64
+	err := tx.Model(&Task{}).Where("status = ?", TaskStatusFailure).Count(&total).Error
+	return total, err
+}
+
+func CountAllFailedTasks(startTimestamp int64, endTimestamp int64, username string) (int64, error) {
+	tx := DB
+	if username != "" {
+		userIds := DB.Unscoped().Model(&User{}).Select("id").Where("username = ?", username)
+		tx = tx.Where("user_id IN (?)", userIds)
+	}
+	return countFailedTasks(tx, startTimestamp, endTimestamp)
+}
+
+func CountUserFailedTasks(userId int, startTimestamp int64, endTimestamp int64) (int64, error) {
+	return countFailedTasks(
+		DB.Where("user_id = ?", userId),
+		startTimestamp,
+		endTimestamp,
+	)
 }
 
 // TaskCountAllTasks returns total tasks that match the given query params (admin usage)
