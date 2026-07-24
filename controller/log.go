@@ -55,6 +55,30 @@ func GetUserLogs(c *gin.Context) {
 	return
 }
 
+func GetAllErrorLogCount(c *gin.Context) {
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	username := c.Query("username")
+	total, err := model.CountAllErrorLogs(startTimestamp, endTimestamp, username)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"count": total})
+}
+
+func GetUserErrorLogCount(c *gin.Context) {
+	userId := c.GetInt("id")
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	total, err := model.CountUserErrorLogs(userId, startTimestamp, endTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"count": total})
+}
+
 // Deprecated: SearchAllLogs 已废弃，前端未使用该接口。
 func SearchAllLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{

@@ -71,6 +71,12 @@ const LazyPerformanceOverview = lazy(() =>
   }))
 )
 
+const LazyRequestResultOverview = lazy(() =>
+  import('./components/models/request-result-overview').then((m) => ({
+    default: m.RequestResultOverview,
+  }))
+)
+
 const LazyUserCharts = lazy(() =>
   import('./components/users/user-charts').then((m) => ({
     default: m.UserCharts,
@@ -130,6 +136,31 @@ function PerformanceOverviewFallback() {
   )
 }
 
+function RequestResultOverviewFallback() {
+  const cellClasses = [
+    'flex min-h-20 items-center gap-3 px-3 py-3 sm:px-5',
+    'flex min-h-20 items-center gap-3 border-l px-3 py-3 sm:px-5',
+    'flex min-h-20 items-center gap-3 border-t px-3 py-3 sm:px-5 lg:border-t-0 lg:border-l',
+    'flex min-h-20 items-center gap-3 border-t border-l px-3 py-3 sm:px-5 lg:border-t-0',
+  ]
+
+  return (
+    <div className='overflow-hidden rounded-lg border'>
+      <div className='grid grid-cols-2 lg:grid-cols-4'>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={cellClasses[i]}>
+            <Skeleton className='size-8 shrink-0 rounded-full' />
+            <div className='flex min-w-0 flex-col gap-2'>
+              <Skeleton className='h-3 w-20' />
+              <Skeleton className='h-5 w-16' />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const SECTION_META: Record<
   DashboardSectionId,
   { titleKey: string; descriptionKey: string }
@@ -158,6 +189,7 @@ export function Dashboard() {
 
   const [modelData, setModelData] = useState<QuotaDataItem[]>([])
   const [dataLoading, setDataLoading] = useState(false)
+  const [dataError, setDataError] = useState(false)
   const [chartPreferences, setChartPreferences] =
     useState<DashboardChartPreferences>(() => getSavedChartPreferences())
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
@@ -173,9 +205,10 @@ export function Dashboard() {
   }, [chartPreferences])
 
   const handleDataUpdate = useCallback(
-    (data: QuotaDataItem[], loading: boolean) => {
+    (data: QuotaDataItem[], loading: boolean, error: boolean) => {
       setModelData(data)
       setDataLoading(loading)
+      setDataError(error)
     },
     []
   )
@@ -236,7 +269,7 @@ export function Dashboard() {
             <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
               {showSectionTabs ? (
                 <Tabs value={activeSection} onValueChange={handleSectionChange}>
-                  <TabsList className='group-data-horizontal/tabs:h-auto max-w-full flex-wrap justify-start'>
+                  <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
                     {visibleSections.map((section) => (
                       <TabsTrigger key={section} value={section}>
                         {t(SECTION_META[section].titleKey)}
@@ -265,14 +298,24 @@ export function Dashboard() {
                   />
                 </Suspense>
               </FadeIn>
+              <FadeIn delay={0.05}>
+                <Suspense fallback={<RequestResultOverviewFallback />}>
+                  <LazyRequestResultOverview
+                    data={modelData}
+                    filters={modelFilters}
+                    loading={dataLoading}
+                    error={dataError}
+                  />
+                </Suspense>
+              </FadeIn>
               {isAdmin && (
-                <FadeIn delay={0.05}>
+                <FadeIn delay={0.1}>
                   <Suspense fallback={<PerformanceOverviewFallback />}>
                     <LazyPerformanceOverview />
                   </Suspense>
                 </FadeIn>
               )}
-              <FadeIn delay={0.1}>
+              <FadeIn delay={0.15}>
                 <Suspense fallback={<ModelChartsFallback />}>
                   <LazyConsumptionDistributionChart
                     data={modelData}
@@ -286,7 +329,7 @@ export function Dashboard() {
                   />
                 </Suspense>
               </FadeIn>
-              <FadeIn delay={0.15}>
+              <FadeIn delay={0.2}>
                 <Suspense fallback={<ModelChartsFallback />}>
                   <LazyModelCharts
                     data={modelData}

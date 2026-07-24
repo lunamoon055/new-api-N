@@ -112,11 +112,7 @@ export function PerformanceOverview() {
   const hasData = models.length > 0
 
   if (!loading && !hasData) {
-    return (
-      <div className='text-muted-foreground overflow-hidden rounded-lg border px-4 py-3 text-center text-xs'>
-        {t('No performance data available')}
-      </div>
-    )
+    return null
   }
 
   return (

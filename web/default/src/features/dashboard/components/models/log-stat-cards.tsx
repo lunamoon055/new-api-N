@@ -35,7 +35,11 @@ import type {
 
 interface LogStatCardsProps {
   filters?: DashboardFilters
-  onDataUpdate?: (data: QuotaDataItem[], loading: boolean) => void
+  onDataUpdate?: (
+    data: QuotaDataItem[],
+    loading: boolean,
+    error: boolean
+  ) => void
 }
 
 export function LogStatCards(props: LogStatCardsProps) {
@@ -60,7 +64,7 @@ export function LogStatCards(props: LogStatCardsProps) {
     setLoading(true)
 
     setError(false)
-    onDataUpdate?.([], true)
+    onDataUpdate?.([], true, false)
 
     const timeRange = computeTimeRange(
       getDefaultDays(filters?.time_granularity),
@@ -75,13 +79,13 @@ export function LogStatCards(props: LogStatCardsProps) {
         if (abortController.signal.aborted) return
         const data = res?.data || []
         setStats(calculateDashboardStats(data))
-        onDataUpdate?.(data, false)
+        onDataUpdate?.(data, false, false)
       })
       .catch(() => {
         if (abortController.signal.aborted) return
         setStats(null)
         setError(true)
-        onDataUpdate?.([], false)
+        onDataUpdate?.([], false, true)
       })
       .finally(() => {
         if (!abortController.signal.aborted) {

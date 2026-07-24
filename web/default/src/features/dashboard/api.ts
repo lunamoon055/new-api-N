@@ -19,6 +19,14 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import type { QuotaDataItem, UptimeGroupResult } from './types'
 
+interface ErrorLogCountResponse {
+  success: boolean
+  message?: string
+  data?: {
+    count: number
+  }
+}
+
 // ============================================================================
 // Dashboard APIs
 // ============================================================================
@@ -44,6 +52,25 @@ export async function getUserQuotaDates(
     { params }
   )
   return res.data
+}
+
+export async function getErrorLogCount(
+  params: {
+    start_timestamp: number
+    end_timestamp: number
+    username?: string
+  },
+  isAdmin = false
+): Promise<number> {
+  const endpoint = isAdmin
+    ? '/api/log/error-count'
+    : '/api/log/self/error-count'
+  const res = await api.get<ErrorLogCountResponse>(endpoint, { params })
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.message || 'Failed to load error log count')
+  }
+  const count = Number(res.data.data.count)
+  return Number.isFinite(count) ? Math.max(0, count) : 0
 }
 
 // ----------------------------------------------------------------------------
