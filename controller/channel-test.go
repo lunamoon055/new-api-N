@@ -96,6 +96,12 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 			return channelTestEndpointSanbaoVideo
 		}
 	}
+	if isChannelTestVideosApiModel(modelName) &&
+		(normalized == "" ||
+			normalized == string(constant.EndpointTypeOpenAIVideo) ||
+			normalized == channelTestEndpointOpenAIVideoAsync) {
+		return string(constant.EndpointTypeOpenAIVideo)
+	}
 	if normalized != "" {
 		return normalized
 	}
@@ -363,6 +369,15 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 	}
 
 	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(channel, testModel, endpointType)
+	normalizedPayload, normalizeErr := normalizeChannelTestPayload(testModel, endpointType, payload)
+	if normalizeErr != nil {
+		return testResult{
+			context:     c,
+			localErr:    normalizeErr,
+			newAPIError: types.NewError(normalizeErr, types.ErrorCodeInvalidRequest, types.ErrOptionWithStatusCode(http.StatusBadRequest)),
+		}
+	}
+	payload = normalizedPayload
 	if strings.HasPrefix(requestPath, "/v1/responses/compact") {
 		testModel = ratio_setting.WithCompactModelSuffix(testModel)
 	}
@@ -1175,6 +1190,81 @@ func getChannelTestPayloadTaskID(payload json.RawMessage) string {
 		}
 	}
 	return ""
+}
+
+func normalizeChannelTestPayload(modelName, endpointType string, payload json.RawMessage) (json.RawMessage, error) {
+	payload = bytes.TrimSpace(payload)
+	if len(payload) == 0 || string(payload) == "null" ||
+		endpointType != string(constant.EndpointTypeOpenAIVideo) ||
+		!isChannelTestVideosApiModel(modelName) {
+		return payload, nil
+	}
+	if payload[0] != '{' {
+		return nil, errors.New("request payload must be a JSON object")
+	}
+
+	var raw map[string]any
+	if err := common.Unmarshal(payload, &raw); err != nil {
+		return nil, err
+	}
+	size := channelTestStringField(raw, "size")
+	if channelTestStringField(raw, "ratio") == "" {
+		raw["ratio"] = channelTestVideosRatio(size)
+	}
+	if channelTestStringField(raw, "resolution") == "" {
+		raw["resolution"] = channelTestVideosResolution(size)
+	}
+	if _, exists := raw["duration"]; !exists {
+		raw["duration"] = channelTestVideosDuration(raw["seconds"])
+	}
+	delete(raw, "size")
+	delete(raw, "seconds")
+	return common.Marshal(raw)
+}
+
+func channelTestStringField(values map[string]any, key string) string {
+	value, exists := values[key]
+	if !exists || value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func channelTestVideosRatio(size string) string {
+	switch strings.ToLower(strings.TrimSpace(size)) {
+	case "720x1280", "480x864", "496x864":
+		return "9:16"
+	case "1024x1024":
+		return "1:1"
+	default:
+		return "16:9"
+	}
+}
+
+func channelTestVideosResolution(size string) string {
+	size = strings.ToLower(strings.TrimSpace(size))
+	if strings.Contains(size, "480") || strings.Contains(size, "496") || strings.Contains(size, "864") {
+		return "480p"
+	}
+	return "720p"
+}
+
+func channelTestVideosDuration(value any) int {
+	switch duration := value.(type) {
+	case json.Number:
+		if parsed, err := strconv.Atoi(duration.String()); err == nil && parsed > 0 {
+			return parsed
+		}
+	case float64:
+		if duration > 0 {
+			return int(duration)
+		}
+	case string:
+		if parsed, err := strconv.Atoi(strings.TrimSpace(duration)); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return 5
 }
 
 func buildChannelTestRequest(model string, endpointType string, channel *model.Channel, isStream bool, relayFormat types.RelayFormat, payload json.RawMessage) (any, error) {

@@ -170,7 +170,14 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 	if getTaskAction(info) == constant.TaskActionRemix {
 		return fmt.Sprintf("%s/v1/videos/%s/remix", a.baseURL, getOriginTaskID(info)), nil
 	}
-	if isAsyncGenerationsPath(info.RequestURLPath) || isAsyncGenerationsModel(info.UpstreamModelName) {
+	upstreamModelName := ""
+	if info.ChannelMeta != nil {
+		upstreamModelName = info.UpstreamModelName
+	}
+	if isVideosModelName(info.OriginModelName) || isVideosModelName(upstreamModelName) {
+		return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
+	}
+	if isAsyncGenerationsPath(info.RequestURLPath) || isAsyncGenerationsModel(upstreamModelName) {
 		return fmt.Sprintf("%s/v1/video/async-generations", a.baseURL), nil
 	}
 	return fmt.Sprintf("%s/v1/videos", a.baseURL), nil

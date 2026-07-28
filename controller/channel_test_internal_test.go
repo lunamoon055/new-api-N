@@ -164,6 +164,52 @@ func TestResolveChannelTestEndpointUsesOpenAIVideoForVideosApiModels(t *testing.
 	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
 }
 
+func TestResolveChannelTestEndpointCorrectsLegacyAsyncEndpointForVideosApiModels(t *testing.T) {
+	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(
+		&model.Channel{},
+		"sd2-mini",
+		channelTestEndpointOpenAIVideoAsync,
+	)
+
+	require.Equal(t, string(constant.EndpointTypeOpenAIVideo), endpointType)
+	require.Equal(t, "/v1/videos", requestPath)
+	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
+}
+
+func TestNormalizeChannelTestPayloadConvertsLegacyVideosApiFields(t *testing.T) {
+	payload, err := normalizeChannelTestPayload(
+		"sd2-mini",
+		string(constant.EndpointTypeOpenAIVideo),
+		[]byte(`{"model":"sd2-mini","prompt":"sunrise","size":"720x1280","duration":4}`),
+	)
+
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"model":"sd2-mini",
+		"prompt":"sunrise",
+		"ratio":"9:16",
+		"resolution":"720p",
+		"duration":4
+	}`, string(payload))
+}
+
+func TestNormalizeChannelTestPayloadConvertsLegacySecondsField(t *testing.T) {
+	payload, err := normalizeChannelTestPayload(
+		"videos-mini",
+		string(constant.EndpointTypeOpenAIVideo),
+		[]byte(`{"model":"videos-mini","prompt":"sunrise","size":"1280x720","seconds":"6"}`),
+	)
+
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"model":"videos-mini",
+		"prompt":"sunrise",
+		"ratio":"16:9",
+		"resolution":"720p",
+		"duration":6
+	}`, string(payload))
+}
+
 func TestBuildTestRequestUsesVideosApiPayloadForVideosApiModels(t *testing.T) {
 	request := buildTestRequest("sd2-mini", string(constant.EndpointTypeOpenAIVideo), &model.Channel{}, false)
 

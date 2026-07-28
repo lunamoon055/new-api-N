@@ -258,10 +258,73 @@ export function getChannelTestTemplate(
   )
 }
 
+type ChannelTestChannelLike = {
+  type?: number
+  base_url?: string | null
+}
+
+function isSanbaoChannel(channel?: ChannelTestChannelLike) {
+  if (channel?.type === 58) return true
+  try {
+    const hostname = new URL(channel?.base_url?.trim() ?? '').hostname
+    return (
+      hostname === 'sanbaobeauty.com' || hostname.endsWith('.sanbaobeauty.com')
+    )
+  } catch {
+    return false
+  }
+}
+
+function isSanbaoEndpoint(endpointType: ChannelTestEndpointType) {
+  return endpointType.startsWith('sanbao-')
+}
+
+export function isVideosApiTestModel(model: string) {
+  const normalized = model.trim().toLowerCase()
+  return normalized.startsWith('videos-') || normalized.startsWith('sd2')
+}
+
+export function resolveChannelTestEndpointType(
+  endpointType: ChannelTestEndpointType,
+  model: string,
+  channel?: ChannelTestChannelLike
+): ChannelTestEndpointType {
+  if (isSanbaoChannel(channel) && !isSanbaoEndpoint(endpointType)) {
+    if (
+      endpointType === 'auto' ||
+      endpointType === 'image-generation' ||
+      endpointType === 'openai-video' ||
+      endpointType === 'openai-video-async'
+    ) {
+      return model.trim().toLowerCase().includes('gpt-image2')
+        ? 'sanbao-image'
+        : 'sanbao-video'
+    }
+  }
+  if (
+    isVideosApiTestModel(model) &&
+    (endpointType === 'auto' ||
+      endpointType === 'openai-video' ||
+      endpointType === 'openai-video-async')
+  ) {
+    return 'openai-video'
+  }
+  return endpointType
+}
+
 export function getChannelTestPreviewPayload(
   endpointType: ChannelTestEndpointType,
   model: string
 ) {
+  if (endpointType === 'openai-video' && isVideosApiTestModel(model)) {
+    return {
+      model: model.trim() || '<model>',
+      prompt: 'a mountain at sunrise',
+      ratio: '16:9',
+      resolution: '720p',
+      duration: 5,
+    }
+  }
   const template = getChannelTestTemplate(endpointType)
   return JSON.parse(
     JSON.stringify(template.payload).replaceAll(

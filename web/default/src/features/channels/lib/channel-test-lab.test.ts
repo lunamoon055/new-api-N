@@ -21,6 +21,7 @@ import { describe, test } from 'node:test'
 import {
   getChannelTestPreviewPayload,
   getChannelTestTemplate,
+  resolveChannelTestEndpointType,
   type ChannelTestEndpointType,
 } from './channel-test-lab'
 
@@ -58,5 +59,36 @@ describe('Sanbao channel test templates', () => {
     assert.deepEqual(videoPayload.images, [])
     assert.deepEqual(uploadPayload.images, [])
     assert.equal(pollPayload.task_id, 'task_xxx')
+  })
+})
+
+describe('Videos API channel test templates', () => {
+  test('routes sd2 models away from the legacy async endpoint', () => {
+    assert.equal(
+      resolveChannelTestEndpointType('openai-video-async', 'sd2-mini'),
+      'openai-video'
+    )
+  })
+
+  test('uses ratio and resolution fields for sd2 models', () => {
+    const payload = getChannelTestPreviewPayload('openai-video', 'sd2-mini')
+
+    assert.deepEqual(payload, {
+      model: 'sd2-mini',
+      prompt: 'a mountain at sunrise',
+      ratio: '16:9',
+      resolution: '720p',
+      duration: 5,
+    })
+  })
+
+  test('keeps sd2 models on the Sanbao endpoint for Sanbao channels', () => {
+    assert.equal(
+      resolveChannelTestEndpointType('auto', 'sd2_full', {
+        type: 58,
+        base_url: 'https://sanbaobeauty.com',
+      }),
+      'sanbao-video'
+    )
   })
 })

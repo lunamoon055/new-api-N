@@ -56,6 +56,7 @@ import {
   CHANNEL_TEST_TEMPLATES,
   getChannelTestPreviewPayload,
   getChannelTestTemplate,
+  resolveChannelTestEndpointType,
   type ChannelTestEndpointType,
 } from '../lib/channel-test-lab'
 import type { Channel, ChannelTestResponse } from '../types'
@@ -176,10 +177,16 @@ export function ChannelTestLab() {
     [selectedChannel?.models]
   )
 
-  const selectedTemplate = getChannelTestTemplate(endpointType)
-  const effectiveModel = model.trim() || selectedTemplate.defaultModel
-  const defaultPayload = getChannelTestPreviewPayload(
+  const fallbackTemplate = getChannelTestTemplate(endpointType)
+  const effectiveModel = model.trim() || fallbackTemplate.defaultModel
+  const resolvedEndpointType = resolveChannelTestEndpointType(
     endpointType,
+    effectiveModel,
+    selectedChannel
+  )
+  const selectedTemplate = getChannelTestTemplate(resolvedEndpointType)
+  const defaultPayload = getChannelTestPreviewPayload(
+    resolvedEndpointType,
     effectiveModel
   )
   const defaultTemplateText = formatJson(defaultPayload)
@@ -190,7 +197,8 @@ export function ChannelTestLab() {
   const requestParams = {
     channel_id: Number(channelId) || null,
     model: effectiveModel,
-    endpoint_type: endpointType === 'auto' ? undefined : endpointType,
+    endpoint_type:
+      resolvedEndpointType === 'auto' ? undefined : resolvedEndpointType,
     stream: selectedTemplate.supportsStream ? stream : false,
   }
 
@@ -225,7 +233,9 @@ export function ChannelTestLab() {
 
       const params = {
         model: requestModel,
-        ...(endpointType === 'auto' ? {} : { endpoint_type: endpointType }),
+        ...(resolvedEndpointType === 'auto'
+          ? {}
+          : { endpoint_type: resolvedEndpointType }),
         ...(selectedTemplate.supportsStream && stream ? { stream: true } : {}),
         payload: editedPayload,
       }
@@ -233,7 +243,7 @@ export function ChannelTestLab() {
       return {
         channelId: numericChannelId,
         model: requestModel,
-        endpointType,
+        endpointType: resolvedEndpointType,
         stream: selectedTemplate.supportsStream && stream,
         response,
         requestParams: {
@@ -380,7 +390,10 @@ export function ChannelTestLab() {
             <Label htmlFor='channel-test-lab-endpoint'>
               {t('Endpoint Type')}
             </Label>
-            <Select value={endpointType} onValueChange={handleEndpointChange}>
+            <Select
+              value={resolvedEndpointType}
+              onValueChange={handleEndpointChange}
+            >
               <SelectTrigger id='channel-test-lab-endpoint' className='w-full'>
                 <SelectValue />
               </SelectTrigger>
