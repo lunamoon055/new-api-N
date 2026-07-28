@@ -80,7 +80,7 @@ type CreationInspectorProps = {
   onRemoveImageReference: (index: number) => void
   onRemoveVideoReferenceImage: (index: number) => void
   onRemoveVideoReferenceVideo: (index: number) => void
-  onRemoveVideoReferenceAudio: () => void
+  onRemoveVideoReferenceAudio: (index: number) => void
 }
 
 type InspectorAsset = {
@@ -673,22 +673,23 @@ function getInspectorAssets(
       ]
     }
   )
-  const audioUrl = getCreationReferenceURL(props.videoReferences.audioUrl)
-  const audioAsset = audioUrl
-    ? [
+  const audioAssets = props.videoReferences.audioUrls.flatMap(
+    (reference, index) => {
+      const url = getCreationReferenceURL(reference)
+      if (!url) return []
+      return [
         {
-          id: `audio-reference-${audioUrl}`,
+          id: `audio-reference-${index}-${url}`,
           kind: 'audio' as const,
-          label: t('Reference audio'),
-          previewUrl: getCreationReferencePreviewURL(
-            props.videoReferences.audioUrl
-          ),
-          onRemove: props.onRemoveVideoReferenceAudio,
+          label: `${t('Reference audio')} ${index + 1}`,
+          previewUrl: getCreationReferencePreviewURL(reference),
+          onRemove: () => props.onRemoveVideoReferenceAudio(index),
         },
       ]
-    : []
+    }
+  )
 
-  return [...genericAssets, ...imageAssets, ...videoAssets, ...audioAsset]
+  return [...genericAssets, ...imageAssets, ...videoAssets, ...audioAssets]
 }
 
 function getResultProgress(result: CreationResult) {

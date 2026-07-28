@@ -55,6 +55,7 @@ type responseTask struct {
 	ResultURL          string         `json:"result_url,omitempty"`
 	OutputURL          string         `json:"output_url,omitempty"`
 	VideoURL           string         `json:"video_url,omitempty"`
+	ContentURL         string         `json:"content_url,omitempty"`
 	Metadata           map[string]any `json:"metadata,omitempty"`
 	Error              *struct {
 		Message string `json:"message"`
@@ -120,6 +121,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
+	if isVideosModelName(req.Model) {
+		return validateVideosJSONRequest(c)
+	}
 	return validateVideo2JSONRequest(c, req.Model)
 }
 
@@ -140,7 +144,11 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 		seconds = req.Duration
 	}
 	if seconds <= 0 {
-		seconds = 4
+		defaultSeconds := 4
+		if isVideosModelName(req.Model) {
+			defaultSeconds = 5
+		}
+		seconds = defaultSeconds
 	}
 
 	size := req.Size
@@ -556,6 +564,7 @@ func hasTaskResponseFields(values map[string]any) bool {
 		"status",
 		"state",
 		"url",
+		"content_url",
 		"video_url",
 		"result_url",
 		"output_url",
@@ -565,10 +574,12 @@ func hasTaskResponseFields(values map[string]any) bool {
 func extractVideoURL(resTask responseTask) string {
 	for _, url := range []string{
 		resTask.VideoURL,
+		resTask.ContentURL,
 		resTask.URL,
 		resTask.OutputURL,
 		resTask.ResultURL,
 		stringValue(resTask.Metadata, "video_url"),
+		stringValue(resTask.Metadata, "content_url"),
 		stringValue(resTask.Metadata, "url"),
 		stringValue(resTask.Metadata, "output_url"),
 		stringValue(resTask.Metadata, "result_url"),
@@ -588,11 +599,11 @@ func extractVideoURLFromPayload(resTask responseTask, raw map[string]any) string
 		if values == nil {
 			continue
 		}
-		if url := firstStringValue(values, "video_url", "url", "result_url", "output_url", "download_url"); url != "" {
+		if url := firstStringValue(values, "video_url", "content_url", "url", "result_url", "output_url", "download_url"); url != "" {
 			return url
 		}
 		if metadata := mapValue(values, "metadata"); metadata != nil {
-			if url := firstStringValue(metadata, "video_url", "url", "result_url", "output_url", "download_url"); url != "" {
+			if url := firstStringValue(metadata, "video_url", "content_url", "url", "result_url", "output_url", "download_url"); url != "" {
 				return url
 			}
 		}
@@ -600,7 +611,7 @@ func extractVideoURLFromPayload(resTask responseTask, raw map[string]any) string
 			return url
 		}
 		if result := mapValue(values, "result"); result != nil {
-			if url := firstStringValue(result, "video_url", "url", "result_url", "output_url", "download_url"); url != "" {
+			if url := firstStringValue(result, "video_url", "content_url", "url", "result_url", "output_url", "download_url"); url != "" {
 				return url
 			}
 			if url := firstURLFromArrayFields(result, "data", "outputs", "output", "results", "videos", "urls", "video_urls"); url != "" {
@@ -693,11 +704,11 @@ func firstURLFromAny(value any) string {
 			}
 		}
 	case map[string]any:
-		if url := firstStringValue(v, "video_url", "url", "result_url", "output_url", "download_url"); url != "" {
+		if url := firstStringValue(v, "video_url", "content_url", "url", "result_url", "output_url", "download_url"); url != "" {
 			return url
 		}
 		if metadata := mapValue(v, "metadata"); metadata != nil {
-			if url := firstStringValue(metadata, "video_url", "url", "result_url", "output_url", "download_url"); url != "" {
+			if url := firstStringValue(metadata, "video_url", "content_url", "url", "result_url", "output_url", "download_url"); url != "" {
 				return url
 			}
 		}

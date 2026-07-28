@@ -59,7 +59,7 @@ type VideoReferenceFieldsProps = {
   onFilesSelected: (files: File[]) => void
   onRemoveImage: (index: number) => void
   onRemoveVideo: (index: number) => void
-  onRemoveAudio: () => void
+  onRemoveAudio: (index: number) => void
   capability?: CreationVideoCapability
 }
 
@@ -86,17 +86,18 @@ export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
         getCreationReferenceURL(reference)
       )
     : []
-  const audioReference =
-    showAudio && getCreationReferenceURL(props.value.audioUrl)
-      ? props.value.audioUrl
-      : ''
+  const audioReferences = showAudio
+    ? props.value.audioUrls.filter((reference) =>
+        getCreationReferenceURL(reference)
+      )
+    : []
   const referenceCount =
-    imageReferences.length + videoReferences.length + (audioReference ? 1 : 0)
+    imageReferences.length + videoReferences.length + audioReferences.length
   const uploadDisabled = getUploadDisabled({
     mode: referenceMode,
     imageCount: imageReferences.length,
     videoCount: videoReferences.length,
-    hasAudio: !!audioReference,
+    audioCount: audioReferences.length,
     limits,
   })
 
@@ -174,21 +175,22 @@ export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
                 onRemove={() => props.onRemoveVideo(index)}
               />
             ))}
-            {audioReference && (
+            {audioReferences.map((reference, index) => (
               <ReferenceChip
+                key={`audio-${getCreationReferenceURL(reference)}-${index}`}
                 icon={<FileAudio className='size-3 shrink-0' />}
-                label={t('Reference audio')}
-                removeLabel={t('Remove reference audio')}
+                label={`${t('Reference audio')} ${index + 1}`}
+                removeLabel={`${t('Remove reference audio')} ${index + 1}`}
                 onOpen={() =>
                   setPreview({
                     kind: 'audio',
-                    url: getCreationReferencePreviewURL(audioReference),
-                    title: t('Reference audio'),
+                    url: getCreationReferencePreviewURL(reference),
+                    title: `${t('Reference audio')} ${index + 1}`,
                   })
                 }
-                onRemove={props.onRemoveAudio}
+                onRemove={() => props.onRemoveAudio(index)}
               />
-            )}
+            ))}
           </div>
         )}
       </FieldGroup>
@@ -297,7 +299,7 @@ function getReferenceUploadTip(
 ) {
   if (mode === 'video') {
     return t(
-      'Tip: Reference videos support MP4. Up to {{count}} videos, {{size}} MB total.',
+      'Tip: Reference videos support MP4. Up to {{count}} videos, {{size}} MB each.',
       {
         count: limits.maxVideos,
         size: limits.maxVideoSizeMB,
@@ -306,7 +308,7 @@ function getReferenceUploadTip(
   }
   if (mode === 'multimodal') {
     return t(
-      'Tip: Reference assets support images, videos, and audio. Images: up to {{imageCount}}, {{imageSize}} MB each. Videos: up to {{videoCount}}, {{videoSize}} MB total. Audio: up to {{audioCount}}, {{audioSize}} MB each.',
+      'Tip: Reference assets support images, videos, and audio. Images: up to {{imageCount}}, {{imageSize}} MB each. Videos: up to {{videoCount}}, {{videoSize}} MB each. Audio: up to {{audioCount}}, {{audioSize}} MB each.',
       {
         imageCount: limits.maxImages,
         imageSize: limits.maxImageSizeMB,
@@ -330,7 +332,7 @@ function getUploadDisabled(props: {
   mode: CreationVideoReferenceMode
   imageCount: number
   videoCount: number
-  hasAudio: boolean
+  audioCount: number
   limits: CreationVideoCapability['referenceLimits']
 }) {
   if (props.mode === 'image') {
@@ -342,6 +344,6 @@ function getUploadDisabled(props: {
   return (
     props.imageCount >= props.limits.maxImages &&
     props.videoCount >= props.limits.maxVideos &&
-    (props.limits.maxAudios <= 0 || props.hasAudio)
+    (props.limits.maxAudios <= 0 || props.audioCount >= props.limits.maxAudios)
   )
 }

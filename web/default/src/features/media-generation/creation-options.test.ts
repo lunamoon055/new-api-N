@@ -118,6 +118,7 @@ describe('Sanbao creation model options', () => {
       startImageUrl: '',
       endImageUrl: '',
       videoUrls: [{ url: 'https://example.com/ref.mp4' }],
+      audioUrls: [{ url: 'https://example.com/ref.wav' }],
       audioUrl: { url: 'https://example.com/ref.wav' },
     })
 
@@ -131,6 +132,43 @@ describe('Sanbao creation model options', () => {
       videos: ['https://example.com/ref.mp4'],
       audios: ['https://example.com/ref.wav'],
       reference: 'all',
+    })
+  })
+
+  test('uses videos api aliases for controls, limits, and request fields', () => {
+    assert.deepEqual(
+      getCreationResolutionOptions('sd2满血').map((item) => item.value),
+      ['720p', '480p']
+    )
+    assert.deepEqual(
+      getCreationDurationOptions('sd2满血').slice(0, 3).map((item) => item.value),
+      ['4', '5', '6']
+    )
+    assert.equal(getCreationVideoReferenceLimits('sd2满血').maxAudios, 3)
+    assert.equal(getCreationVideoCapabilities('sd2满血')?.kind, 'videos')
+
+    const options = normalizeCreationVideoOptions(
+      { resolution: '480p', duration: '8', aspectRatio: '1:1' },
+      'sd2满血'
+    )
+    const request = getCreationVideoRequestOptions(options, 'sd2满血', {
+      referenceMode: 'multimodal',
+      imageUrls: [{ url: 'https://example.com/ref.png' }],
+      startImageUrl: '',
+      endImageUrl: '',
+      videoUrls: [{ url: 'https://example.com/ref.mp4' }],
+      audioUrls: [{ url: 'https://example.com/ref.wav' }],
+      audioUrl: { url: 'https://example.com/ref.wav' },
+    })
+
+    assert.deepEqual(request, {
+      duration: 8,
+      ratio: '1:1',
+      resolution: '480p',
+      estimateSeconds: 180,
+      referenceImages: ['https://example.com/ref.png'],
+      referenceVideos: ['https://example.com/ref.mp4'],
+      referenceAudios: ['https://example.com/ref.wav'],
     })
   })
 })

@@ -99,10 +99,12 @@ export function parseVideoGenerationResult(
       getString(source, 'result_url') ||
       getString(source, 'output_url') ||
       getString(source, 'video_url') ||
+      getString(source, 'content_url') ||
       getString(metadata, 'url') ||
       getString(metadata, 'result_url') ||
       getString(metadata, 'output_url') ||
-      getString(metadata, 'video_url'),
+      getString(metadata, 'video_url') ||
+      getString(metadata, 'content_url'),
   }
 }
 

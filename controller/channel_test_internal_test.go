@@ -152,6 +152,30 @@ func TestBuildTestRequestUses480pPayloadForVideo2Async480pModels(t *testing.T) {
 	require.Equal(t, 4, videoRequest.Duration)
 }
 
+func TestResolveChannelTestEndpointUsesOpenAIVideoForVideosApiModels(t *testing.T) {
+	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(
+		&model.Channel{},
+		"sd2-mini",
+		"",
+	)
+
+	require.Equal(t, string(constant.EndpointTypeOpenAIVideo), endpointType)
+	require.Equal(t, "/v1/videos", requestPath)
+	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
+}
+
+func TestBuildTestRequestUsesVideosApiPayloadForVideosApiModels(t *testing.T) {
+	request := buildTestRequest("sd2-mini", string(constant.EndpointTypeOpenAIVideo), &model.Channel{}, false)
+
+	require.IsType(t, relaycommon.TaskSubmitReq{}, request)
+	videoRequest := request.(relaycommon.TaskSubmitReq)
+	require.Equal(t, "sd2-mini", videoRequest.Model)
+	require.Equal(t, "16:9", videoRequest.Ratio)
+	require.Equal(t, "720p", videoRequest.Resolution)
+	require.Equal(t, 5, videoRequest.Duration)
+	require.Equal(t, "", videoRequest.Size)
+}
+
 func TestBuildChannelTestRequestUsesCustomVideoPayload(t *testing.T) {
 	request, err := buildChannelTestRequest(
 		"seedance2(933)",

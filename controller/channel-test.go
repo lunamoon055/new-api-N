@@ -221,6 +221,8 @@ func isChannelTestVideoModel(channel *model.Channel, modelName string) bool {
 		strings.HasPrefix(modelName, "veo") ||
 		strings.Contains(modelName, "kling") ||
 		strings.Contains(modelName, "video-") ||
+		strings.HasPrefix(modelName, "videos-") ||
+		strings.HasPrefix(modelName, "sd2") ||
 		strings.Contains(modelName, "grok-imagine-video")
 }
 
@@ -235,6 +237,12 @@ func isChannelTestAsyncVideoModel(modelName string) bool {
 	default:
 		return false
 	}
+}
+
+func isChannelTestVideosApiModel(modelName string) bool {
+	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
+	return strings.HasPrefix(normalizedModelName, "videos-") ||
+		strings.HasPrefix(normalizedModelName, "sd2")
 }
 
 func isVideo2ModelName(modelName string) bool {
@@ -1283,6 +1291,15 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 		}
 		switch constant.EndpointType(endpointType) {
 		case constant.EndpointTypeOpenAIVideo:
+			if isChannelTestVideosApiModel(model) {
+				return relaycommon.TaskSubmitReq{
+					Model:      model,
+					Prompt:     "a short product video",
+					Ratio:      "16:9",
+					Resolution: "720p",
+					Duration:   5,
+				}
+			}
 			return relaycommon.TaskSubmitReq{
 				Model:    model,
 				Prompt:   "a short product video",
@@ -1344,6 +1361,15 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	}
 
 	if isChannelTestVideoModel(channel, model) {
+		if isChannelTestVideosApiModel(model) {
+			return relaycommon.TaskSubmitReq{
+				Model:      model,
+				Prompt:     "a short product video",
+				Ratio:      "16:9",
+				Resolution: "720p",
+				Duration:   5,
+			}
+		}
 		return relaycommon.TaskSubmitReq{
 			Model:    model,
 			Prompt:   "a short product video",

@@ -131,11 +131,22 @@ export function sanitizeCreationHistoryItem(
         .map(getStorableReferenceURL)
         .filter(isStorableReferenceURL)
     : []
+  const audioUrls = Array.isArray(references.audioUrls)
+    ? references.audioUrls
+        .map(getStorableReferenceURL)
+        .filter(isStorableReferenceURL)
+    : []
   const audioUrl = isStorableReferenceURL(
     getStorableReferenceURL(references.audioUrl)
   )
     ? getStorableReferenceURL(references.audioUrl)
     : ''
+  const normalizedAudioUrls =
+    audioUrls.length > 0
+      ? audioUrls
+      : audioUrl
+        ? [audioUrl]
+        : []
 
   return {
     ...sanitizedItem,
@@ -145,6 +156,7 @@ export function sanitizeCreationHistoryItem(
       startImageUrl,
       endImageUrl,
       videoUrls,
+      audioUrls: normalizedAudioUrls,
       audioUrl,
     },
   }

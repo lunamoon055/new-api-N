@@ -85,6 +85,36 @@ var creationModelMetadataByName = map[string]creationModelMetadata{
 		Description: "适合文本生成视频和动态镜头创作的异步视频模型。",
 		Tags:        []string{"video", "async"},
 	},
+	"videos-standard": {
+		Mode:        creationModeVideo,
+		Description: "用于视频生成和创作的标准模型。",
+		Tags:        []string{"video", "async"},
+	},
+	"videos-fast": {
+		Mode:        creationModeVideo,
+		Description: "用于视频生成和创作的快速模型。",
+		Tags:        []string{"video", "async"},
+	},
+	"videos-mini": {
+		Mode:        creationModeVideo,
+		Description: "用于视频生成和创作的轻量模型。",
+		Tags:        []string{"video", "async"},
+	},
+	"sd2-mini": {
+		Mode:        creationModeVideo,
+		Description: "用于视频生成和创作的轻量模型。",
+		Tags:        []string{"video", "async"},
+	},
+	"sd2-fast": {
+		Mode:        creationModeVideo,
+		Description: "用于视频生成和创作的快速模型。",
+		Tags:        []string{"video", "async"},
+	},
+	"sd2满血": {
+		Mode:        creationModeVideo,
+		Description: "用于视频生成和创作的标准模型。",
+		Tags:        []string{"video", "async"},
+	},
 	"sora2": {
 		Mode:        creationModeVideo,
 		Description: "按 linksky 异步媒体接口接入的视频生成模型，适合短视频创作。",
@@ -942,6 +972,8 @@ func getCreationModelMetadata(modelName string) creationModelMetadata {
 		}
 	case strings.HasPrefix(modelName, "sora") ||
 		strings.HasPrefix(modelName, "video-2.0") ||
+		strings.HasPrefix(modelName, "videos-") ||
+		strings.HasPrefix(modelName, "sd2") ||
 		strings.HasPrefix(modelName, "veo") ||
 		strings.Contains(modelName, "kling") ||
 		strings.Contains(modelName, "grok-imagine-video"):

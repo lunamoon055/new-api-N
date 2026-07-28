@@ -38,7 +38,7 @@ func FindTaskVideoURL(value any, taskID string) string {
 			}
 		}
 	case map[string]any:
-		for _, key := range []string{"video_url", "url", "result_url", "output_url", "download_url"} {
+		for _, key := range []string{"video_url", "content_url", "url", "result_url", "output_url", "download_url"} {
 			if url := FindTaskVideoURL(v[key], taskID); url != "" {
 				return url
 			}

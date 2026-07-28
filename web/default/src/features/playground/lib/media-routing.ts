@@ -65,6 +65,12 @@ const VIDEO_MODEL_NAMES = new Set([
   'video-2.0-fast-480p',
   'video-2.0-mini-480p',
   'sora2',
+  'videos-standard',
+  'videos-fast',
+  'videos-mini',
+  'sd2-mini',
+  'sd2-fast',
+  'sd2满血',
   'ko3',
   'kling-v3',
 ])
@@ -78,6 +84,8 @@ export function getPlaygroundModelMode(model: string): PlaygroundMediaMode {
   if (
     VIDEO_MODEL_NAMES.has(normalizedModel) ||
     normalizedModel.startsWith('video-') ||
+    normalizedModel.startsWith('videos-') ||
+    normalizedModel.startsWith('sd2-') ||
     normalizedModel.startsWith('sora') ||
     normalizedModel.startsWith('veo') ||
     normalizedModel.includes('kling') ||

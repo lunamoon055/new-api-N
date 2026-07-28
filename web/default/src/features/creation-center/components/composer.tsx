@@ -91,7 +91,7 @@ type ComposerProps = {
   onVideoReferenceFilesSelected: (files: File[]) => void
   onRemoveVideoReferenceImage: (index: number) => void
   onRemoveVideoReferenceVideo: (index: number) => void
-  onRemoveVideoReferenceAudio: () => void
+  onRemoveVideoReferenceAudio: (index: number) => void
   onRemoveAsset: (index: number) => void
   onSubmit: () => void
 }
@@ -418,7 +418,11 @@ export function Composer(props: ComposerProps) {
 }
 
 function supportsReferenceMentions(capability?: CreationVideoCapability) {
-  return capability?.kind === 'video2' || capability?.kind === 'sanbao'
+  return (
+    capability?.kind === 'video2' ||
+    capability?.kind === 'sanbao' ||
+    capability?.kind === 'videos'
+  )
 }
 
 function ComposerSelectGroup(props: {
@@ -490,18 +494,16 @@ function getVideoReferenceMentionItems(
       label: `${t('Reference video')} ${index + 1}`,
       token: `${t('Reference video')}${index + 1}`,
     }))
-  const audioItem = getCreationReferenceURL(references.audioUrl)
-    ? [
-        {
-          id: 'audio',
-          kind: 'audio' as const,
-          label: t('Reference audio'),
-          token: t('Reference audio'),
-        },
-      ]
-    : []
+  const audioItems = references.audioUrls
+    .filter((reference) => getCreationReferenceURL(reference))
+    .map((_, index) => ({
+      id: `audio-${index}`,
+      kind: 'audio' as const,
+      label: `${t('Reference audio')} ${index + 1}`,
+      token: `${t('Reference audio')}${index + 1}`,
+    }))
 
-  return [...imageItems, ...videoItems, ...audioItem]
+  return [...imageItems, ...videoItems, ...audioItems]
 }
 
 function matchesReferenceMentionQuery(
