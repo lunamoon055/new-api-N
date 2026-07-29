@@ -170,7 +170,7 @@ func sendBarkNotify(barkURL string, data dto.Notify) error {
 
 		// 发送请求
 		client := GetHttpClient()
-		resp, err = client.Do(req)
+		resp, err = DoSSRFProtectedRequest(client, req)
 		if err != nil {
 			return fmt.Errorf("failed to send bark request: %v", err)
 		}
@@ -265,7 +265,7 @@ func sendGotifyNotify(gotifyUrl string, gotifyToken string, priority int, data d
 
 		// 发送请求
 		client := GetHttpClient()
-		resp, err = client.Do(req)
+		resp, err = DoSSRFProtectedRequest(client, req)
 		if err != nil {
 			return fmt.Errorf("failed to send gotify request: %v", err)
 		}

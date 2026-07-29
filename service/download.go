@@ -65,6 +65,10 @@ func DoDownloadRequest(originUrl string, reason ...string) (resp *http.Response,
 		}
 
 		common.SysLog(fmt.Sprintf("downloading from origin: %s, reason: %s", common.MaskSensitiveInfo(originUrl), strings.Join(reason, ", ")))
-		return GetHttpClient().Get(originUrl)
+		req, err := http.NewRequest(http.MethodGet, originUrl, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create download request: %v", err)
+		}
+		return DoSSRFProtectedRequest(GetHttpClient(), req)
 	}
 }

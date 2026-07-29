@@ -15,6 +15,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var commonGroupCol string
@@ -24,6 +25,13 @@ var commonFalseVal string
 
 var logKeyCol string
 var logGroupCol string
+
+func withRowLock(tx *gorm.DB) *gorm.DB {
+	if tx == nil || common.UsingSQLite {
+		return tx
+	}
+	return tx.Clauses(clause.Locking{Strength: "UPDATE"})
+}
 
 func initCol() {
 	// init common column names

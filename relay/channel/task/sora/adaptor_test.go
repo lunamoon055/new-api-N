@@ -59,6 +59,31 @@ func TestBuildRequestURLKeepsVideosApiModelOnStandardEndpoint(t *testing.T) {
 	require.Equal(t, "https://api.example.com/v1/videos", got)
 }
 
+func TestBuildRequestURLKeepsVideos4CatalogModelsOnStandardEndpoint(t *testing.T) {
+	adaptor := &TaskAdaptor{baseURL: "https://api.example.com"}
+	for _, modelName := range []string{
+		"videos-4 (4图3视频1音频)",
+		"videos-4-fast (4图3视频1音频)",
+		"videos-4-mini (4图3视频1音频)",
+	} {
+		t.Run(modelName, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				OriginModelName: modelName,
+				RequestURLPath:  "/v1/video/async-generations",
+				TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+				ChannelMeta: &relaycommon.ChannelMeta{
+					UpstreamModelName: modelName,
+				},
+			}
+
+			got, err := adaptor.BuildRequestURL(info)
+
+			require.NoError(t, err)
+			require.Equal(t, "https://api.example.com/v1/videos", got)
+		})
+	}
+}
+
 func TestFetchTaskUsesAsyncGenerationsForSora2(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

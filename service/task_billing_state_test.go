@@ -121,6 +121,63 @@ func TestApplyPendingTaskBilling_FinalizeRefundIsIdempotent(t *testing.T) {
 	assert.Equal(t, preConsumed, log.Quota)
 }
 
+func TestRecoverPendingTaskBillingEventAfterLogInsertDoesNotDuplicate(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 47, 47, 47
+	const userQuota, tokenQuota = 7_000, 2_000
+	const preConsumed = 3_000
+
+	seedUser(t, userID, userQuota)
+	seedToken(t, tokenID, userID, "sk-outbox-crash-window", tokenQuota)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.Status = model.TaskStatusFailure
+	task.FailReason = "upstream failed"
+	persistBillingTask(t, task, "task_outbox_crash_window", model.TaskBillingStatusFinalizePending, 0)
+
+	result, err := model.ApplyTaskBilling(
+		task,
+		model.TaskBillingStatusFinalizePending,
+		model.TaskBillingStatusRefunded,
+		"",
+		&model.TaskBillingEventPayload{
+			Content:    task.FailReason,
+			ModelName:  "test-model",
+			Group:      "default",
+			LogEnabled: true,
+		},
+	)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.NotEmpty(t, result.EventID)
+
+	event, err := model.GetTaskBillingEventByEventID(result.EventID)
+	require.NoError(t, err)
+	assert.Equal(t, model.TaskBillingEventStatusPending, event.Status)
+
+	// Simulate a process crash after LOG_DB accepted the event but before the
+	// primary database marked the outbox row delivered.
+	require.NoError(t, model.RecordTaskBillingEventLog(event))
+	assert.Equal(t, int64(1), countLogs(t))
+
+	recoverPendingTaskBillingEvents(ctx, 10)
+	recoverPendingTaskBillingEvents(ctx, 10)
+
+	persistedEvent, err := model.GetTaskBillingEventByEventID(result.EventID)
+	require.NoError(t, err)
+	assert.Equal(t, model.TaskBillingEventStatusDelivered, persistedEvent.Status)
+	assert.Equal(t, int64(1), countLogs(t))
+
+	var eventLogCount int64
+	require.NoError(t, model.LOG_DB.Model(&model.Log{}).
+		Where("billing_event_id = ?", result.EventID).
+		Count(&eventLogCount).Error)
+	assert.Equal(t, int64(1), eventLogCount)
+}
+
 func TestApplyPendingTaskBilling_SubscriptionInsufficientRollsBack(t *testing.T) {
 	truncate(t)
 	ctx := context.Background()

@@ -318,6 +318,11 @@ const VIDEOS_API_CAPABILITY: CreationVideoCapability = {
   referenceLimits: VIDEOS_API_REFERENCE_LIMITS,
 }
 
+const VIDEOS_4_API_CAPABILITY: CreationVideoCapability = {
+  ...VIDEOS_API_CAPABILITY,
+  referenceLimits: VIDEO2_REFERENCE_LIMITS,
+}
+
 const VIDEO_MODEL_ID_ALIASES: Record<string, string> = {
   'sd2-mini': 'videos-mini',
   'sd2-fast': 'videos-fast',
@@ -337,6 +342,9 @@ const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
   'videos-standard': VIDEOS_API_CAPABILITY,
   'videos-fast': VIDEOS_API_CAPABILITY,
   'videos-mini': VIDEOS_API_CAPABILITY,
+  'videos-4': VIDEOS_4_API_CAPABILITY,
+  'videos-4-fast': VIDEOS_4_API_CAPABILITY,
+  'videos-4-mini': VIDEOS_4_API_CAPABILITY,
   'sd2-mini': VIDEOS_API_CAPABILITY,
   'sd2-fast': VIDEOS_API_CAPABILITY,
   sd2满血: VIDEOS_API_CAPABILITY,

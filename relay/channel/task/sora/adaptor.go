@@ -122,7 +122,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
 	if isVideosModelName(req.Model) {
-		return validateVideosJSONRequest(c)
+		return validateVideosJSONRequest(c, req.Model)
 	}
 	return validateVideo2JSONRequest(c, req.Model)
 }

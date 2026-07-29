@@ -1,6 +1,8 @@
 package common
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -19,6 +21,29 @@ type SSRFProtection struct {
 	ApplyIPFilterForDomain bool     // 对域名启用IP过滤
 }
 
+// SSRFResolver is the subset of net.Resolver used by the SSRF-safe HTTP
+// transport. Keeping it as an interface allows deterministic DNS-rebinding
+// tests without changing the process-wide resolver.
+type SSRFResolver interface {
+	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
+}
+
+// SSRFResolvedTarget is the validated network endpoint that must be used for
+// the actual connection. DialAddress deliberately contains an IP literal so a
+// later transport layer cannot resolve the hostname a second time.
+type SSRFResolvedTarget struct {
+	Host string
+	Port int
+	IP   net.IP
+}
+
+func (t *SSRFResolvedTarget) DialAddress() string {
+	if t == nil || t.IP == nil || t.Port <= 0 {
+		return ""
+	}
+	return net.JoinHostPort(t.IP.String(), strconv.Itoa(t.Port))
+}
+
 // DefaultSSRFProtection 默认SSRF防护配置
 var DefaultSSRFProtection = &SSRFProtection{
 	AllowPrivateIp:   false,
@@ -33,20 +58,20 @@ var DefaultSSRFProtection = &SSRFProtection{
 // 参考 IANA IPv4 Special-Purpose Address Registry
 // https://www.iana.org/assignments/iana-ipv4-special-registry/
 var privateIPv4Nets = []net.IPNet{
-	{IP: net.IPv4(0, 0, 0, 0), Mask: net.CIDRMask(8, 32)},       // 0.0.0.0/8 ("This network" / 未指定)
-	{IP: net.IPv4(10, 0, 0, 0), Mask: net.CIDRMask(8, 32)},      // 10.0.0.0/8 (私有)
-	{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)},   // 100.64.0.0/10 (运营商级 NAT / CGNAT)
-	{IP: net.IPv4(127, 0, 0, 0), Mask: net.CIDRMask(8, 32)},     // 127.0.0.0/8 (回环)
-	{IP: net.IPv4(169, 254, 0, 0), Mask: net.CIDRMask(16, 32)},  // 169.254.0.0/16 (链路本地)
-	{IP: net.IPv4(172, 16, 0, 0), Mask: net.CIDRMask(12, 32)},   // 172.16.0.0/12 (私有)
-	{IP: net.IPv4(192, 0, 0, 0), Mask: net.CIDRMask(24, 32)},    // 192.0.0.0/24 (IETF 协议分配)
-	{IP: net.IPv4(192, 0, 2, 0), Mask: net.CIDRMask(24, 32)},    // 192.0.2.0/24 (TEST-NET-1)
-	{IP: net.IPv4(192, 168, 0, 0), Mask: net.CIDRMask(16, 32)},  // 192.168.0.0/16 (私有)
-	{IP: net.IPv4(198, 18, 0, 0), Mask: net.CIDRMask(15, 32)},   // 198.18.0.0/15 (基准测试)
-	{IP: net.IPv4(198, 51, 100, 0), Mask: net.CIDRMask(24, 32)}, // 198.51.100.0/24 (TEST-NET-2)
-	{IP: net.IPv4(203, 0, 113, 0), Mask: net.CIDRMask(24, 32)},  // 203.0.113.0/24 (TEST-NET-3)
-	{IP: net.IPv4(224, 0, 0, 0), Mask: net.CIDRMask(4, 32)},     // 224.0.0.0/4 (组播)
-	{IP: net.IPv4(240, 0, 0, 0), Mask: net.CIDRMask(4, 32)},     // 240.0.0.0/4 (保留)
+	{IP: net.IPv4(0, 0, 0, 0), Mask: net.CIDRMask(8, 32)},          // 0.0.0.0/8 ("This network" / 未指定)
+	{IP: net.IPv4(10, 0, 0, 0), Mask: net.CIDRMask(8, 32)},         // 10.0.0.0/8 (私有)
+	{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)},      // 100.64.0.0/10 (运营商级 NAT / CGNAT)
+	{IP: net.IPv4(127, 0, 0, 0), Mask: net.CIDRMask(8, 32)},        // 127.0.0.0/8 (回环)
+	{IP: net.IPv4(169, 254, 0, 0), Mask: net.CIDRMask(16, 32)},     // 169.254.0.0/16 (链路本地)
+	{IP: net.IPv4(172, 16, 0, 0), Mask: net.CIDRMask(12, 32)},      // 172.16.0.0/12 (私有)
+	{IP: net.IPv4(192, 0, 0, 0), Mask: net.CIDRMask(24, 32)},       // 192.0.0.0/24 (IETF 协议分配)
+	{IP: net.IPv4(192, 0, 2, 0), Mask: net.CIDRMask(24, 32)},       // 192.0.2.0/24 (TEST-NET-1)
+	{IP: net.IPv4(192, 168, 0, 0), Mask: net.CIDRMask(16, 32)},     // 192.168.0.0/16 (私有)
+	{IP: net.IPv4(198, 18, 0, 0), Mask: net.CIDRMask(15, 32)},      // 198.18.0.0/15 (基准测试)
+	{IP: net.IPv4(198, 51, 100, 0), Mask: net.CIDRMask(24, 32)},    // 198.51.100.0/24 (TEST-NET-2)
+	{IP: net.IPv4(203, 0, 113, 0), Mask: net.CIDRMask(24, 32)},     // 203.0.113.0/24 (TEST-NET-3)
+	{IP: net.IPv4(224, 0, 0, 0), Mask: net.CIDRMask(4, 32)},        // 224.0.0.0/4 (组播)
+	{IP: net.IPv4(240, 0, 0, 0), Mask: net.CIDRMask(4, 32)},        // 240.0.0.0/4 (保留)
 	{IP: net.IPv4(255, 255, 255, 255), Mask: net.CIDRMask(32, 32)}, // 255.255.255.255/32 (受限广播)
 }
 
@@ -248,85 +273,172 @@ func (p *SSRFProtection) IsIPAccessAllowed(ip net.IP) bool {
 	return !listed
 }
 
-// ValidateURL 验证URL是否安全
-func (p *SSRFProtection) ValidateURL(urlStr string) error {
-	// 解析URL
+func parseSSRFTargetURL(urlStr string) (*url.URL, string, int, error) {
 	u, err := url.Parse(urlStr)
 	if err != nil {
-		return fmt.Errorf("invalid URL format: %v", err)
+		return nil, "", 0, fmt.Errorf("invalid URL format: %v", err)
 	}
 
-	// 只允许HTTP/HTTPS协议
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("unsupported protocol: %s (only http/https allowed)", u.Scheme)
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return nil, "", 0, fmt.Errorf("unsupported protocol: %s (only http/https allowed)", u.Scheme)
+	}
+	if u.Opaque != "" {
+		return nil, "", 0, errors.New("opaque URL is not allowed")
+	}
+	host := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(u.Hostname()), "."))
+	if host == "" {
+		return nil, "", 0, errors.New("URL host is empty")
+	}
+	if strings.Contains(host, "%") {
+		return nil, "", 0, errors.New("scoped IP address is not allowed")
 	}
 
-	// 解析主机和端口
-	host, portStr, err := net.SplitHostPort(u.Host)
-	if err != nil {
-		// 没有端口，使用默认端口
-		host = u.Hostname()
-		if u.Scheme == "https" {
+	portStr := u.Port()
+	if portStr == "" {
+		if strings.HasSuffix(u.Host, ":") {
+			return nil, "", 0, errors.New("URL port is empty")
+		}
+		if scheme == "https" {
 			portStr = "443"
 		} else {
 			portStr = "80"
 		}
 	}
-
-	// 验证端口
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
-		return fmt.Errorf("invalid port: %s", portStr)
+		return nil, "", 0, fmt.Errorf("invalid port: %s", portStr)
+	}
+	if port < 1 || port > 65535 {
+		return nil, "", 0, fmt.Errorf("invalid port: %s", portStr)
+	}
+	return u, host, port, nil
+}
+
+func (p *SSRFProtection) validateResolvedIP(host string, ip net.IP) error {
+	if p.IsIPAccessAllowed(ip) {
+		return nil
+	}
+	if isPrivateIP(ip) {
+		if host == ip.String() {
+			return fmt.Errorf("private IP address not allowed: %s", ip.String())
+		}
+		return fmt.Errorf("private IP address not allowed: %s resolves to %s", host, ip.String())
+	}
+	if p.IpFilterMode {
+		if host == ip.String() {
+			return fmt.Errorf("ip not in whitelist: %s", ip.String())
+		}
+		return fmt.Errorf("ip not in whitelist: %s resolves to %s", host, ip.String())
+	}
+	if host == ip.String() {
+		return fmt.Errorf("ip in blacklist: %s", ip.String())
+	}
+	return fmt.Errorf("ip in blacklist: %s resolves to %s", host, ip.String())
+}
+
+func (p *SSRFProtection) resolveURL(
+	ctx context.Context,
+	urlStr string,
+	resolver SSRFResolver,
+	forceResolveDomain bool,
+) (*SSRFResolvedTarget, error) {
+	_, host, port, err := parseSSRFTargetURL(urlStr)
+	if err != nil {
+		return nil, err
 	}
 
 	if !p.isAllowedPort(port) {
-		return fmt.Errorf("port %d is not allowed", port)
+		return nil, fmt.Errorf("port %d is not allowed", port)
 	}
 
-	// 如果 host 是 IP，则跳过域名检查
 	if ip := net.ParseIP(host); ip != nil {
-		if !p.IsIPAccessAllowed(ip) {
-			if isPrivateIP(ip) {
-				return fmt.Errorf("private IP address not allowed: %s", ip.String())
-			}
-			if p.IpFilterMode {
-				return fmt.Errorf("ip not in whitelist: %s", ip.String())
-			}
-			return fmt.Errorf("ip in blacklist: %s", ip.String())
+		if err := p.validateResolvedIP(ip.String(), ip); err != nil {
+			return nil, err
 		}
-		return nil
+		return &SSRFResolvedTarget{Host: host, Port: port, IP: append(net.IP(nil), ip...)}, nil
 	}
 
-	// 先进行域名过滤
 	if !p.isDomainAllowed(host) {
 		if p.DomainFilterMode {
-			return fmt.Errorf("domain not in whitelist: %s", host)
+			return nil, fmt.Errorf("domain not in whitelist: %s", host)
 		}
-		return fmt.Errorf("domain in blacklist: %s", host)
+		return nil, fmt.Errorf("domain in blacklist: %s", host)
 	}
 
-	// 若未启用对域名应用IP过滤，则到此通过
-	if !p.ApplyIPFilterForDomain {
-		return nil
+	if !forceResolveDomain && !p.ApplyIPFilterForDomain {
+		return &SSRFResolvedTarget{Host: host, Port: port}, nil
 	}
 
-	// 解析域名对应IP并检查
-	ips, err := net.LookupIP(host)
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
+	ipAddrs, err := resolver.LookupIPAddr(ctx, host)
 	if err != nil {
-		return fmt.Errorf("DNS resolution failed for %s: %v", host, err)
+		return nil, fmt.Errorf("DNS resolution failed for %s: %v", host, err)
 	}
-	for _, ip := range ips {
-		if !p.IsIPAccessAllowed(ip) {
-			if isPrivateIP(ip) && !p.AllowPrivateIp {
-				return fmt.Errorf("private IP address not allowed: %s resolves to %s", host, ip.String())
+	if len(ipAddrs) == 0 {
+		return nil, fmt.Errorf("DNS resolution returned no addresses for %s", host)
+	}
+
+	var selectedIP net.IP
+	for _, ipAddr := range ipAddrs {
+		ip := ipAddr.IP
+		if ip == nil {
+			continue
+		}
+		if p.ApplyIPFilterForDomain {
+			if err := p.validateResolvedIP(host, ip); err != nil {
+				return nil, err
 			}
-			if p.IpFilterMode {
-				return fmt.Errorf("ip not in whitelist: %s resolves to %s", host, ip.String())
-			}
-			return fmt.Errorf("ip in blacklist: %s resolves to %s", host, ip.String())
+		}
+		if selectedIP == nil || (selectedIP.To4() == nil && ip.To4() != nil) {
+			selectedIP = append(net.IP(nil), ip...)
 		}
 	}
-	return nil
+	if selectedIP == nil {
+		return nil, fmt.Errorf("DNS resolution returned no usable addresses for %s", host)
+	}
+	return &SSRFResolvedTarget{Host: host, Port: port, IP: selectedIP}, nil
+}
+
+// ValidateURL validates URL policy. Domain resolution is performed when the
+// configured policy applies IP filtering to domains.
+func (p *SSRFProtection) ValidateURL(urlStr string) error {
+	_, err := p.resolveURL(context.Background(), urlStr, net.DefaultResolver, false)
+	return err
+}
+
+// ResolveURL validates URL policy and resolves the exact IP endpoint that a
+// protected transport must dial. A domain is always resolved here, even when
+// domain IP filtering is disabled, so the transport cannot perform a second
+// DNS lookup.
+func (p *SSRFProtection) ResolveURL(ctx context.Context, urlStr string, resolver SSRFResolver) (*SSRFResolvedTarget, error) {
+	return p.resolveURL(ctx, urlStr, resolver, true)
+}
+
+func newSSRFProtectionWithFetchSetting(
+	allowPrivateIp bool,
+	domainFilterMode bool,
+	ipFilterMode bool,
+	domainList []string,
+	ipList []string,
+	allowedPorts []string,
+	applyIPFilterForDomain bool,
+) (*SSRFProtection, error) {
+	allowedPortInts, err := parsePortRanges(allowedPorts)
+	if err != nil {
+		return nil, fmt.Errorf("request reject - invalid port configuration: %v", err)
+	}
+	return &SSRFProtection{
+		AllowPrivateIp:         allowPrivateIp,
+		DomainFilterMode:       domainFilterMode,
+		DomainList:             domainList,
+		IpFilterMode:           ipFilterMode,
+		IpList:                 ipList,
+		AllowedPorts:           allowedPortInts,
+		ApplyIPFilterForDomain: applyIPFilterForDomain,
+	}, nil
 }
 
 // ValidateURLWithFetchSetting 使用FetchSetting配置验证URL
@@ -336,20 +448,50 @@ func ValidateURLWithFetchSetting(urlStr string, enableSSRFProtection, allowPriva
 		return nil
 	}
 
-	// 解析端口范围配置
-	allowedPortInts, err := parsePortRanges(allowedPorts)
+	protection, err := newSSRFProtectionWithFetchSetting(
+		allowPrivateIp,
+		domainFilterMode,
+		ipFilterMode,
+		domainList,
+		ipList,
+		allowedPorts,
+		applyIPFilterForDomain,
+	)
 	if err != nil {
-		return fmt.Errorf("request reject - invalid port configuration: %v", err)
-	}
-
-	protection := &SSRFProtection{
-		AllowPrivateIp:         allowPrivateIp,
-		DomainFilterMode:       domainFilterMode,
-		DomainList:             domainList,
-		IpFilterMode:           ipFilterMode,
-		IpList:                 ipList,
-		AllowedPorts:           allowedPortInts,
-		ApplyIPFilterForDomain: applyIPFilterForDomain,
+		return err
 	}
 	return protection.ValidateURL(urlStr)
+}
+
+// ResolveURLWithFetchSetting validates and resolves a URL for an HTTP
+// transport that pins the connection to the returned IP address.
+func ResolveURLWithFetchSetting(
+	ctx context.Context,
+	urlStr string,
+	enableSSRFProtection bool,
+	allowPrivateIp bool,
+	domainFilterMode bool,
+	ipFilterMode bool,
+	domainList []string,
+	ipList []string,
+	allowedPorts []string,
+	applyIPFilterForDomain bool,
+	resolver SSRFResolver,
+) (*SSRFResolvedTarget, error) {
+	if !enableSSRFProtection {
+		return nil, nil
+	}
+	protection, err := newSSRFProtectionWithFetchSetting(
+		allowPrivateIp,
+		domainFilterMode,
+		ipFilterMode,
+		domainList,
+		ipList,
+		allowedPorts,
+		applyIPFilterForDomain,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return protection.ResolveURL(ctx, urlStr, resolver)
 }

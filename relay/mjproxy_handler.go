@@ -57,7 +57,14 @@ func RelayMidjourneyImage(c *gin.Context) {
 		})
 		return
 	}
-	resp, err := httpClient.Get(midjourneyTask.ImageUrl)
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, midjourneyTask.ImageUrl, nil)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "image_url_invalid",
+		})
+		return
+	}
+	resp, err := service.DoSSRFProtectedRequest(httpClient, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "http_get_image_failed",

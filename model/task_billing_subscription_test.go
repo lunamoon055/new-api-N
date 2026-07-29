@@ -109,6 +109,155 @@ func loadSubscriptionLedgerState(t *testing.T, taskID int64, requestID string) (
 	return task, subscription, token, record
 }
 
+func seedPreConsumeSubscription(t *testing.T, id int, amountTotal int64, amountUsed int64) UserSubscription {
+	t.Helper()
+	now := time.Now().Unix()
+	require.NoError(t, DB.Create(&SubscriptionPlan{
+		Id:               id,
+		Title:            fmt.Sprintf("pre-consume-%d", id),
+		TotalAmount:      amountTotal,
+		QuotaResetPeriod: SubscriptionResetNever,
+	}).Error)
+	subscription := UserSubscription{
+		Id:          id,
+		UserId:      id,
+		PlanId:      id,
+		AmountTotal: amountTotal,
+		AmountUsed:  amountUsed,
+		Status:      "active",
+		StartTime:   now - 60,
+		EndTime:     now + 3600,
+	}
+	require.NoError(t, DB.Create(&subscription).Error)
+	return subscription
+}
+
+func TestPreConsumeUserSubscriptionRejectsCrossUserRequestReuse(t *testing.T) {
+	truncateTables(t)
+
+	subscription := seedPreConsumeSubscription(t, 9801, 1_000, 100)
+	require.NoError(t, DB.Create(&SubscriptionPreConsumeRecord{
+		RequestId:          "req_cross_user",
+		UserId:             subscription.UserId,
+		UserSubscriptionId: subscription.Id,
+		PreConsumed:        100,
+		Status:             SubscriptionPreConsumeStatusConsumed,
+	}).Error)
+
+	_, err := PreConsumeUserSubscription(
+		"req_cross_user",
+		subscription.UserId+1,
+		"test-model",
+		0,
+		100,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "owner mismatch")
+
+	var persisted UserSubscription
+	require.NoError(t, DB.First(&persisted, subscription.Id).Error)
+	assert.Equal(t, int64(100), persisted.AmountUsed)
+}
+
+func TestPreConsumeUserSubscriptionRejectsAmountMismatch(t *testing.T) {
+	truncateTables(t)
+
+	subscription := seedPreConsumeSubscription(t, 9802, 1_000, 100)
+	require.NoError(t, DB.Create(&SubscriptionPreConsumeRecord{
+		RequestId:          "req_amount_mismatch",
+		UserId:             subscription.UserId,
+		UserSubscriptionId: subscription.Id,
+		PreConsumed:        100,
+		Status:             SubscriptionPreConsumeStatusConsumed,
+	}).Error)
+
+	_, err := PreConsumeUserSubscription(
+		"req_amount_mismatch",
+		subscription.UserId,
+		"test-model",
+		0,
+		101,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "amount mismatch")
+
+	var persisted UserSubscription
+	require.NoError(t, DB.First(&persisted, subscription.Id).Error)
+	assert.Equal(t, int64(100), persisted.AmountUsed)
+}
+
+func TestPreConsumeUserSubscriptionConcurrentReservationsDoNotOverspend(t *testing.T) {
+	truncateTables(t)
+
+	subscription := seedPreConsumeSubscription(t, 9803, 100, 0)
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		requestID := fmt.Sprintf("req_concurrent_reserve_%d", i)
+		go func() {
+			<-start
+			_, err := PreConsumeUserSubscription(
+				requestID,
+				subscription.UserId,
+				"test-model",
+				0,
+				75,
+			)
+			results <- err
+		}()
+	}
+	close(start)
+
+	successCount := 0
+	failureCount := 0
+	for i := 0; i < 2; i++ {
+		err := <-results
+		if err == nil {
+			successCount++
+			continue
+		}
+		failureCount++
+		assert.Contains(t, err.Error(), "quota insufficient")
+	}
+	assert.Equal(t, 1, successCount)
+	assert.Equal(t, 1, failureCount)
+
+	var persisted UserSubscription
+	require.NoError(t, DB.First(&persisted, subscription.Id).Error)
+	assert.Equal(t, int64(75), persisted.AmountUsed)
+
+	var recordCount int64
+	require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).Count(&recordCount).Error)
+	assert.Equal(t, int64(1), recordCount)
+}
+
+func TestPreConsumeUserSubscriptionRejectsAmountUsedOverflow(t *testing.T) {
+	truncateTables(t)
+
+	maxInt64 := int64(^uint64(0) >> 1)
+	subscription := seedPreConsumeSubscription(t, 9804, 0, maxInt64-5)
+
+	_, err := PreConsumeUserSubscription(
+		"req_amount_used_overflow",
+		subscription.UserId,
+		"test-model",
+		0,
+		10,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "quota insufficient")
+
+	var persisted UserSubscription
+	require.NoError(t, DB.First(&persisted, subscription.Id).Error)
+	assert.Equal(t, maxInt64-5, persisted.AmountUsed)
+
+	var recordCount int64
+	require.NoError(t, DB.Model(&SubscriptionPreConsumeRecord{}).
+		Where("request_id = ?", "req_amount_used_overflow").
+		Count(&recordCount).Error)
+	assert.Zero(t, recordCount)
+}
+
 func TestInitTaskPersistsRequestIDInPrivateData(t *testing.T) {
 	truncateTables(t)
 
@@ -116,6 +265,9 @@ func TestInitTaskPersistsRequestIDInPrivateData(t *testing.T) {
 	task := InitTask("", &commonRelay.RelayInfo{
 		RequestId: requestID,
 		UserId:    9701,
+		ChannelMeta: &commonRelay.ChannelMeta{
+			ChannelId: 9701,
+		},
 		TaskRelayInfo: &commonRelay.TaskRelayInfo{
 			PublicTaskID: "task_request_id",
 		},

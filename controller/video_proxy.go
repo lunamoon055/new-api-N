@@ -157,7 +157,7 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
-	resp, err := client.Do(req)
+	resp, err := service.DoSSRFProtectedRequest(client, req)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to fetch video for task %s", taskID))
 		videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")

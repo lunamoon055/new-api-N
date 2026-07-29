@@ -174,6 +174,58 @@ describe('Sanbao creation model options', () => {
     })
   })
 
+  test('uses videos-4 controls, limits, and videos api request fields', () => {
+    for (const model of [
+      'videos-4 (4图3视频1音频)',
+      'videos-4-fast (4图3视频1音频)',
+      'videos-4-mini (4图3视频1音频)',
+    ]) {
+      assert.equal(getCreationVideoCapabilities(model)?.kind, 'videos')
+      assert.deepEqual(
+        getCreationResolutionOptions(model).map((item) => item.value),
+        ['720p', '480p']
+      )
+      assert.deepEqual(
+        {
+          maxImages: getCreationVideoReferenceLimits(model).maxImages,
+          maxVideos: getCreationVideoReferenceLimits(model).maxVideos,
+          maxAudios: getCreationVideoReferenceLimits(model).maxAudios,
+        },
+        {
+          maxImages: 4,
+          maxVideos: 3,
+          maxAudios: 1,
+        }
+      )
+    }
+
+    const model = 'videos-4-mini (4图3视频1音频)'
+    const options = normalizeCreationVideoOptions(
+      { resolution: '480p', duration: '6', aspectRatio: '9:16' },
+      model
+    )
+    assert.deepEqual(
+      getCreationVideoRequestOptions(options, model, {
+        referenceMode: 'multimodal',
+        imageUrls: [{ url: 'https://example.com/ref.png' }],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [{ url: 'https://example.com/ref.mp4' }],
+        audioUrls: [{ url: 'https://example.com/ref.wav' }],
+        audioUrl: { url: 'https://example.com/ref.wav' },
+      }),
+      {
+        duration: 6,
+        ratio: '9:16',
+        resolution: '480p',
+        estimateSeconds: 150,
+        referenceImages: ['https://example.com/ref.png'],
+        referenceVideos: ['https://example.com/ref.mp4'],
+        referenceAudios: ['https://example.com/ref.wav'],
+      }
+    )
+  })
+
   test('ignores catalog display suffixes when matching videos api models', () => {
     const model = 'sd2-mini (9图3视频3音频)'
 

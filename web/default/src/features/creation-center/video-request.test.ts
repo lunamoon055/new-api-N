@@ -38,14 +38,14 @@ describe('Creation Center video request payload', () => {
   test('routes unadapted OpenAI models through the prompt endpoint', () => {
     assert.deepEqual(
       buildCreationVideoSubmitRequest({
-        model: createVideoModel('videos-4 (4图3视频1音频)'),
+        model: createVideoModel('future-video-model'),
         prompt: '生成一个五秒的 1080p 视频',
         videoOptions: { resolution: '1080p', duration: '5' },
       }),
       {
         endpoint: '/pg/chat/completions',
         payload: {
-          model: 'videos-4 (4图3视频1音频)',
+          model: 'future-video-model',
           messages: [
             {
               role: 'user',
@@ -57,6 +57,37 @@ describe('Creation Center video request payload', () => {
         transport: 'prompt',
       }
     )
+  })
+
+  test('routes every videos-4 catalog model through videos api billing', () => {
+    for (const model of [
+      'videos-4 (4图3视频1音频)',
+      'videos-4-fast (4图3视频1音频)',
+      'videos-4-mini (4图3视频1音频)',
+    ]) {
+      assert.deepEqual(
+        buildCreationVideoSubmitRequest({
+          model: createVideoModel(model),
+          prompt: '生成一段城市延时摄影',
+          videoOptions: {
+            resolution: '480p',
+            duration: '6',
+            aspectRatio: '16:9',
+          },
+        }),
+        {
+          endpoint: '/api/creation/video/async-generations',
+          payload: {
+            model,
+            prompt: '生成一段城市延时摄影',
+            duration: 6,
+            ratio: '16:9',
+            resolution: '480p',
+          },
+          transport: 'async-video',
+        }
+      )
+    }
   })
 
   test('pairs catalog-suffixed sd2 models with the videos api UI and endpoint', () => {

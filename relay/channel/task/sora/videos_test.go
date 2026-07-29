@@ -20,6 +20,9 @@ func TestIsVideosModelName(t *testing.T) {
 	require.True(t, isVideosModelName("sd2-mini"))
 	require.True(t, isVideosModelName("sd2-fast"))
 	require.True(t, isVideosModelName("sd2满血"))
+	require.True(t, isVideosModelName("videos-4 (4图3视频1音频)"))
+	require.True(t, isVideosModelName("videos-4-fast (4图3视频1音频)"))
+	require.True(t, isVideosModelName("videos-4-mini（4图3视频1音频）"))
 	require.False(t, isVideosModelName("video-2.0-fast"))
 	require.False(t, isVideosModelName("sora2"))
 }
@@ -27,19 +30,19 @@ func TestIsVideosModelName(t *testing.T) {
 func TestValidateVideosRequest(t *testing.T) {
 	validDuration := 15
 	valid := videosRequest{
-		Prompt: "make a vertical product video",
-		Duration: &validDuration,
-		Ratio: "9:16",
-		Resolution: "720p",
+		Prompt:          "make a vertical product video",
+		Duration:        &validDuration,
+		Ratio:           "9:16",
+		Resolution:      "720p",
 		ReferenceImages: []string{"https://cdn.example/a.png"},
 		ReferenceVideos: []string{"https://cdn.example/a.mp4"},
 		ReferenceAudios: []string{"https://cdn.example/a.mp3"},
 	}
-	require.NoError(t, validateVideosRequest(valid))
+	require.NoError(t, validateVideosRequest(valid, "sd2-mini"))
 
 	noDuration := valid
 	noDuration.Duration = nil
-	require.NoError(t, validateVideosRequest(noDuration))
+	require.NoError(t, validateVideosRequest(noDuration, "sd2-mini"))
 
 	zero := 0
 	tests := []struct {
@@ -144,9 +147,39 @@ func TestValidateVideosRequest(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			req := valid
 			test.mutate(&req)
-			require.ErrorContains(t, validateVideosRequest(req), test.contains)
+			require.ErrorContains(t, validateVideosRequest(req, "sd2-mini"), test.contains)
 		})
 	}
+}
+
+func TestValidateVideos4ReferenceLimits(t *testing.T) {
+	validDuration := 6
+	valid := videosRequest{
+		Prompt:          "make a product video",
+		Duration:        &validDuration,
+		Ratio:           "16:9",
+		Resolution:      "480p",
+		ReferenceImages: []string{"https://cdn.example/1.png"},
+		ReferenceVideos: []string{"https://cdn.example/1.mp4"},
+		ReferenceAudios: []string{"https://cdn.example/1.mp3"},
+	}
+	require.NoError(t, validateVideosRequest(valid, "videos-4-mini (4图3视频1音频)"))
+
+	tooManyImages := valid
+	tooManyImages.ReferenceImages = []string{"1", "2", "3", "4", "5"}
+	require.ErrorContains(
+		t,
+		validateVideosRequest(tooManyImages, "videos-4 (4图3视频1音频)"),
+		"must not exceed 4",
+	)
+
+	tooManyAudios := valid
+	tooManyAudios.ReferenceAudios = []string{"1", "2"}
+	require.ErrorContains(
+		t,
+		validateVideosRequest(tooManyAudios, "videos-4-fast (4图3视频1音频)"),
+		"must not exceed 1",
+	)
 }
 
 func newVideosJSONContext(t *testing.T, body string) *gin.Context {

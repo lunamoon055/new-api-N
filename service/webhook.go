@@ -110,7 +110,7 @@ func SendWebhookNotify(webhookURL string, secret string, data dto.Notify) error 
 
 		// 发送请求
 		client := GetHttpClient()
-		resp, err = client.Do(req)
+		resp, err = DoSSRFProtectedRequest(client, req)
 		if err != nil {
 			return fmt.Errorf("failed to send webhook request: %v", err)
 		}

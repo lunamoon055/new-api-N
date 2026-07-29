@@ -14,28 +14,72 @@ import (
 )
 
 type videosRequest struct {
-	Prompt         string   `json:"prompt"`
-	Duration       *int     `json:"duration,omitempty"`
-	Ratio          string   `json:"ratio,omitempty"`
-	Resolution     string   `json:"resolution,omitempty"`
+	Prompt          string   `json:"prompt"`
+	Duration        *int     `json:"duration,omitempty"`
+	Ratio           string   `json:"ratio,omitempty"`
+	Resolution      string   `json:"resolution,omitempty"`
 	ReferenceImages []string `json:"referenceImages,omitempty"`
 	ReferenceVideos []string `json:"referenceVideos,omitempty"`
 	ReferenceAudios []string `json:"referenceAudios,omitempty"`
-	FirstImage     string   `json:"first_image,omitempty"`
-	LastImage      string   `json:"last_image,omitempty"`
+	FirstImage      string   `json:"first_image,omitempty"`
+	LastImage       string   `json:"last_image,omitempty"`
+}
+
+type videosReferenceLimits struct {
+	maxImages int
+	maxVideos int
+	maxAudios int
+}
+
+func normalizeVideosModelName(modelName string) string {
+	normalized := strings.ToLower(strings.TrimSpace(modelName))
+	for _, delimiters := range [][2]string{{"(", ")"}, {"（", "）"}} {
+		if !strings.HasSuffix(normalized, delimiters[1]) {
+			continue
+		}
+		if index := strings.LastIndex(normalized, delimiters[0]); index > 0 {
+			normalized = strings.TrimSpace(normalized[:index])
+		}
+	}
+	return normalized
+}
+
+func isVideos4ModelName(modelName string) bool {
+	switch normalizeVideosModelName(modelName) {
+	case "videos-4", "videos-4-fast", "videos-4-mini":
+		return true
+	default:
+		return false
+	}
 }
 
 func isVideosModelName(modelName string) bool {
-	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
+	normalizedModelName := normalizeVideosModelName(modelName)
 	switch normalizedModelName {
-	case "videos-standard", "videos-fast", "videos-mini":
+	case "videos-standard", "videos-fast", "videos-mini",
+		"videos-4", "videos-4-fast", "videos-4-mini":
 		return true
 	default:
 		return strings.HasPrefix(normalizedModelName, "sd2")
 	}
 }
 
-func validateVideosRequest(req videosRequest) error {
+func getVideosReferenceLimits(modelName string) videosReferenceLimits {
+	if isVideos4ModelName(modelName) {
+		return videosReferenceLimits{
+			maxImages: 4,
+			maxVideos: 3,
+			maxAudios: 1,
+		}
+	}
+	return videosReferenceLimits{
+		maxImages: 9,
+		maxVideos: 3,
+		maxAudios: 3,
+	}
+}
+
+func validateVideosRequest(req videosRequest, modelName string) error {
 	if strings.TrimSpace(req.Prompt) == "" {
 		return fmt.Errorf("prompt is required")
 	}
@@ -54,14 +98,15 @@ func validateVideosRequest(req videosRequest) error {
 	if strings.TrimSpace(req.FirstImage) != "" || strings.TrimSpace(req.LastImage) != "" {
 		return fmt.Errorf("first_image and last_image are not supported")
 	}
-	if countNonBlank(req.ReferenceImages) > 9 {
-		return fmt.Errorf("image references must not exceed 9")
+	limits := getVideosReferenceLimits(modelName)
+	if countNonBlank(req.ReferenceImages) > limits.maxImages {
+		return fmt.Errorf("image references must not exceed %d", limits.maxImages)
 	}
-	if countNonBlank(req.ReferenceVideos) > 3 {
-		return fmt.Errorf("video references must not exceed 3")
+	if countNonBlank(req.ReferenceVideos) > limits.maxVideos {
+		return fmt.Errorf("video references must not exceed %d", limits.maxVideos)
 	}
-	if countNonBlank(req.ReferenceAudios) > 3 {
-		return fmt.Errorf("audio references must not exceed 3")
+	if countNonBlank(req.ReferenceAudios) > limits.maxAudios {
+		return fmt.Errorf("audio references must not exceed %d", limits.maxAudios)
 	}
 	for _, value := range req.ReferenceImages {
 		if err := validateVideo2URL(value); err != nil {
@@ -81,12 +126,12 @@ func validateVideosRequest(req videosRequest) error {
 	return nil
 }
 
-func validateVideosJSONRequest(c *gin.Context) *dto.TaskError {
+func validateVideosJSONRequest(c *gin.Context, modelName string) *dto.TaskError {
 	var req videosRequest
 	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
-	if err := validateVideosRequest(req); err != nil {
+	if err := validateVideosRequest(req, modelName); err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
 	return nil
