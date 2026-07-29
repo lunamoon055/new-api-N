@@ -183,6 +183,16 @@ func UpsertPasskeyCredential(credential *PasskeyCredential) error {
 		return fmt.Errorf("Passkey 保存失败，请重试")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
+		var existing PasskeyCredential
+		findErr := tx.Where("user_id = ?", credential.UserID).First(&existing).Error
+		if findErr != nil && !errors.Is(findErr, gorm.ErrRecordNotFound) {
+			common.SysLog(fmt.Sprintf("UpsertPasskeyCredential: failed to inspect existing credential for user %d: %v", credential.UserID, findErr))
+			return fmt.Errorf("Passkey 保存失败，请重试")
+		}
+		securityMaterialChanged := errors.Is(findErr, gorm.ErrRecordNotFound) ||
+			existing.CredentialID != credential.CredentialID ||
+			existing.PublicKey != credential.PublicKey
+
 		// 使用Unscoped()进行硬删除，避免唯一索引冲突
 		if err := tx.Unscoped().Where("user_id = ?", credential.UserID).Delete(&PasskeyCredential{}).Error; err != nil {
 			common.SysLog(fmt.Sprintf("UpsertPasskeyCredential: failed to delete existing credential for user %d: %v", credential.UserID, err))
@@ -191,6 +201,12 @@ func UpsertPasskeyCredential(credential *PasskeyCredential) error {
 		if err := tx.Create(credential).Error; err != nil {
 			common.SysLog(fmt.Sprintf("UpsertPasskeyCredential: failed to create credential for user %d: %v", credential.UserID, err))
 			return fmt.Errorf("Passkey 保存失败，请重试")
+		}
+		if securityMaterialChanged {
+			if err := BumpUserSessionVersion(tx, credential.UserID); err != nil {
+				common.SysLog(fmt.Sprintf("UpsertPasskeyCredential: failed to revoke old sessions for user %d: %v", credential.UserID, err))
+				return fmt.Errorf("Passkey 保存失败，请重试")
+			}
 		}
 		return nil
 	})
@@ -201,10 +217,20 @@ func DeletePasskeyByUserID(userID int) error {
 		common.SysLog("DeletePasskeyByUserID: empty user ID")
 		return fmt.Errorf("删除失败，请重试")
 	}
-	// 使用Unscoped()进行硬删除，避免唯一索引冲突
-	if err := DB.Unscoped().Where("user_id = ?", userID).Delete(&PasskeyCredential{}).Error; err != nil {
-		common.SysLog(fmt.Sprintf("DeletePasskeyByUserID: failed to delete passkey for user %d: %v", userID, err))
-		return fmt.Errorf("删除失败，请重试")
-	}
-	return nil
+	return DB.Transaction(func(tx *gorm.DB) error {
+		// 使用Unscoped()进行硬删除，避免唯一索引冲突
+		result := tx.Unscoped().Where("user_id = ?", userID).Delete(&PasskeyCredential{})
+		if result.Error != nil {
+			common.SysLog(fmt.Sprintf("DeletePasskeyByUserID: failed to delete passkey for user %d: %v", userID, result.Error))
+			return fmt.Errorf("删除失败，请重试")
+		}
+		if result.RowsAffected == 0 {
+			return nil
+		}
+		if err := BumpUserSessionVersion(tx, userID); err != nil {
+			common.SysLog(fmt.Sprintf("DeletePasskeyByUserID: failed to revoke old sessions for user %d: %v", userID, err))
+			return fmt.Errorf("删除失败，请重试")
+		}
+		return nil
+	})
 }

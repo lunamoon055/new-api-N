@@ -906,6 +906,11 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 	return expiredCount, nil
 }
 
+const (
+	SubscriptionPreConsumeStatusConsumed = "consumed"
+	SubscriptionPreConsumeStatusRefunded = "refunded"
+)
+
 // SubscriptionPreConsumeRecord stores idempotent pre-consume operations per request.
 type SubscriptionPreConsumeRecord struct {
 	Id                 int    `json:"id"`
@@ -928,6 +933,84 @@ func (r *SubscriptionPreConsumeRecord) BeforeCreate(tx *gorm.DB) error {
 func (r *SubscriptionPreConsumeRecord) BeforeUpdate(tx *gorm.DB) error {
 	r.UpdatedAt = common.GetTimestamp()
 	return nil
+}
+
+type subscriptionPreConsumeRefundClaim struct {
+	Record  SubscriptionPreConsumeRecord
+	Found   bool
+	Claimed bool
+}
+
+// claimSubscriptionPreConsumeRefundTx atomically claims ownership of a
+// subscription pre-consume refund. expectedUserID and expectedSubscriptionID
+// are optional ownership guards used by durable async tasks.
+func claimSubscriptionPreConsumeRefundTx(
+	tx *gorm.DB,
+	requestID string,
+	expectedUserID int,
+	expectedSubscriptionID int,
+) (subscriptionPreConsumeRefundClaim, error) {
+	claim := subscriptionPreConsumeRefundClaim{}
+	requestID = strings.TrimSpace(requestID)
+	if tx == nil {
+		return claim, errors.New("subscription refund transaction is nil")
+	}
+	if requestID == "" {
+		return claim, errors.New("requestId is empty")
+	}
+
+	var record SubscriptionPreConsumeRecord
+	query := tx.Where("request_id = ?", requestID).Limit(1).Find(&record)
+	if query.Error != nil {
+		return claim, query.Error
+	}
+	if query.RowsAffected == 0 {
+		return claim, nil
+	}
+	claim.Record = record
+	claim.Found = true
+
+	if expectedUserID > 0 && record.UserId != expectedUserID {
+		return claim, fmt.Errorf(
+			"subscription pre-consume user mismatch for request %q: got %d want %d",
+			requestID,
+			record.UserId,
+			expectedUserID,
+		)
+	}
+	if expectedSubscriptionID > 0 && record.UserSubscriptionId != expectedSubscriptionID {
+		return claim, fmt.Errorf(
+			"subscription pre-consume owner mismatch for request %q: got %d want %d",
+			requestID,
+			record.UserSubscriptionId,
+			expectedSubscriptionID,
+		)
+	}
+
+	switch record.Status {
+	case SubscriptionPreConsumeStatusRefunded:
+		return claim, nil
+	case SubscriptionPreConsumeStatusConsumed:
+		update := tx.Model(&SubscriptionPreConsumeRecord{}).
+			Where("id = ? AND status = ?", record.Id, SubscriptionPreConsumeStatusConsumed).
+			Updates(map[string]any{
+				"status":     SubscriptionPreConsumeStatusRefunded,
+				"updated_at": common.GetTimestamp(),
+			})
+		if update.Error != nil {
+			return claim, update.Error
+		}
+		// A zero-row CAS means another refund transaction already owns the
+		// amount_used adjustment. All valid transitions are consumed->refunded.
+		claim.Claimed = update.RowsAffected == 1
+		return claim, nil
+	default:
+		return claim, fmt.Errorf(
+			"unsupported subscription pre-consume status %q for request %q",
+			record.Status,
+			requestID,
+		)
+	}
 }
 
 func maybeResetUserSubscriptionWithPlanTx(tx *gorm.DB, sub *UserSubscription, plan *SubscriptionPlan, now int64) error {
@@ -988,7 +1071,7 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 			return query.Error
 		}
 		if query.RowsAffected > 0 {
-			if existing.Status == "refunded" {
+			if existing.Status == SubscriptionPreConsumeStatusRefunded {
 				return errors.New("subscription pre-consume already refunded")
 			}
 			var sub UserSubscription
@@ -1034,12 +1117,12 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 				UserId:             userId,
 				UserSubscriptionId: sub.Id,
 				PreConsumed:        amount,
-				Status:             "consumed",
+				Status:             SubscriptionPreConsumeStatusConsumed,
 			}
 			if err := tx.Create(record).Error; err != nil {
 				var dup SubscriptionPreConsumeRecord
 				if err2 := tx.Where("request_id = ?", requestId).First(&dup).Error; err2 == nil {
-					if dup.Status == "refunded" {
+					if dup.Status == SubscriptionPreConsumeStatusRefunded {
 						return errors.New("subscription pre-consume already refunded")
 					}
 					returnValue.UserSubscriptionId = sub.Id
@@ -1076,23 +1159,21 @@ func RefundSubscriptionPreConsume(requestId string) error {
 		return errors.New("requestId is empty")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		var record SubscriptionPreConsumeRecord
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").
-			Where("request_id = ?", requestId).First(&record).Error; err != nil {
+		claim, err := claimSubscriptionPreConsumeRefundTx(tx, requestId, 0, 0)
+		if err != nil {
 			return err
 		}
-		if record.Status == "refunded" {
+		if !claim.Found {
+			return gorm.ErrRecordNotFound
+		}
+		if !claim.Claimed || claim.Record.PreConsumed <= 0 {
 			return nil
 		}
-		if record.PreConsumed <= 0 {
-			record.Status = "refunded"
-			return tx.Save(&record).Error
-		}
-		if err := PostConsumeUserSubscriptionDelta(record.UserSubscriptionId, -record.PreConsumed); err != nil {
-			return err
-		}
-		record.Status = "refunded"
-		return tx.Save(&record).Error
+		return adjustTaskSubscriptionQuota(
+			tx,
+			claim.Record.UserSubscriptionId,
+			-claim.Record.PreConsumed,
+		)
 	})
 }
 

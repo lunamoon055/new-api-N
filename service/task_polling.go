@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -37,7 +38,7 @@ var GetTaskAdaptorFunc func(platform constant.TaskPlatform) TaskPollingAdaptor
 
 // sweepTimedOutTasks 在主轮询之前独立清理超时任务。
 // 每次最多处理 100 条，剩余的下个周期继续处理。
-// 使用 per-task CAS (UpdateWithStatus) 防止覆盖被正常轮询已推进的任务。
+// 使用 per-task CAS 防止覆盖被正常轮询已推进的任务。
 func sweepTimedOutTasks(ctx context.Context) {
 	if constant.TaskTimeoutMinutes <= 0 {
 		return
@@ -48,16 +49,15 @@ func sweepTimedOutTasks(ctx context.Context) {
 		return
 	}
 
-	const legacyTaskCutoff int64 = 1740182400 // 2026-02-22 00:00:00 UTC
 	reason := fmt.Sprintf("任务超时（%d分钟）", constant.TaskTimeoutMinutes)
 	legacyReason := "任务超时（旧系统遗留任务，不进行退款，请联系管理员）"
 	now := time.Now().Unix()
 	timedOutCount := 0
 
 	for _, task := range tasks {
-		isLegacy := task.SubmitTime > 0 && task.SubmitTime < legacyTaskCutoff
+		isLegacy := task.BillingStatus == model.TaskBillingStatusLegacy
 
-		oldStatus := task.Status
+		snap := task.Snapshot()
 		task.Status = model.TaskStatusFailure
 		task.Progress = "100%"
 		task.FinishTime = now
@@ -65,9 +65,11 @@ func sweepTimedOutTasks(ctx context.Context) {
 			task.FailReason = legacyReason
 		} else {
 			task.FailReason = reason
+			task.BillingStatus = model.TaskBillingStatusFinalizePending
+			task.BillingTargetQuota = 0
 		}
 
-		won, err := task.UpdateWithStatus(oldStatus)
+		won, err := task.UpdateWithSnapshot(snap)
 		if err != nil {
 			logger.LogError(ctx, fmt.Sprintf("sweepTimedOutTasks CAS update error for task %s: %v", task.TaskID, err))
 			continue
@@ -77,8 +79,14 @@ func sweepTimedOutTasks(ctx context.Context) {
 			continue
 		}
 		timedOutCount++
-		if !isLegacy && task.Quota != 0 {
-			RefundTaskQuota(ctx, task, reason)
+		if !isLegacy {
+			if _, err := ApplyPendingTaskBilling(ctx, task, reason); err != nil {
+				logger.LogError(ctx, fmt.Sprintf(
+					"sweepTimedOutTasks billing error for task %s: %v",
+					task.TaskID,
+					err,
+				))
+			}
 		}
 	}
 
@@ -87,54 +95,111 @@ func sweepTimedOutTasks(ctx context.Context) {
 	}
 }
 
+func failTaskWithPendingRefund(ctx context.Context, task *model.Task, reason string) error {
+	if task == nil {
+		return nil
+	}
+	snap := task.Snapshot()
+	task.Status = model.TaskStatusFailure
+	task.Progress = taskcommon.ProgressComplete
+	task.FailReason = reason
+	if task.FinishTime == 0 {
+		task.FinishTime = time.Now().Unix()
+	}
+	task.BillingStatus = model.TaskBillingStatusFinalizePending
+	task.BillingTargetQuota = 0
+
+	won, err := task.UpdateWithSnapshot(snap)
+	if err != nil {
+		return err
+	}
+	if !won {
+		return nil
+	}
+	_, err = ApplyPendingTaskBilling(ctx, task, reason)
+	return err
+}
+
+const taskSubmissionRecoveryDelay = 10 * time.Minute
+
+func recoverStaleTaskSubmissions(ctx context.Context, limit int) {
+	cutoff := time.Now().Add(-taskSubmissionRecoveryDelay).Unix()
+	for _, task := range model.GetStaleSubmittingTaskBilling(cutoff, limit) {
+		reason := "任务提交进程中断，已退还预扣额度"
+		if err := failTaskWithPendingRefund(ctx, task, reason); err != nil {
+			scheduleTaskBillingRetry(task, err)
+			logger.LogError(ctx, fmt.Sprintf(
+				"恢复中断的任务提交 %s 失败: %s",
+				task.TaskID,
+				err.Error(),
+			))
+		}
+	}
+}
+
 // TaskPollingLoop 主轮询循环，每 15 秒检查一次未完成的任务
 func TaskPollingLoop() {
 	for {
 		time.Sleep(time.Duration(15) * time.Second)
-		common.SysLog("任务进度轮询开始")
-		ctx := context.TODO()
-		sweepTimedOutTasks(ctx)
-		allTasks := model.GetAllUnFinishSyncTasks(constant.TaskQueryLimit)
-		platformTask := make(map[constant.TaskPlatform][]*model.Task)
-		for _, t := range allTasks {
-			platformTask[t.Platform] = append(platformTask[t.Platform], t)
+		runTaskPollingCycle()
+	}
+}
+
+func runTaskPollingCycle() {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			common.SysError(fmt.Sprintf(
+				"任务进度轮询 panic: %v\n%s",
+				recovered,
+				debug.Stack(),
+			))
 		}
-		for platform, tasks := range platformTask {
-			if len(tasks) == 0 {
+	}()
+
+	common.SysLog("任务进度轮询开始")
+	ctx := context.TODO()
+	recoverStaleTaskSubmissions(ctx, constant.TaskQueryLimit)
+	recoverPendingTaskBilling(ctx, constant.TaskQueryLimit)
+	sweepTimedOutTasks(ctx)
+	allTasks := model.GetAllUnFinishSyncTasks(constant.TaskQueryLimit)
+	platformTask := make(map[constant.TaskPlatform][]*model.Task)
+	for _, t := range allTasks {
+		platformTask[t.Platform] = append(platformTask[t.Platform], t)
+	}
+	for platform, tasks := range platformTask {
+		if len(tasks) == 0 {
+			continue
+		}
+		taskChannelM := make(map[int][]string)
+		taskM := make(map[string]*model.Task)
+		nullTasks := make([]*model.Task, 0)
+		for _, task := range tasks {
+			upstreamID := task.GetUpstreamTaskID()
+			if upstreamID == "" {
+				// 统计失败的未完成任务
+				nullTasks = append(nullTasks, task)
 				continue
 			}
-			taskChannelM := make(map[int][]string)
-			taskM := make(map[string]*model.Task)
-			nullTaskIds := make([]int64, 0)
-			for _, task := range tasks {
-				upstreamID := task.GetUpstreamTaskID()
-				if upstreamID == "" {
-					// 统计失败的未完成任务
-					nullTaskIds = append(nullTaskIds, task.ID)
-					continue
-				}
-				taskM[upstreamID] = task
-				taskChannelM[task.ChannelId] = append(taskChannelM[task.ChannelId], upstreamID)
-			}
-			if len(nullTaskIds) > 0 {
-				err := model.TaskBulkUpdateByID(nullTaskIds, map[string]any{
-					"status":   "FAILURE",
-					"progress": "100%",
-				})
-				if err != nil {
+			taskM[upstreamID] = task
+			taskChannelM[task.ChannelId] = append(taskChannelM[task.ChannelId], upstreamID)
+		}
+		if len(nullTasks) > 0 {
+			for _, task := range nullTasks {
+				reason := "任务缺少上游任务 ID"
+				if err := failTaskWithPendingRefund(ctx, task, reason); err != nil {
 					logger.LogError(ctx, fmt.Sprintf("Fix null task_id task error: %v", err))
 				} else {
-					logger.LogInfo(ctx, fmt.Sprintf("Fix null task_id task success: %v", nullTaskIds))
+					logger.LogInfo(ctx, fmt.Sprintf("Fix null task_id task success: %d", task.ID))
 				}
 			}
-			if len(taskChannelM) == 0 {
-				continue
-			}
-
-			DispatchPlatformUpdate(platform, taskChannelM, taskM)
 		}
-		common.SysLog("任务进度轮询完成")
+		if len(taskChannelM) == 0 {
+			continue
+		}
+
+		DispatchPlatformUpdate(platform, taskChannelM, taskM)
 	}
+	common.SysLog("任务进度轮询完成")
 }
 
 // DispatchPlatformUpdate 按平台分发轮询更新
@@ -169,21 +234,14 @@ func updateSunoTasks(ctx context.Context, channelId int, taskIds []string, taskM
 	}
 	ch, err := model.CacheGetChannel(channelId)
 	if err != nil {
+		reason := fmt.Sprintf("获取渠道信息失败，请联系管理员，渠道ID：%d", channelId)
 		common.SysLog(fmt.Sprintf("CacheGetChannel: %v", err))
-		// Collect DB primary key IDs for bulk update (taskIds are upstream IDs, not task_id column values)
-		var failedIDs []int64
 		for _, upstreamID := range taskIds {
 			if t, ok := taskM[upstreamID]; ok {
-				failedIDs = append(failedIDs, t.ID)
+				if billingErr := failTaskWithPendingRefund(ctx, t, reason); billingErr != nil {
+					common.SysLog(fmt.Sprintf("UpdateSunoTask error: %v", billingErr))
+				}
 			}
-		}
-		err = model.TaskBulkUpdateByID(failedIDs, map[string]any{
-			"fail_reason": fmt.Sprintf("获取渠道信息失败，请联系管理员，渠道ID：%d", channelId),
-			"status":      "FAILURE",
-			"progress":    "100%",
-		})
-		if err != nil {
-			common.SysLog(fmt.Sprintf("UpdateSunoTask error: %v", err))
 		}
 		return err
 	}
@@ -222,28 +280,53 @@ func updateSunoTasks(ctx context.Context, channelId int, taskIds []string, taskM
 
 	for _, responseItem := range responseItems.Data {
 		task := taskM[responseItem.TaskID]
+		if task == nil {
+			logger.LogWarn(ctx, fmt.Sprintf("忽略上游返回的未知任务 ID: %s", responseItem.TaskID))
+			continue
+		}
 		if !taskNeedsUpdate(task, responseItem) {
 			continue
 		}
 
+		snap := task.Snapshot()
 		task.Status = lo.If(model.TaskStatus(responseItem.Status) != "", model.TaskStatus(responseItem.Status)).Else(task.Status)
 		task.FailReason = lo.If(responseItem.FailReason != "", responseItem.FailReason).Else(task.FailReason)
 		task.SubmitTime = lo.If(responseItem.SubmitTime != 0, responseItem.SubmitTime).Else(task.SubmitTime)
 		task.StartTime = lo.If(responseItem.StartTime != 0, responseItem.StartTime).Else(task.StartTime)
 		task.FinishTime = lo.If(responseItem.FinishTime != 0, responseItem.FinishTime).Else(task.FinishTime)
-		if responseItem.FailReason != "" || task.Status == model.TaskStatusFailure {
+		if responseItem.FailReason != "" && task.Status != model.TaskStatusSuccess {
+			task.Status = model.TaskStatusFailure
+			if task.FinishTime == 0 {
+				task.FinishTime = time.Now().Unix()
+			}
+		}
+		if task.Status == model.TaskStatusFailure {
 			logger.LogInfo(ctx, task.TaskID+" 构建失败，"+task.FailReason)
 			task.Progress = "100%"
-			RefundTaskQuota(ctx, task, task.FailReason)
 		}
 		if responseItem.Status == model.TaskStatusSuccess {
 			task.Progress = "100%"
 		}
 		task.Data = responseItem.Data
 
-		err = task.Update()
-		if err != nil {
-			common.SysLog("UpdateSunoTask task error: " + err.Error())
+		isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
+		if isDone && snap.Status != task.Status {
+			taskResult := &relaycommon.TaskInfo{Status: string(task.Status)}
+			reason := PrepareTaskFinalBilling(adaptor, task, taskResult)
+			won, updateErr := task.UpdateWithSnapshot(snap)
+			if updateErr != nil {
+				common.SysLog("UpdateSunoTask task error: " + updateErr.Error())
+				continue
+			}
+			if won {
+				if _, billingErr := ApplyPendingTaskBilling(ctx, task, reason); billingErr != nil {
+					common.SysLog("UpdateSunoTask billing error: " + billingErr.Error())
+				}
+			}
+		} else if !snap.Equal(task.Snapshot()) {
+			if _, updateErr := task.UpdateWithSnapshot(snap); updateErr != nil {
+				common.SysLog("UpdateSunoTask task error: " + updateErr.Error())
+			}
 		}
 	}
 	return nil
@@ -304,20 +387,13 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 	}
 	cacheGetChannel, err := model.CacheGetChannel(channelId)
 	if err != nil {
-		// Collect DB primary key IDs for bulk update (taskIds are upstream IDs, not task_id column values)
-		var failedIDs []int64
+		reason := fmt.Sprintf("Failed to get channel info, channel ID: %d", channelId)
 		for _, upstreamID := range taskIds {
 			if t, ok := taskM[upstreamID]; ok {
-				failedIDs = append(failedIDs, t.ID)
+				if billingErr := failTaskWithPendingRefund(ctx, t, reason); billingErr != nil {
+					common.SysLog(fmt.Sprintf("UpdateVideoTask error: %v", billingErr))
+				}
 			}
-		}
-		errUpdate := model.TaskBulkUpdateByID(failedIDs, map[string]any{
-			"fail_reason": fmt.Sprintf("Failed to get channel info, channel ID: %d", channelId),
-			"status":      "FAILURE",
-			"progress":    "100%",
-		})
-		if errUpdate != nil {
-			common.SysLog(fmt.Sprintf("UpdateVideoTask error: %v", errUpdate))
 		}
 		return fmt.Errorf("CacheGetChannel failed: %w", err)
 	}
@@ -416,9 +492,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		}
 	}
 
-	shouldRefund := false
-	shouldSettle := false
-	quota := task.Quota
+	billingReason := ""
 
 	task.Status = model.TaskStatus(taskResult.Status)
 	switch taskResult.Status {
@@ -446,7 +520,6 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			// No URL from adaptor — construct proxy URL using public task ID
 			task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 		}
-		shouldSettle = true
 	case model.TaskStatusFailure:
 		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", taskId), task)
 		task.Status = model.TaskStatusFailure
@@ -457,9 +530,6 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		task.FailReason = taskResult.Reason
 		logger.LogInfo(ctx, fmt.Sprintf("Task %s failed: %s", task.TaskID, task.FailReason))
 		taskResult.Progress = taskcommon.ProgressComplete
-		if quota != 0 {
-			shouldRefund = true
-		}
 	default:
 		return fmt.Errorf("unknown task status %s for task %s", taskResult.Status, task.TaskID)
 	}
@@ -469,30 +539,24 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 	isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
 	if isDone && snap.Status != task.Status {
-		won, err := task.UpdateWithStatus(snap.Status)
+		billingReason = PrepareTaskFinalBilling(adaptor, task, taskResult)
+		won, err := task.UpdateWithSnapshot(snap)
 		if err != nil {
 			logger.LogError(ctx, fmt.Sprintf("UpdateWithStatus failed for task %s: %s", task.TaskID, err.Error()))
-			shouldRefund = false
-			shouldSettle = false
 		} else if !won {
 			logger.LogWarn(ctx, fmt.Sprintf("Task %s already transitioned by another process, skip billing", task.TaskID))
-			shouldRefund = false
-			shouldSettle = false
+		} else if _, err := ApplyPendingTaskBilling(ctx, task, billingReason); err != nil {
+			// The terminal state and FINALIZE_PENDING target are already durable.
+			// A later recovery pass retries the same atomic adjustment.
+			logger.LogError(ctx, fmt.Sprintf("Finalize task billing failed for task %s: %s", task.TaskID, err.Error()))
 		}
 	} else if !snap.Equal(task.Snapshot()) {
-		if _, err := task.UpdateWithStatus(snap.Status); err != nil {
+		if _, err := task.UpdateWithSnapshot(snap); err != nil {
 			logger.LogError(ctx, fmt.Sprintf("Failed to update task %s: %s", task.TaskID, err.Error()))
 		}
 	} else {
 		// No changes, skip update
 		logger.LogDebug(ctx, "No update needed for task %s", task.TaskID)
-	}
-
-	if shouldSettle {
-		settleTaskBillingOnComplete(ctx, adaptor, task, taskResult)
-	}
-	if shouldRefund {
-		RefundTaskQuota(ctx, task, task.FailReason)
 	}
 
 	return nil

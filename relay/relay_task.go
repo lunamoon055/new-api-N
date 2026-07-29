@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
@@ -226,6 +228,13 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		}
 	}
 
+	// Persist the billing owner before contacting the upstream. If the process
+	// exits during submission, the stale SUBMITTING record can be failed and
+	// refunded instead of leaving an untracked reservation.
+	if _, err := ensurePersistentTaskSubmission(c, info, platform); err != nil {
+		return nil, service.TaskErrorWrapperLocal(err, "persist_task_submission_failed", http.StatusInternalServerError)
+	}
+
 	// 8. 构建请求体
 	requestBody, err := adaptor.BuildRequestBody(c, info)
 	if err != nil {
@@ -274,6 +283,59 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		Platform:       platform,
 		Quota:          finalQuota,
 	}, nil
+}
+
+func ensurePersistentTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo, platform constant.TaskPlatform) (*model.Task, error) {
+	if info == nil || info.TaskRelayInfo == nil {
+		return nil, fmt.Errorf("task relay info is unavailable")
+	}
+	if info.PersistentTaskID > 0 {
+		task, err := model.GetTaskByID(info.PersistentTaskID)
+		if err != nil {
+			return nil, fmt.Errorf("load persistent task submission: %w", err)
+		}
+		if task.TaskID != info.PublicTaskID || task.UserId != info.UserId {
+			return nil, fmt.Errorf("persistent task submission identity mismatch")
+		}
+		return task, nil
+	}
+
+	task := model.InitTask(platform, info)
+	if request, err := relaycommon.GetTaskRequest(c); err == nil {
+		task.Properties.Input = request.Prompt
+	}
+	task.PrivateData.BillingSource = info.BillingSource
+	task.PrivateData.SubscriptionId = info.SubscriptionId
+	task.PrivateData.TokenId = info.TokenId
+	task.PrivateData.BillingContext = taskBillingContext(info)
+	task.BillingTargetQuota = info.PriceData.Quota
+	if info.Billing != nil {
+		task.Quota = info.Billing.GetPreConsumedQuota()
+	}
+	task.BillingStatus = model.TaskBillingStatusSubmitting
+	task.Action = info.Action
+	if err := task.Insert(); err != nil {
+		return nil, err
+	}
+	info.PersistentTaskID = task.ID
+	return task, nil
+}
+
+func taskBillingContext(info *relaycommon.RelayInfo) *model.TaskBillingContext {
+	return &model.TaskBillingContext{
+		ModelPrice:         info.PriceData.ModelPrice,
+		GroupRatio:         info.PriceData.GroupRatioInfo.GroupRatio,
+		UserGroup:          info.UserGroup,
+		UsingGroup:         info.UsingGroup,
+		GroupSpecialRatio:  info.PriceData.GroupRatioInfo.GroupSpecialRatio,
+		HasSpecialRatio:    info.PriceData.GroupRatioInfo.HasSpecialRatio,
+		ModelRatio:         info.PriceData.ModelRatio,
+		OtherRatios:        info.PriceData.OtherRatios,
+		VideoBillingMode:   info.PriceData.VideoBillingMode,
+		AppliedOtherRatios: info.PriceData.AppliedOtherRatios,
+		OriginModelName:    info.OriginModelName,
+		PerCallBilling:     common.StringsContains(constant.TaskPricePatches, info.OriginModelName) || info.PriceData.UsePrice,
+	}
 }
 
 // recalcQuotaFromRatios 根据 adjustedRatios 重新计算 quota。
@@ -444,6 +506,13 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 // 仅当渠道类型为 Gemini 或 Vertex 时触发；其他渠道或出错时返回 nil。
 // 当非 OpenAI Video API 时，还会构建自定义格式的响应体。
 func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
+	if task == nil ||
+		task.Status == model.TaskStatusSuccess ||
+		task.Status == model.TaskStatusFailure {
+		// Terminal task state is immutable. Re-querying an inconsistent
+		// upstream must never reopen billing or flip SETTLED/REFUNDED.
+		return nil
+	}
 	channelModel, err := model.GetChannelById(task.ChannelId, true)
 	if err != nil {
 		return nil
@@ -489,6 +558,15 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	if ti.Progress != "" {
 		task.Progress = ti.Progress
 	}
+	if task.Status == model.TaskStatusFailure && ti.Reason != "" {
+		task.FailReason = ti.Reason
+	}
+	if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {
+		task.Progress = taskcommon.ProgressComplete
+		if task.FinishTime == 0 {
+			task.FinishTime = common.GetTimestamp()
+		}
+	}
 	if strings.HasPrefix(ti.Url, "data:") {
 		// data: URI — kept in Data, not ResultURL
 	} else if ti.Url != "" {
@@ -498,8 +576,20 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 	}
 
-	if !snap.Equal(task.Snapshot()) {
-		_, _ = task.UpdateWithStatus(snap.Status)
+	isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
+	if isDone && snap.Status != task.Status {
+		reason := service.PrepareTaskFinalBilling(adaptor, task, ti)
+		if won, updateErr := task.UpdateWithSnapshot(snap); updateErr == nil && won {
+			if _, billingErr := service.ApplyPendingTaskBilling(context.Background(), task, reason); billingErr != nil {
+				logger.LogError(context.Background(), fmt.Sprintf(
+					"realtime task billing failed for task %s: %s",
+					task.TaskID,
+					billingErr.Error(),
+				))
+			}
+		}
+	} else if !snap.Equal(task.Snapshot()) {
+		_, _ = task.UpdateWithSnapshot(snap)
 	}
 
 	// OpenAI Video API 由调用者的 ConvertToOpenAIVideo 分支处理

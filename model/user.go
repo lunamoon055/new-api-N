@@ -53,6 +53,16 @@ type User struct {
 	StripeCustomer   string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
 	CreatedAt        int64          `json:"created_at" gorm:"autoCreateTime;column:created_at"`
 	LastLoginAt      int64          `json:"last_login_at" gorm:"default:0;column:last_login_at"`
+	SessionVersion   int64          `json:"-" gorm:"not null;default:1;column:session_version"`
+}
+
+type UserAuthState struct {
+	Id             int
+	Username       string
+	Role           int
+	Status         int
+	Group          string
+	SessionVersion int64
 }
 
 func (user *User) ToBaseUser() *UserBase {
@@ -306,6 +316,48 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 	return &user, err
 }
 
+func GetUserAuthState(id int) (*UserAuthState, error) {
+	if id == 0 {
+		return nil, errors.New("id 为空！")
+	}
+	var state UserAuthState
+	err := DB.Model(&User{}).
+		Select("id", "username", "role", "status", "group", "session_version").
+		Where("id = ?", id).
+		First(&state).Error
+	if err != nil {
+		return nil, err
+	}
+	return &state, nil
+}
+
+func BumpUserSessionVersion(tx *gorm.DB, userId int) error {
+	if userId == 0 {
+		return errors.New("id 为空！")
+	}
+	if tx == nil {
+		tx = DB
+	}
+	result := tx.Model(&User{}).
+		Where("id = ?", userId).
+		UpdateColumn(
+			"session_version",
+			gorm.Expr(
+				"CASE WHEN session_version IS NULL OR session_version < ? THEN ? ELSE session_version + ? END",
+				1,
+				2,
+				1,
+			),
+		)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 func GetUserIdByAffCode(affCode string) (int, error) {
 	if affCode == "" {
 		return 0, errors.New("affCode 为空！")
@@ -497,6 +549,9 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 func (user *User) Update(updatePassword bool) error {
 	var err error
 	userId := user.Id
+	if userId == 0 {
+		return errors.New("id 为空！")
+	}
 	if updatePassword {
 		user.Password, err = common.Password2Hash(user.Password)
 		if err != nil {
@@ -504,8 +559,27 @@ func (user *User) Update(updatePassword bool) error {
 		}
 	}
 	newUser := *user
-	DB.First(user, userId)
-	if err = DB.Model(user).Updates(newUser).Error; err != nil {
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		var current User
+		if err := tx.Select("id", "role", "status").First(&current, userId).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&User{}).
+			Where("id = ?", userId).
+			Omit("session_version").
+			Updates(newUser).Error; err != nil {
+			return err
+		}
+
+		roleChanged := newUser.Role != 0 && newUser.Role != current.Role
+		statusChanged := newUser.Status != 0 && newUser.Status != current.Status
+		if updatePassword || roleChanged || statusChanged {
+			return BumpUserSessionVersion(tx, userId)
+		}
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	if err = DB.First(user, userId).Error; err != nil {
@@ -536,9 +610,30 @@ func (user *User) Edit(updatePassword bool) error {
 	if updatePassword {
 		updates["password"] = newUser.Password
 	}
+	if newUser.Role != 0 {
+		updates["role"] = newUser.Role
+	}
+	if newUser.Status != 0 {
+		updates["status"] = newUser.Status
+	}
 
-	DB.First(user, userId)
-	if err = DB.Model(user).Updates(updates).Error; err != nil {
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		var current User
+		if err := tx.Select("id", "role", "status").First(&current, userId).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&User{}).Where("id = ?", userId).Updates(updates).Error; err != nil {
+			return err
+		}
+
+		roleChanged := newUser.Role != 0 && newUser.Role != current.Role
+		statusChanged := newUser.Status != 0 && newUser.Status != current.Status
+		if updatePassword || roleChanged || statusChanged {
+			return BumpUserSessionVersion(tx, userId)
+		}
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	if err = DB.First(user, userId).Error; err != nil {
@@ -724,8 +819,24 @@ func ResetUserPasswordByEmail(email string, password string) error {
 	if err != nil {
 		return err
 	}
-	err = DB.Model(&User{}).Where("email = ?", email).Update("password", hashedPassword).Error
-	return err
+	result := DB.Model(&User{}).
+		Where("email = ?", email).
+		Updates(map[string]interface{}{
+			"password": hashedPassword,
+			"session_version": gorm.Expr(
+				"CASE WHEN session_version IS NULL OR session_version < ? THEN ? ELSE session_version + ? END",
+				1,
+				2,
+				1,
+			),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func IsAdmin(userId int) bool {
@@ -895,17 +1006,13 @@ func IncreaseUserQuota(id int, quota int, db bool) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
-	gopool.Go(func() {
-		err := cacheIncrUserQuota(id, int64(quota))
-		if err != nil {
-			common.SysLog("failed to increase user quota: " + err.Error())
-		}
-	})
 	if !db && common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeUserQuota, id, quota)
+		addQuotaBatchRecord(BatchUpdateTypeUserQuota, id, quota, func() error {
+			return cacheIncrUserQuota(id, int64(quota))
+		})
 		return nil
 	}
-	return increaseUserQuota(id, quota)
+	return IncreaseUserQuotaDirect(id, quota)
 }
 
 func increaseUserQuota(id int, quota int) (err error) {
@@ -920,17 +1027,13 @@ func DecreaseUserQuota(id int, quota int, db bool) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
-	gopool.Go(func() {
-		err := cacheDecrUserQuota(id, int64(quota))
-		if err != nil {
-			common.SysLog("failed to decrease user quota: " + err.Error())
-		}
-	})
 	if !db && common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeUserQuota, id, -quota)
+		addQuotaBatchRecord(BatchUpdateTypeUserQuota, id, -quota, func() error {
+			return cacheDecrUserQuota(id, int64(quota))
+		})
 		return nil
 	}
-	return decreaseUserQuota(id, quota)
+	return DecreaseUserQuotaDirect(id, quota)
 }
 
 func decreaseUserQuota(id int, quota int) (err error) {

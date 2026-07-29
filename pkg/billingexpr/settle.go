@@ -1,5 +1,7 @@
 package billingexpr
 
+import "fmt"
+
 // quotaConversion converts raw expression output to quota based on the
 // expression version. This is the central dispatch point for future versions
 // that may use a different conversion formula.
@@ -23,7 +25,10 @@ func ComputeTieredQuotaWithRequest(snap *BillingSnapshot, params TokenParams, re
 	}
 
 	quotaBeforeGroup := quotaConversion(cost, snap)
-	afterGroup := QuotaRound(quotaBeforeGroup * snap.GroupRatio)
+	afterGroup, err := QuotaRoundChecked(quotaBeforeGroup*snap.GroupRatio, snap.QuotaPerUnit)
+	if err != nil {
+		return TieredResult{}, fmt.Errorf("tiered quota validation failed: %w", err)
+	}
 	crossed := trace.MatchedTier != snap.EstimatedTier
 
 	return TieredResult{

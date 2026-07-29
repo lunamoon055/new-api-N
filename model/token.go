@@ -235,6 +235,24 @@ func GetTokenByIds(id int, userId int) (*Token, error) {
 	return &token, err
 }
 
+// GetTokenKeyByIdsUnscoped is used only by delayed billing/cache invalidation.
+// A task may finish after its token was soft-deleted, but the old Redis entry
+// must still be invalidated with the original key.
+func GetTokenKeyByIdsUnscoped(id int, userId int) (string, error) {
+	if id <= 0 || userId <= 0 {
+		return "", gorm.ErrRecordNotFound
+	}
+	var token Token
+	err := DB.Unscoped().
+		Select("key").
+		Where("id = ? AND user_id = ?", id, userId).
+		First(&token).Error
+	if err != nil {
+		return "", err
+	}
+	return token.Key, nil
+}
+
 func GetTokenById(id int) (*Token, error) {
 	if id == 0 {
 		return nil, errors.New("id 为空！")
@@ -376,19 +394,13 @@ func IncreaseTokenQuota(tokenId int, key string, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
-	if common.RedisEnabled {
-		gopool.Go(func() {
-			err := cacheIncrTokenQuota(key, int64(quota))
-			if err != nil {
-				common.SysLog("failed to increase token quota: " + err.Error())
-			}
-		})
-	}
 	if common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeTokenQuota, tokenId, quota)
+		addQuotaBatchRecord(BatchUpdateTypeTokenQuota, tokenId, quota, func() error {
+			return cacheIncrTokenQuota(key, int64(quota))
+		})
 		return nil
 	}
-	return increaseTokenQuota(tokenId, quota)
+	return IncreaseTokenQuotaDirect(tokenId, key, quota)
 }
 
 func increaseTokenQuota(id int, quota int) (err error) {
@@ -406,19 +418,13 @@ func DecreaseTokenQuota(id int, key string, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
-	if common.RedisEnabled {
-		gopool.Go(func() {
-			err := cacheDecrTokenQuota(key, int64(quota))
-			if err != nil {
-				common.SysLog("failed to decrease token quota: " + err.Error())
-			}
-		})
-	}
 	if common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeTokenQuota, id, -quota)
+		addQuotaBatchRecord(BatchUpdateTypeTokenQuota, id, -quota, func() error {
+			return cacheDecrTokenQuota(key, int64(quota))
+		})
 		return nil
 	}
-	return decreaseTokenQuota(id, quota)
+	return DecreaseTokenQuotaDirect(id, key, quota)
 }
 
 func decreaseTokenQuota(id int, quota int) (err error) {

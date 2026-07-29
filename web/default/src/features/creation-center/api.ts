@@ -25,10 +25,8 @@ import {
   parseVideoGenerationResult,
 } from '@/features/media-generation/result-parsers'
 import {
-  DEFAULT_CREATION_VIDEO_OPTIONS,
   composeCreationPrompt,
   getCreationImageRequestOptions,
-  getCreationVideoRequestOptions,
   type CreationImageOptions,
   type CreationImageReferences,
   type CreationVideoReferences,
@@ -43,6 +41,10 @@ import type {
   CreationModel,
   CreationResult,
 } from './types'
+import {
+  buildCreationVideoSubmitRequest,
+  extractPromptVideoURL,
+} from './video-request'
 
 const CREATION_MODEL_CATEGORIES_OPTION_KEY = 'CreationModelCategories'
 const CREATION_MODEL_DESCRIPTIONS_OPTION_KEY = 'CreationModelDescriptions'
@@ -167,22 +169,17 @@ export async function submitCreationTask(params: {
     return parseImageResult(response.data, params.model.id)
   }
 
-  const videoOptions = getCreationVideoRequestOptions(
-    params.videoOptions ?? DEFAULT_CREATION_VIDEO_OPTIONS,
-    params.model,
-    params.videoReferences
-  )
-  const { estimateSeconds: _estimateSeconds, ...videoPayload } = videoOptions
-  const response = await api.post(
-    '/api/creation/video/async-generations',
-    {
-      model: params.model.id,
-      prompt: promptWithAssets,
-      ...videoPayload,
-    },
-    { skipErrorHandler: true } as Record<string, unknown>
-  )
-  return parseVideoResult(response.data, params.model.id)
+  const videoRequest = buildCreationVideoSubmitRequest({
+    ...params,
+    prompt: promptWithAssets,
+    content: buildChatContent(promptWithAssets, params.assets ?? []),
+  })
+  const response = await api.post(videoRequest.endpoint, videoRequest.payload, {
+    skipErrorHandler: true,
+  } as Record<string, unknown>)
+  return videoRequest.transport === 'prompt'
+    ? parsePromptVideoResult(response.data, params.model.id)
+    : parseVideoResult(response.data, params.model.id)
 }
 
 function buildChatContent(prompt: string, assets: CreationAsset[]) {
@@ -255,6 +252,15 @@ function parseChatResult(raw: unknown, model: string): CreationResult {
     status: text ? 'completed' : 'unknown',
     outputText: text,
     raw,
+  }
+}
+
+function parsePromptVideoResult(raw: unknown, model: string): CreationResult {
+  const chatResult = parseChatResult(raw, model)
+  return {
+    ...chatResult,
+    mode: 'video',
+    videoUrl: extractPromptVideoURL(chatResult.outputText),
   }
 }
 

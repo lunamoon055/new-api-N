@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -29,6 +30,15 @@ type LoginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
+
+const (
+	sessionVersionSessionKey = "session_version"
+	pending2FAUserIDKey      = "pending_user_id"
+	pending2FAUsernameKey    = "pending_username"
+	pending2FAVersionKey     = "pending_session_version"
+	pending2FACreatedAtKey   = "pending_created_at"
+	pending2FAMaxAge         = 5 * time.Minute
+)
 
 func Login(c *gin.Context) {
 	if !common.PasswordLoginEnabled {
@@ -67,10 +77,15 @@ func Login(c *gin.Context) {
 
 	// 检查是否启用2FA
 	if model.IsTwoFAEnabled(user.Id) {
-		// 设置pending session，等待2FA验证
+		// Store only a short-lived, version-bound pending identity. Clearing the
+		// old session prevents an existing authenticated cookie from being
+		// carried into a different user's 2FA flow.
 		session := sessions.Default(c)
-		session.Set("pending_username", user.Username)
-		session.Set("pending_user_id", user.Id)
+		session.Clear()
+		session.Set(pending2FAUsernameKey, user.Username)
+		session.Set(pending2FAUserIDKey, user.Id)
+		session.Set(pending2FAVersionKey, user.SessionVersion)
+		session.Set(pending2FACreatedAtKey, time.Now().Unix())
 		err := session.Save()
 		if err != nil {
 			common.ApiErrorI18n(c, i18n.MsgUserSessionSaveFailed)
@@ -92,14 +107,36 @@ func Login(c *gin.Context) {
 
 // setup session & cookies and then return user info
 func setupLogin(user *model.User, c *gin.Context) {
+	state, err := model.GetUserAuthState(user.Id)
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
+		return
+	}
+	if state.Status != common.UserStatusEnabled ||
+		state.SessionVersion < 1 ||
+		strings.TrimSpace(state.Username) == "" ||
+		!common.IsValidateRole(state.Role) {
+		common.ApiErrorI18n(c, i18n.MsgUserUsernameOrPasswordError)
+		return
+	}
+	// Bind the completed login to the security state that was authenticated.
+	// If a password, role, status, or factor changed concurrently, do not issue
+	// a cookie carrying the newer version to an older authentication attempt.
+	if user.SessionVersion < 1 || user.SessionVersion != state.SessionVersion {
+		common.ApiErrorI18n(c, i18n.MsgUserUsernameOrPasswordError)
+		return
+	}
+
 	model.UpdateUserLastLoginAt(user.Id)
 	session := sessions.Default(c)
-	session.Set("id", user.Id)
-	session.Set("username", user.Username)
-	session.Set("role", user.Role)
-	session.Set("status", user.Status)
-	session.Set("group", user.Group)
-	err := session.Save()
+	session.Clear()
+	session.Set("id", state.Id)
+	session.Set("username", state.Username)
+	session.Set("role", state.Role)
+	session.Set("status", state.Status)
+	session.Set("group", state.Group)
+	session.Set(sessionVersionSessionKey, state.SessionVersion)
+	err = session.Save()
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserSessionSaveFailed)
 		return
@@ -108,12 +145,12 @@ func setupLogin(user *model.User, c *gin.Context) {
 		"message": "",
 		"success": true,
 		"data": map[string]any{
-			"id":           user.Id,
-			"username":     user.Username,
+			"id":           state.Id,
+			"username":     state.Username,
 			"display_name": user.DisplayName,
-			"role":         user.Role,
-			"status":       user.Status,
-			"group":        user.Group,
+			"role":         state.Role,
+			"status":       state.Status,
+			"group":        state.Group,
 		},
 	})
 }
@@ -587,9 +624,16 @@ func UpdateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if strings.TrimSpace(originUser.Group) != strings.TrimSpace(updatedUser.Group) {
+	authorizationChanged :=
+		strings.TrimSpace(originUser.Group) != strings.TrimSpace(updatedUser.Group) ||
+			originUser.Status != updatedUser.Status ||
+			originUser.Role != updatedUser.Role
+	if authorizationChanged {
+		if err := model.InvalidateUserCache(updatedUser.Id); err != nil {
+			common.SysLog(fmt.Sprintf("invalidate user cache failed after authorization update for user %d: %s", updatedUser.Id, err.Error()))
+		}
 		if err := model.InvalidateUserTokensCache(updatedUser.Id); err != nil {
-			common.SysLog(fmt.Sprintf("invalidate user tokens cache failed after group update for user %d: %s", updatedUser.Id, err.Error()))
+			common.SysLog(fmt.Sprintf("invalidate user tokens cache failed after authorization update for user %d: %s", updatedUser.Id, err.Error()))
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -1027,10 +1071,13 @@ func EmailBind(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserVerificationCodeError)
 		return
 	}
-	session := sessions.Default(c)
-	id := session.Get("id")
+	id := c.GetInt("id")
+	if id == 0 {
+		common.ApiErrorI18n(c, i18n.MsgAuthNotLoggedIn)
+		return
+	}
 	user := model.User{
-		Id: id.(int),
+		Id: id,
 	}
 	err := user.FillUserById()
 	if err != nil {

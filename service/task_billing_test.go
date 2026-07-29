@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"testing"
@@ -40,6 +41,7 @@ func TestMain(m *testing.M) {
 
 	if err := db.AutoMigrate(
 		&model.Task{},
+		&model.TaskBillingEvent{},
 		&model.User{},
 		&model.Token{},
 		&model.Log{},
@@ -61,6 +63,7 @@ func truncate(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
 		model.DB.Exec("DELETE FROM tasks")
+		model.DB.Exec("DELETE FROM task_billing_events")
 		model.DB.Exec("DELETE FROM users")
 		model.DB.Exec("DELETE FROM tokens")
 		model.DB.Exec("DELETE FROM logs")
@@ -72,7 +75,13 @@ func truncate(t *testing.T) {
 
 func seedUser(t *testing.T, id int, quota int) {
 	t.Helper()
-	user := &model.User{Id: id, Username: "test_user", Quota: quota, Status: common.UserStatusEnabled}
+	user := &model.User{
+		Id:       id,
+		Username: fmt.Sprintf("test_user_%d", id),
+		AffCode:  fmt.Sprintf("aff_%d", id),
+		Quota:    quota,
+		Status:   common.UserStatusEnabled,
+	}
 	require.NoError(t, model.DB.Create(user).Error)
 }
 

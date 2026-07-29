@@ -268,6 +268,7 @@ func migrateDB() error {
 		&TopUp{},
 		&QuotaData{},
 		&Task{},
+		&TaskBillingEvent{},
 		&Model{},
 		&Vendor{},
 		&PrefillGroup{},
@@ -283,6 +284,9 @@ func migrateDB() error {
 		&PerfMetric{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := backfillUserSessionVersions(); err != nil {
 		return err
 	}
 	if common.UsingSQLite {
@@ -317,6 +321,7 @@ func migrateDBFast() error {
 		{&TopUp{}, "TopUp"},
 		{&QuotaData{}, "QuotaData"},
 		{&Task{}, "Task"},
+		{&TaskBillingEvent{}, "TaskBillingEvent"},
 		{&Model{}, "Model"},
 		{&Vendor{}, "Vendor"},
 		{&PrefillGroup{}, "PrefillGroup"},
@@ -354,6 +359,9 @@ func migrateDBFast() error {
 			return err
 		}
 	}
+	if err := backfillUserSessionVersions(); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -365,6 +373,12 @@ func migrateDBFast() error {
 	}
 	common.SysLog("database migrated")
 	return nil
+}
+
+func backfillUserSessionVersions() error {
+	return DB.Model(&User{}).
+		Where("session_version IS NULL OR session_version < ?", 1).
+		Update("session_version", 1).Error
 }
 
 func migrateLOGDB() error {

@@ -73,6 +73,7 @@ func VideoProxy(c *gin.Context) {
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy client")
 		return
 	}
+	client = newVideoProxyHTTPClient(client)
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
@@ -93,11 +94,13 @@ func VideoProxy(c *gin.Context) {
 		}
 		videoURL, err = getGeminiVideoURL(channel, task, apiKey)
 		if err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to resolve Gemini video URL for task %s: %s", taskID, err.Error()))
+			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to resolve Gemini video URL for task %s", taskID))
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to resolve Gemini video URL")
 			return
 		}
-		req.Header.Set("x-goog-api-key", apiKey)
+		if isSameURLOrigin(videoURL, getGeminiBaseURL(channel)) {
+			req.Header.Set("x-goog-api-key", apiKey)
+		}
 	case constant.ChannelTypeVertexAi:
 		videoURL, err = getVertexVideoURL(channel, task)
 		if err != nil {
@@ -141,7 +144,7 @@ func VideoProxy(c *gin.Context) {
 	}
 
 	fetchSetting := system_setting.GetFetchSetting()
-	if err := common.ValidateURLWithFetchSetting(videoURL, fetchSetting.EnableSSRFProtection, fetchSetting.AllowPrivateIp, fetchSetting.DomainFilterMode, fetchSetting.IpFilterMode, fetchSetting.DomainList, fetchSetting.IpList, fetchSetting.AllowedPorts, fetchSetting.ApplyIPFilterForDomain); err != nil {
+	if err := validateVideoProxyURL(videoURL, fetchSetting); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Video URL blocked for task %s: %v", taskID, err))
 		videoProxyError(c, http.StatusForbidden, "server_error", fmt.Sprintf("request blocked: %v", err))
 		return
@@ -149,33 +152,28 @@ func VideoProxy(c *gin.Context) {
 
 	req.URL, err = url.Parse(videoURL)
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to parse URL %s: %s", videoURL, err.Error()))
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to parse video URL for task %s", taskID))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy request")
 		return
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to fetch video from %s: %s", videoURL, err.Error()))
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to fetch video for task %s", taskID))
 		videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to fetch video content")
 		return
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Upstream returned status %d for %s", resp.StatusCode, videoURL))
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Upstream returned status %d for task %s", resp.StatusCode, taskID))
 		videoProxyError(c, http.StatusBadGateway, "server_error",
 			fmt.Sprintf("Upstream service returned status %d", resp.StatusCode))
 		return
 	}
 
-	for key, values := range resp.Header {
-		for _, value := range values {
-			c.Writer.Header().Add(key, value)
-		}
-	}
-
-	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	copyVideoProxyResponseHeaders(c.Writer.Header(), resp.Header)
+	applyVideoProxyPrivateCacheHeaders(c.Writer.Header())
 	applyVideoProxyDownloadHeaders(c.Writer.Header(), taskID)
 	c.Writer.WriteHeader(resp.StatusCode)
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
@@ -244,7 +242,7 @@ func writeVideoDataURL(c *gin.Context, taskID string, dataURL string) error {
 	}
 
 	c.Writer.Header().Set("Content-Type", mimeType)
-	c.Writer.Header().Set("Cache-Control", "public, max-age=86400")
+	applyVideoProxyPrivateCacheHeaders(c.Writer.Header())
 	applyVideoProxyDownloadHeaders(c.Writer.Header(), taskID)
 	c.Writer.WriteHeader(http.StatusOK)
 	_, err = c.Writer.Write(videoBytes)
@@ -256,6 +254,85 @@ func applyVideoProxyDownloadHeaders(headers http.Header, taskID string) {
 	headers.Set("Content-Type", mimeType)
 	headers.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, buildVideoProxyFilename(taskID, mimeType)))
 	headers.Set("X-Content-Type-Options", "nosniff")
+}
+
+func applyVideoProxyPrivateCacheHeaders(headers http.Header) {
+	headers.Set("Cache-Control", "private, no-store, max-age=0")
+	headers.Set("Pragma", "no-cache")
+	headers.Set("Expires", "0")
+	headers.Set("Vary", "Authorization, Cookie")
+}
+
+var videoProxyResponseHeaderAllowlist = map[string]struct{}{
+	"Accept-Ranges":  {},
+	"Content-Length": {},
+	"Content-Range":  {},
+	"Content-Type":   {},
+	"Etag":           {},
+	"Last-Modified":  {},
+}
+
+func copyVideoProxyResponseHeaders(dst http.Header, src http.Header) {
+	for key, values := range src {
+		canonicalKey := http.CanonicalHeaderKey(key)
+		if _, ok := videoProxyResponseHeaderAllowlist[canonicalKey]; !ok {
+			continue
+		}
+		dst.Del(canonicalKey)
+		for _, value := range values {
+			dst.Add(canonicalKey, value)
+		}
+	}
+}
+
+func newVideoProxyHTTPClient(base *http.Client) *http.Client {
+	if base == nil {
+		base = http.DefaultClient
+	}
+	client := *base
+	baseCheckRedirect := base.CheckRedirect
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		fetchSetting := system_setting.GetFetchSetting()
+		if err := validateVideoProxyURL(req.URL.String(), fetchSetting); err != nil {
+			return fmt.Errorf("redirect blocked: %w", err)
+		}
+		if len(via) > 0 && !isSameURLOrigin(req.URL.String(), via[len(via)-1].URL.String()) {
+			for _, header := range []string{
+				"Authorization",
+				"Cookie",
+				"Proxy-Authorization",
+				"X-Api-Key",
+				"X-Goog-Api-Key",
+			} {
+				req.Header.Del(header)
+			}
+		}
+		if baseCheckRedirect != nil {
+			return baseCheckRedirect(req, via)
+		}
+		return nil
+	}
+	return &client
+}
+
+func validateVideoProxyURL(videoURL string, fetchSetting *system_setting.FetchSetting) error {
+	if fetchSetting == nil {
+		return fmt.Errorf("fetch setting is not available")
+	}
+	return common.ValidateURLWithFetchSetting(
+		videoURL,
+		fetchSetting.EnableSSRFProtection,
+		fetchSetting.AllowPrivateIp,
+		fetchSetting.DomainFilterMode,
+		fetchSetting.IpFilterMode,
+		fetchSetting.DomainList,
+		fetchSetting.IpList,
+		fetchSetting.AllowedPorts,
+		fetchSetting.ApplyIPFilterForDomain,
+	)
 }
 
 func normalizeVideoProxyContentType(contentType string) string {

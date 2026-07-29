@@ -77,10 +77,19 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 
 // resolveTokenKey 通过 TokenId 运行时获取令牌 Key（用于 Redis 缓存操作）。
 // 如果令牌已被删除或查询失败，返回空字符串。
-func resolveTokenKey(ctx context.Context, tokenId int, taskID string) string {
-	token, err := model.GetTokenById(tokenId)
+func resolveTokenKey(ctx context.Context, tokenId, userId int, taskID string) string {
+	token, err := model.GetTokenByIds(tokenId, userId)
 	if err != nil {
-		logger.LogWarn(ctx, fmt.Sprintf("获取令牌 key 失败 (tokenId=%d, task=%s): %s", tokenId, taskID, err.Error()))
+		key, unscopedErr := model.GetTokenKeyByIdsUnscoped(tokenId, userId)
+		if unscopedErr == nil {
+			return key
+		}
+		logger.LogWarn(ctx, fmt.Sprintf(
+			"获取令牌 key 失败 (tokenId=%d, task=%s): %s",
+			tokenId,
+			taskID,
+			err.Error(),
+		))
 		return ""
 	}
 	return token.Key
@@ -108,7 +117,7 @@ func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
 	if task.PrivateData.TokenId <= 0 || delta == 0 {
 		return
 	}
-	tokenKey := resolveTokenKey(ctx, task.PrivateData.TokenId, task.TaskID)
+	tokenKey := resolveTokenKey(ctx, task.PrivateData.TokenId, task.UserId, task.TaskID)
 	if tokenKey == "" {
 		return
 	}
@@ -121,6 +130,28 @@ func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
 	if err != nil {
 		logger.LogWarn(ctx, fmt.Sprintf("调整令牌额度失败 (delta=%d, task=%s): %s", delta, task.TaskID, err.Error()))
 	}
+}
+
+func taskAdjustQuota(ctx context.Context, task *model.Task, delta int) error {
+	if taskIsSubscription(task) {
+		if err := taskAdjustFunding(task, delta); err != nil {
+			return err
+		}
+		taskAdjustTokenQuota(ctx, task, delta)
+		return nil
+	}
+
+	tokenKey := ""
+	if task.PrivateData.TokenId > 0 {
+		tokenKey = resolveTokenKey(ctx, task.PrivateData.TokenId, task.UserId, task.TaskID)
+	}
+	return model.AdjustWalletQuota(
+		task.UserId,
+		task.PrivateData.TokenId,
+		tokenKey,
+		delta,
+		tokenKey != "",
+	)
 }
 
 // taskBillingOther 从 task 的 BillingContext 构建日志 Other 字段。
@@ -200,16 +231,13 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 		return
 	}
 
-	// 1. 退还资金来源（钱包或订阅）
-	if err := taskAdjustFunding(task, -quota); err != nil {
+	// 1. 退还资金来源与令牌额度
+	if err := taskAdjustQuota(ctx, task, -quota); err != nil {
 		logger.LogWarn(ctx, fmt.Sprintf("退还资金来源失败 task %s: %s", task.TaskID, err.Error()))
 		return
 	}
 
-	// 2. 退还令牌额度
-	taskAdjustTokenQuota(ctx, task, -quota)
-
-	// 3. 记录日志
+	// 2. 记录日志
 	other := taskBillingOther(task)
 	other["task_id"] = task.TaskID
 	other["reason"] = reason
@@ -250,14 +278,11 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		reason,
 	))
 
-	// 调整资金来源
-	if err := taskAdjustFunding(task, quotaDelta); err != nil {
+	// 调整资金来源与令牌额度
+	if err := taskAdjustQuota(ctx, task, quotaDelta); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("差额结算资金调整失败 task %s: %s", task.TaskID, err.Error()))
 		return
 	}
-
-	// 调整令牌额度
-	taskAdjustTokenQuota(ctx, task, quotaDelta)
 
 	task.Quota = actualQuota
 
@@ -293,8 +318,16 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 // 当任务成功且返回了 totalTokens 时，根据模型倍率和分组倍率重新计算实际扣费额度，
 // 与预扣费的差额进行补扣或退还。支持钱包和订阅计费来源。
 func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTokens int) {
-	if totalTokens <= 0 {
+	actualQuota, reason, ok := CalculateTaskQuotaByTokens(task, totalTokens)
+	if !ok {
 		return
+	}
+	RecalculateTaskQuota(ctx, task, actualQuota, reason)
+}
+
+func CalculateTaskQuotaByTokens(task *model.Task, totalTokens int) (int, string, bool) {
+	if totalTokens <= 0 {
+		return 0, "", false
 	}
 
 	modelName := taskModelName(task)
@@ -303,7 +336,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 	modelRatio, hasRatioSetting, _ := ratio_setting.GetModelRatio(modelName)
 	// 只有配置了倍率(非固定价格)时才按 token 重新计费
 	if !hasRatioSetting || modelRatio <= 0 {
-		return
+		return 0, "", false
 	}
 
 	finalGroupRatio := taskGroupRatioForRecalculation(task)
@@ -322,5 +355,5 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 	actualQuota := int(float64(totalTokens) * modelRatio * finalGroupRatio * otherMultiplier)
 
 	reason := fmt.Sprintf("token重算：tokens=%d, modelRatio=%.2f, groupRatio=%.2f, otherMultiplier=%.4f", totalTokens, modelRatio, finalGroupRatio, otherMultiplier)
-	RecalculateTaskQuota(ctx, task, actualQuota, reason)
+	return actualQuota, reason, actualQuota > 0
 }

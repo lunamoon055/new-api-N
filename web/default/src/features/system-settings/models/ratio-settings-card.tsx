@@ -416,17 +416,30 @@ export function RatioSettingsCard({
       }
 
       const apiKeyMap: Record<string, string> = {
-        BillingMode: 'billing_setting.billing_mode',
-        BillingExpr: 'billing_setting.billing_expr',
         VideoBillingMode: 'billing_setting.video_billing_mode',
         VideoResolutionPrices: 'billing_setting.video_resolution_prices',
       }
 
+      const billingChanged =
+        normalized.BillingMode !==
+          modelNormalizedDefaults.current.BillingMode ||
+        normalized.BillingExpr !== modelNormalizedDefaults.current.BillingExpr
       const updates = (
         Object.keys(normalized) as Array<keyof ModelFormValues>
-      ).filter(
-        (key) => normalized[key] !== modelNormalizedDefaults.current[key]
-      )
+      ).filter((key) => {
+        if (key === 'BillingMode' || key === 'BillingExpr') return false
+        return normalized[key] !== modelNormalizedDefaults.current[key]
+      })
+
+      if (billingChanged) {
+        await updateOption.mutateAsync({
+          key: 'billing_setting.billing_config',
+          value: JSON.stringify({
+            billing_mode: JSON.parse(normalized.BillingMode),
+            billing_expr: JSON.parse(normalized.BillingExpr),
+          }),
+        })
+      }
 
       for (const key of updates) {
         const apiKey = apiKeyMap[key as string] || (key as string)

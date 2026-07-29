@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -501,7 +502,9 @@ func RelayTask(c *gin.Context) {
 	var result *relay.TaskSubmitResult
 	var taskErr *dto.TaskError
 	defer func() {
-		if taskErr != nil && relayInfo.Billing != nil {
+		// Once a durable task owns the reservation, its persistent billing
+		// state (including a retryable refund) is the only refund path.
+		if taskErr != nil && relayInfo.Billing != nil && relayInfo.PersistentTaskID == 0 {
 			relayInfo.Billing.Refund(c)
 		}
 	}()
@@ -569,52 +572,116 @@ func RelayTask(c *gin.Context) {
 		logger.LogInfo(c, retryLogStr)
 	}
 
-	// ── 成功：结算 + 日志 + 插入任务 ──
+	// ── 成功：完成预先持久化的 SUBMITTING 记录，再执行提交结算 ──
 	if taskErr == nil {
-		if settleErr := service.SettleBilling(c, relayInfo, result.Quota); settleErr != nil {
-			common.SysError("settle task billing error: " + settleErr.Error())
-		}
-		service.LogTaskConsumption(c, relayInfo)
-
-		task := model.InitTask(result.Platform, relayInfo)
-		attachTaskPromptFromRequest(c, task)
-		task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
-		task.PrivateData.BillingSource = relayInfo.BillingSource
-		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
-		task.PrivateData.TokenId = relayInfo.TokenId
-		task.PrivateData.BillingContext = &model.TaskBillingContext{
-			ModelPrice:         relayInfo.PriceData.ModelPrice,
-			GroupRatio:         relayInfo.PriceData.GroupRatioInfo.GroupRatio,
-			UserGroup:          relayInfo.UserGroup,
-			UsingGroup:         relayInfo.UsingGroup,
-			GroupSpecialRatio:  relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio,
-			HasSpecialRatio:    relayInfo.PriceData.GroupRatioInfo.HasSpecialRatio,
-			ModelRatio:         relayInfo.PriceData.ModelRatio,
-			OtherRatios:        relayInfo.PriceData.OtherRatios,
-			VideoBillingMode:   relayInfo.PriceData.VideoBillingMode,
-			AppliedOtherRatios: relayInfo.PriceData.AppliedOtherRatios,
-			OriginModelName:    relayInfo.OriginModelName,
-			PerCallBilling:     common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
-		}
-		task.Quota = result.Quota
-		task.Data = result.TaskData
-		task.Action = relayInfo.Action
-		if insertErr := task.Insert(); insertErr != nil {
-			common.SysError("insert task error: " + insertErr.Error())
+		if completeErr := completePersistentTaskSubmission(c, relayInfo, result); completeErr != nil {
+			common.SysError("complete task submission error: " + completeErr.Error())
+			taskErr = service.TaskErrorWrapperLocal(completeErr, "complete_task_submission_failed", http.StatusInternalServerError)
+		} else {
+			service.LogTaskConsumption(c, relayInfo)
 		}
 	}
 
 	if taskErr != nil {
+		if relayInfo.PersistentTaskID > 0 {
+			if refundErr := failPersistentTaskSubmission(c, relayInfo.PersistentTaskID, taskErr.Message); refundErr != nil {
+				common.SysError("persist failed task refund error: " + refundErr.Error())
+			}
+		}
 		respondTaskError(c, taskErr)
 	}
 }
 
-func attachTaskPromptFromRequest(c *gin.Context, task *model.Task) {
-	taskReq, err := relaycommon.GetTaskRequest(c)
+func completePersistentTaskSubmission(c *gin.Context, relayInfo *relaycommon.RelayInfo, result *relay.TaskSubmitResult) error {
+	if relayInfo == nil || result == nil || relayInfo.PersistentTaskID <= 0 {
+		return errors.New("persistent task submission is unavailable")
+	}
+	task, err := model.GetTaskByID(relayInfo.PersistentTaskID)
 	if err != nil {
+		return err
+	}
+	snapshot := task.Snapshot()
+	if task.BillingStatus != model.TaskBillingStatusSubmitting {
+		return fmt.Errorf("task %s is no longer submitting", task.TaskID)
+	}
+
+	task.Platform = result.Platform
+	task.ChannelId = relayInfo.ChannelId
+	task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
+	task.PrivateData.BillingSource = relayInfo.BillingSource
+	task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
+	task.PrivateData.TokenId = relayInfo.TokenId
+	task.PrivateData.BillingContext = &model.TaskBillingContext{
+		ModelPrice:         relayInfo.PriceData.ModelPrice,
+		GroupRatio:         relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+		UserGroup:          relayInfo.UserGroup,
+		UsingGroup:         relayInfo.UsingGroup,
+		GroupSpecialRatio:  relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio,
+		HasSpecialRatio:    relayInfo.PriceData.GroupRatioInfo.HasSpecialRatio,
+		ModelRatio:         relayInfo.PriceData.ModelRatio,
+		OtherRatios:        relayInfo.PriceData.OtherRatios,
+		VideoBillingMode:   relayInfo.PriceData.VideoBillingMode,
+		AppliedOtherRatios: relayInfo.PriceData.AppliedOtherRatios,
+		OriginModelName:    relayInfo.OriginModelName,
+		PerCallBilling:     common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+	}
+	task.BillingTargetQuota = result.Quota
+	if relayInfo.Billing != nil {
+		task.BillingStatus = model.TaskBillingStatusSubmitPending
+	} else {
+		task.Quota = result.Quota
+		task.BillingStatus = model.TaskBillingStatusSettled
+	}
+	task.Data = result.TaskData
+	task.Action = relayInfo.Action
+
+	won, err := task.UpdateWithSnapshot(snapshot)
+	if err != nil {
+		return err
+	}
+	if !won {
+		return fmt.Errorf("task %s submission state changed concurrently", task.TaskID)
+	}
+	if task.BillingStatus == model.TaskBillingStatusSubmitPending {
+		if _, settleErr := service.ApplyPendingTaskBilling(c, task, "提交后计费调整"); settleErr != nil {
+			// SUBMIT_PENDING is durable and will be retried by the recovery loop.
+			common.SysError("settle task billing error: " + settleErr.Error())
+		}
+	}
+	return nil
+}
+
+func failPersistentTaskSubmission(ctx context.Context, taskID int64, reason string) error {
+	task, err := model.GetTaskByID(taskID)
+	if err != nil {
+		return err
+	}
+	if task.BillingStatus != model.TaskBillingStatusSubmitting {
+		return nil
+	}
+	snapshot := task.Snapshot()
+	task.Status = model.TaskStatusFailure
+	task.Progress = "100%"
+	task.FailReason = reason
+	task.FinishTime = time.Now().Unix()
+	task.BillingStatus = model.TaskBillingStatusFinalizePending
+	task.BillingTargetQuota = 0
+	won, err := task.UpdateWithSnapshot(snapshot)
+	if err != nil || !won {
+		return err
+	}
+	_, err = service.ApplyPendingTaskBilling(ctx, task, reason)
+	return err
+}
+
+func attachTaskPromptFromRequest(c *gin.Context, task *model.Task) {
+	if task == nil {
 		return
 	}
-	task.Properties.Input = taskReq.Prompt
+	taskReq, err := relaycommon.GetTaskRequest(c)
+	if err == nil {
+		task.Properties.Input = taskReq.Prompt
+	}
 }
 
 // respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写）

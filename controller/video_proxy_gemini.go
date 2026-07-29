@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -17,13 +18,10 @@ func getGeminiVideoURL(channel *model.Channel, task *model.Task, apiKey string) 
 		return "", fmt.Errorf("invalid channel or task")
 	}
 
-	if url := extractGeminiVideoURLFromTaskData(task); url != "" {
-		return ensureAPIKey(url, apiKey), nil
-	}
+	baseURL := getGeminiBaseURL(channel)
 
-	baseURL := constant.ChannelBaseURLs[channel.Type]
-	if channel.GetBaseURL() != "" {
-		baseURL = channel.GetBaseURL()
+	if videoURL := extractGeminiVideoURLFromTaskData(task); videoURL != "" {
+		return ensureAPIKeyForOrigin(videoURL, baseURL, apiKey), nil
 	}
 
 	adaptor := relay.GetTaskAdaptor(constant.TaskPlatform(strconv.Itoa(channel.Type)))
@@ -52,11 +50,11 @@ func getGeminiVideoURL(channel *model.Channel, task *model.Task, apiKey string) 
 
 	taskInfo, parseErr := adaptor.ParseTaskResult(body)
 	if parseErr == nil && taskInfo != nil && taskInfo.RemoteUrl != "" {
-		return ensureAPIKey(taskInfo.RemoteUrl, apiKey), nil
+		return ensureAPIKeyForOrigin(taskInfo.RemoteUrl, baseURL, apiKey), nil
 	}
 
-	if url := extractGeminiVideoURLFromPayload(body); url != "" {
-		return ensureAPIKey(url, apiKey), nil
+	if videoURL := extractGeminiVideoURLFromPayload(body); videoURL != "" {
+		return ensureAPIKeyForOrigin(videoURL, baseURL, apiKey), nil
 	}
 
 	if parseErr != nil {
@@ -280,15 +278,58 @@ func buildVideoDataURL(mimeType string, encoding string, base64Data string) stri
 	return "data:" + mime + ";base64," + base64Data
 }
 
-func ensureAPIKey(uri, key string) string {
-	if key == "" || uri == "" {
+func getGeminiBaseURL(channel *model.Channel) string {
+	if channel == nil {
+		return ""
+	}
+	baseURL := constant.ChannelBaseURLs[channel.Type]
+	if configuredBaseURL := strings.TrimSpace(channel.GetBaseURL()); configuredBaseURL != "" {
+		baseURL = configuredBaseURL
+	}
+	return baseURL
+}
+
+func ensureAPIKeyForOrigin(uri, credentialOrigin, key string) string {
+	if key == "" || uri == "" || !isSameURLOrigin(uri, credentialOrigin) {
 		return uri
 	}
-	if strings.Contains(uri, "key=") {
+	parsedURL, err := url.Parse(uri)
+	if err != nil || parsedURL == nil {
 		return uri
 	}
-	if strings.Contains(uri, "?") {
-		return fmt.Sprintf("%s&key=%s", uri, key)
+	query := parsedURL.Query()
+	if query.Get("key") != "" {
+		return parsedURL.String()
 	}
-	return fmt.Sprintf("%s?key=%s", uri, key)
+	query.Set("key", key)
+	parsedURL.RawQuery = query.Encode()
+	return parsedURL.String()
+}
+
+func isSameURLOrigin(first, second string) bool {
+	firstURL, err := url.Parse(strings.TrimSpace(first))
+	if err != nil || firstURL == nil || firstURL.Scheme == "" || firstURL.Host == "" {
+		return false
+	}
+	secondURL, err := url.Parse(strings.TrimSpace(second))
+	if err != nil || secondURL == nil || secondURL.Scheme == "" || secondURL.Host == "" {
+		return false
+	}
+	return strings.EqualFold(firstURL.Scheme, secondURL.Scheme) &&
+		strings.EqualFold(firstURL.Hostname(), secondURL.Hostname()) &&
+		effectiveURLPort(firstURL) == effectiveURLPort(secondURL)
+}
+
+func effectiveURLPort(parsedURL *url.URL) string {
+	if port := parsedURL.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(parsedURL.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	default:
+		return ""
+	}
 }

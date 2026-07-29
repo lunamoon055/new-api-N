@@ -33,14 +33,128 @@ func validUserInfo(username string, role int) bool {
 	return true
 }
 
+const sessionVersionKey = "session_version"
+
+var (
+	errSessionInvalid = errors.New("invalid session")
+	errSessionRevoked = errors.New("session revoked")
+)
+
+func sessionUserId(value any) (int, bool) {
+	id, ok := value.(int)
+	return id, ok && id > 0
+}
+
+func sessionVersion(value any) (int64, bool) {
+	switch version := value.(type) {
+	case int64:
+		return version, version > 0
+	case int:
+		return int64(version), version > 0
+	default:
+		return 0, false
+	}
+}
+
+func saveSessionAuthState(session sessions.Session, state *model.UserAuthState) error {
+	session.Set("id", state.Id)
+	session.Set("username", state.Username)
+	session.Set("role", state.Role)
+	session.Set("status", state.Status)
+	session.Set("group", state.Group)
+	session.Set(sessionVersionKey, state.SessionVersion)
+	return session.Save()
+}
+
+func clearAuthSession(session sessions.Session) {
+	session.Clear()
+	if err := session.Save(); err != nil {
+		common.SysLog("failed to clear invalid session: " + err.Error())
+	}
+}
+
+func shouldClearAuthSession(err error) bool {
+	return errors.Is(err, errSessionInvalid) ||
+		errors.Is(err, errSessionRevoked) ||
+		errors.Is(err, gorm.ErrRecordNotFound)
+}
+
+func resolveSessionAuth(session sessions.Session) (*model.UserAuthState, bool, error) {
+	idRaw := session.Get("id")
+	if idRaw == nil {
+		return nil, false, nil
+	}
+	id, ok := sessionUserId(idRaw)
+	if !ok {
+		return nil, true, errSessionInvalid
+	}
+
+	state, err := model.GetUserAuthState(id)
+	if err != nil {
+		return nil, true, err
+	}
+	if state.SessionVersion < 1 {
+		return nil, true, errSessionInvalid
+	}
+
+	versionRaw := session.Get(sessionVersionKey)
+	if versionRaw == nil {
+		if state.SessionVersion != 1 {
+			return nil, true, errSessionRevoked
+		}
+		if state.Status != common.UserStatusEnabled || !validUserInfo(state.Username, state.Role) {
+			return state, true, nil
+		}
+		if err := saveSessionAuthState(session, state); err != nil {
+			return nil, true, err
+		}
+		return state, true, nil
+	}
+
+	version, ok := sessionVersion(versionRaw)
+	if !ok {
+		return nil, true, errSessionInvalid
+	}
+	if version != state.SessionVersion {
+		return nil, true, errSessionRevoked
+	}
+	return state, true, nil
+}
+
 func authHelper(c *gin.Context, minRole int) {
 	session := sessions.Default(c)
-	username := session.Get("username")
-	role := session.Get("role")
-	id := session.Get("id")
-	status := session.Get("status")
+	state, hasSession, sessionErr := resolveSessionAuth(session)
+	if sessionErr != nil {
+		if shouldClearAuthSession(sessionErr) {
+			clearAuthSession(session)
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn),
+			})
+		} else {
+			common.SysLog("resolve session auth error: " + sessionErr.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+			})
+		}
+		c.Abort()
+		return
+	}
+
+	var username string
+	var role int
+	var id int
+	var status int
+	var group string
 	useAccessToken := false
-	if username == nil {
+	if hasSession {
+		username = state.Username
+		role = state.Role
+		id = state.Id
+		status = state.Status
+		group = state.Group
+	} else {
 		// Check access token
 		accessToken := c.Request.Header.Get("Authorization")
 		if accessToken == "" {
@@ -82,6 +196,7 @@ func authHelper(c *gin.Context, minRole int) {
 			role = user.Role
 			id = user.Id
 			status = user.Status
+			group = user.Group
 			useAccessToken = true
 		} else {
 			c.JSON(http.StatusOK, gin.H{
@@ -120,7 +235,10 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	if status.(int) == common.UserStatusDisabled {
+	if status == common.UserStatusDisabled {
+		if hasSession {
+			clearAuthSession(session)
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
@@ -128,7 +246,7 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	if role.(int) < minRole {
+	if role < minRole {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
@@ -136,7 +254,10 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	if !validUserInfo(username.(string), role.(int)) {
+	if !validUserInfo(username, role) {
+		if hasSession {
+			clearAuthSession(session)
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid),
@@ -149,8 +270,8 @@ func authHelper(c *gin.Context, minRole int) {
 	c.Set("username", username)
 	c.Set("role", role)
 	c.Set("id", id)
-	c.Set("group", session.Get("group"))
-	c.Set("user_group", session.Get("group"))
+	c.Set("group", group)
+	c.Set("user_group", group)
 	c.Set("use_access_token", useAccessToken)
 
 	c.Next()
@@ -159,9 +280,26 @@ func authHelper(c *gin.Context, minRole int) {
 func TryUserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)
-		id := session.Get("id")
-		if id != nil {
-			c.Set("id", id)
+		state, hasSession, err := resolveSessionAuth(session)
+		if err != nil {
+			if shouldClearAuthSession(err) {
+				clearAuthSession(session)
+			}
+			c.Next()
+			return
+		}
+		if hasSession {
+			if state.Status != common.UserStatusEnabled || !validUserInfo(state.Username, state.Role) {
+				clearAuthSession(session)
+				c.Next()
+				return
+			}
+			c.Set("id", state.Id)
+			c.Set("username", state.Username)
+			c.Set("role", state.Role)
+			c.Set("group", state.Group)
+			c.Set("user_group", state.Group)
+			c.Set("use_access_token", false)
 		}
 		c.Next()
 	}
@@ -195,17 +333,23 @@ func TokenOrUserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		// Try session auth first (dashboard users)
 		session := sessions.Default(c)
-		if id := session.Get("id"); id != nil {
-			if status, ok := session.Get("status").(int); ok && status == common.UserStatusEnabled {
-				c.Set("id", id)
-				c.Set("username", session.Get("username"))
-				c.Set("role", session.Get("role"))
-				c.Set("group", session.Get("group"))
-				c.Set("user_group", session.Get("group"))
+		state, hasSession, err := resolveSessionAuth(session)
+		if err != nil {
+			if shouldClearAuthSession(err) {
+				clearAuthSession(session)
+			}
+		} else if hasSession {
+			if state.Status == common.UserStatusEnabled && validUserInfo(state.Username, state.Role) {
+				c.Set("id", state.Id)
+				c.Set("username", state.Username)
+				c.Set("role", state.Role)
+				c.Set("group", state.Group)
+				c.Set("user_group", state.Group)
 				c.Set("use_access_token", false)
 				c.Next()
 				return
 			}
+			clearAuthSession(session)
 		}
 		// Fall back to token auth (API clients)
 		TokenAuth()(c)

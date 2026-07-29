@@ -22,6 +22,7 @@ const (
 
 var batchUpdateStores []map[int]int
 var batchUpdateLocks []sync.Mutex
+var batchUpdateExecutionLock sync.Mutex
 
 func init() {
 	for i := 0; i < BatchUpdateTypeCount; i++ {
@@ -42,10 +43,29 @@ func InitBatchUpdater() {
 func addNewRecord(type_ int, id int, value int) {
 	batchUpdateLocks[type_].Lock()
 	defer batchUpdateLocks[type_].Unlock()
+	addNewRecordLocked(type_, id, value)
+}
+
+func addNewRecordLocked(type_ int, id int, value int) {
 	if _, ok := batchUpdateStores[type_][id]; !ok {
 		batchUpdateStores[type_][id] = value
 	} else {
 		batchUpdateStores[type_][id] += value
+	}
+}
+
+func addQuotaBatchRecord(type_ int, id int, value int, updateCache func() error) {
+	batchUpdateExecutionLock.Lock()
+	defer batchUpdateExecutionLock.Unlock()
+
+	batchUpdateLocks[type_].Lock()
+	addNewRecordLocked(type_, id, value)
+	batchUpdateLocks[type_].Unlock()
+
+	if common.RedisEnabled && updateCache != nil {
+		if err := updateCache(); err != nil {
+			common.SysLog("failed to update quota cache: " + err.Error())
+		}
 	}
 }
 
@@ -68,6 +88,10 @@ func batchUpdate() {
 
 	common.SysLog("batch update started")
 	for i := 0; i < BatchUpdateTypeCount; i++ {
+		quotaStore := i == BatchUpdateTypeUserQuota || i == BatchUpdateTypeTokenQuota
+		if quotaStore {
+			batchUpdateExecutionLock.Lock()
+		}
 		batchUpdateLocks[i].Lock()
 		store := batchUpdateStores[i]
 		batchUpdateStores[i] = make(map[int]int)
@@ -79,11 +103,13 @@ func batchUpdate() {
 				err := increaseUserQuota(key, value)
 				if err != nil {
 					common.SysLog("failed to batch update user quota: " + err.Error())
+					addNewRecord(BatchUpdateTypeUserQuota, key, value)
 				}
 			case BatchUpdateTypeTokenQuota:
 				err := increaseTokenQuota(key, value)
 				if err != nil {
 					common.SysLog("failed to batch update token quota: " + err.Error())
+					addNewRecord(BatchUpdateTypeTokenQuota, key, value)
 				}
 			case BatchUpdateTypeUsedQuota:
 				updateUserUsedQuota(key, value)
@@ -92,6 +118,9 @@ func batchUpdate() {
 			case BatchUpdateTypeChannelUsedQuota:
 				updateChannelUsedQuota(key, value)
 			}
+		}
+		if quotaStore {
+			batchUpdateExecutionLock.Unlock()
 		}
 	}
 	common.SysLog("batch update finished")

@@ -432,10 +432,25 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         })
       })
 
-      const updates = Object.entries(finalRatios).map(([key, value]) => ({
-        key,
-        value: JSON.stringify(value, null, 2),
-      }))
+      const billingMode = finalRatios['billing_setting.billing_mode']
+      const billingExpr = finalRatios['billing_setting.billing_expr']
+      const updates = Object.entries(finalRatios)
+        .filter(
+          ([key]) =>
+            key !== 'billing_setting.billing_mode' &&
+            key !== 'billing_setting.billing_expr'
+        )
+        .map(([key, value]) => ({
+          key,
+          value: JSON.stringify(value, null, 2),
+        }))
+      updates.push({
+        key: 'billing_setting.billing_config',
+        value: JSON.stringify({
+          billing_mode: billingMode,
+          billing_expr: billingExpr,
+        }),
+      })
 
       return new Promise<boolean>((resolve) => {
         syncMutate(updates, {

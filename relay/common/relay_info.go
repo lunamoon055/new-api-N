@@ -664,6 +664,9 @@ type TaskRelayInfo struct {
 	// PublicTaskID 是提交时预生成的 task_xxxx 格式公开 ID，
 	// 供 DoResponse 在返回给客户端时使用（避免暴露上游真实 ID）。
 	PublicTaskID string
+	// PersistentTaskID points to the durable SUBMITTING record created before
+	// the upstream request. It lets retries reuse one billing owner.
+	PersistentTaskID int64
 
 	ConsumeQuota bool
 
@@ -674,21 +677,21 @@ type TaskRelayInfo struct {
 }
 
 type TaskSubmitReq struct {
-	Prompt         string                 `json:"prompt"`
-	Model          string                 `json:"model,omitempty"`
-	Mode           string                 `json:"mode,omitempty"`
-	Image          string                 `json:"image,omitempty"`
-	Images         []string               `json:"images,omitempty"`
-	Size           string                 `json:"size,omitempty"`
-	Ratio          string                 `json:"ratio,omitempty"`
-	Resolution     string                 `json:"resolution,omitempty"`
-	Duration       int                    `json:"duration,omitempty"`
-	Seconds        string                 `json:"seconds,omitempty"`
-	InputReference string                 `json:"input_reference,omitempty"`
+	Prompt          string                 `json:"prompt"`
+	Model           string                 `json:"model,omitempty"`
+	Mode            string                 `json:"mode,omitempty"`
+	Image           string                 `json:"image,omitempty"`
+	Images          []string               `json:"images,omitempty"`
+	Size            string                 `json:"size,omitempty"`
+	Ratio           string                 `json:"ratio,omitempty"`
+	Resolution      string                 `json:"resolution,omitempty"`
+	Duration        int                    `json:"duration,omitempty"`
+	Seconds         string                 `json:"seconds,omitempty"`
+	InputReference  string                 `json:"input_reference,omitempty"`
 	ReferenceImages []string               `json:"referenceImages,omitempty"`
 	ReferenceVideos []string               `json:"referenceVideos,omitempty"`
 	ReferenceAudios []string               `json:"referenceAudios,omitempty"`
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty"`
 }
 
 func (t *TaskSubmitReq) GetPrompt() string {

@@ -321,7 +321,7 @@ const VIDEOS_API_CAPABILITY: CreationVideoCapability = {
 const VIDEO_MODEL_ID_ALIASES: Record<string, string> = {
   'sd2-mini': 'videos-mini',
   'sd2-fast': 'videos-fast',
-  'sd2满血': 'videos-standard',
+  sd2满血: 'videos-standard',
 }
 
 const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
@@ -339,7 +339,7 @@ const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
   'videos-mini': VIDEOS_API_CAPABILITY,
   'sd2-mini': VIDEOS_API_CAPABILITY,
   'sd2-fast': VIDEOS_API_CAPABILITY,
-  'sd2满血': VIDEOS_API_CAPABILITY,
+  sd2满血: VIDEOS_API_CAPABILITY,
 }
 
 export const DEFAULT_CREATION_VIDEO_OPTIONS: CreationVideoOptions = {
@@ -402,15 +402,26 @@ function normalizeModelId(model?: CreationModelInput) {
   return getModelId(model).trim().toLowerCase()
 }
 
+function getNormalizedModelIdVariants(value?: string) {
+  const normalized = value?.trim().toLowerCase() ?? ''
+  if (!normalized) return []
+
+  const withoutDisplaySuffix = normalized
+    .replace(/\s*[(（][^()（）]*[)）]\s*$/u, '')
+    .trim()
+  return [...new Set([normalized, withoutDisplaySuffix].filter(Boolean))]
+}
+
 function getCreationModelIdCandidates(model?: CreationModelInput) {
-  const candidates = [normalizeModelId(model)]
+  const candidates = getNormalizedModelIdVariants(normalizeModelId(model))
   const metadata = getModelMetadata(model)
   for (const value of [metadata?.upstream_model_id, metadata?.id]) {
-    const candidate = value?.trim().toLowerCase()
-    if (candidate) candidates.push(candidate)
+    candidates.push(...getNormalizedModelIdVariants(value))
   }
-  const mapped = VIDEO_MODEL_ID_ALIASES[candidates[0] ?? '']
-  if (mapped) candidates.push(mapped)
+  for (const candidate of [...candidates]) {
+    const mapped = VIDEO_MODEL_ID_ALIASES[candidate]
+    if (mapped) candidates.push(mapped)
+  }
   return [...new Set(candidates.filter(Boolean))]
 }
 
@@ -755,9 +766,18 @@ export function normalizeCreationVideoReferences(
   }
 
   if (capability.kind === 'videos') {
-    const limitedAudioUrls = audioUrls.slice(0, capability.referenceLimits.maxAudios)
-    const limitedImageUrls = imageUrls.slice(0, capability.referenceLimits.maxImages)
-    const limitedVideoUrls = videoUrls.slice(0, capability.referenceLimits.maxVideos)
+    const limitedAudioUrls = audioUrls.slice(
+      0,
+      capability.referenceLimits.maxAudios
+    )
+    const limitedImageUrls = imageUrls.slice(
+      0,
+      capability.referenceLimits.maxImages
+    )
+    const limitedVideoUrls = videoUrls.slice(
+      0,
+      capability.referenceLimits.maxVideos
+    )
     return {
       referenceMode,
       imageUrls: limitedImageUrls,
@@ -765,7 +785,9 @@ export function normalizeCreationVideoReferences(
       endImageUrl: '',
       videoUrls: limitedVideoUrls,
       audioUrls: limitedAudioUrls,
-      audioUrl: getCreationReferenceURL(limitedAudioUrls[0]) ? limitedAudioUrls[0] : '',
+      audioUrl: getCreationReferenceURL(limitedAudioUrls[0])
+        ? limitedAudioUrls[0]
+        : '',
     }
   }
 
@@ -982,10 +1004,7 @@ export function getCreationVideoReferenceError(
     }
     return 'Video2 accepts at most 1 audio reference.'
   }
-  const mediaCount =
-    imageCount +
-    normalized.videoUrls.length +
-    audioCount
+  const mediaCount = imageCount + normalized.videoUrls.length + audioCount
   if (
     referenceLimits.maxMediaFiles &&
     mediaCount > referenceLimits.maxMediaFiles

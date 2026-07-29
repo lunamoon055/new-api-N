@@ -4,11 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -86,94 +84,24 @@ func calculateAudioQuota(info QuotaInfo) int {
 	return int(quota.Round(0).IntPart())
 }
 
-func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage) error {
-	if relayInfo.UsePrice {
+func ReserveWssQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage) error {
+	if relayInfo == nil || relayInfo.Billing == nil || usage == nil {
 		return nil
 	}
-	userQuota, err := model.GetUserQuota(relayInfo.UserId, false)
-	if err != nil {
+	quota, _, _ := calculateWssQuota(relayInfo, usage)
+	if err := relayInfo.Billing.Reserve(quota); err != nil {
 		return err
 	}
-
-	token, err := model.GetTokenByKey(strings.TrimPrefix(relayInfo.TokenKey, "sk-"), false)
-	if err != nil {
-		return err
-	}
-
-	modelName := relayInfo.OriginModelName
-	textInputTokens := usage.InputTokenDetails.TextTokens
-	textOutTokens := usage.OutputTokenDetails.TextTokens
-	audioInputTokens := usage.InputTokenDetails.AudioTokens
-	audioOutTokens := usage.OutputTokenDetails.AudioTokens
-	groupRatio := ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
-	modelRatio, _, _ := ratio_setting.GetModelRatio(modelName)
-
-	autoGroup, exists := common.GetContextKey(ctx, constant.ContextKeyAutoGroup)
-	if exists {
-		groupRatio = ratio_setting.GetGroupRatio(autoGroup.(string))
-		logger.LogDebug(ctx, "final group ratio: %f", groupRatio)
-		relayInfo.UsingGroup = autoGroup.(string)
-	}
-
-	actualGroupRatio := groupRatio
-	userGroupRatio, ok := ratio_setting.GetGroupGroupRatio(relayInfo.UserGroup, relayInfo.UsingGroup)
-	if ok {
-		actualGroupRatio = userGroupRatio
-	}
-
-	quotaInfo := QuotaInfo{
-		InputDetails: TokenDetails{
-			TextTokens:  textInputTokens,
-			AudioTokens: audioInputTokens,
-		},
-		OutputDetails: TokenDetails{
-			TextTokens:  textOutTokens,
-			AudioTokens: audioOutTokens,
-		},
-		ModelName:  modelName,
-		UsePrice:   relayInfo.UsePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: actualGroupRatio,
-	}
-
-	quota := calculateAudioQuota(quotaInfo)
-
-	if userQuota < quota {
-		return fmt.Errorf("user quota is not enough, user quota: %s, need quota: %s", logger.FormatQuota(userQuota), logger.FormatQuota(quota))
-	}
-
-	if !token.UnlimitedQuota && token.RemainQuota < quota {
-		return fmt.Errorf("token quota is not enough, token remain quota: %s, need quota: %s", logger.FormatQuota(token.RemainQuota), logger.FormatQuota(quota))
-	}
-
-	err = PostConsumeQuota(relayInfo, quota, 0, false)
-	if err != nil {
-		return err
-	}
-	logger.LogInfo(ctx, "realtime streaming consume quota success, quota: "+fmt.Sprintf("%d", quota))
+	logger.LogInfo(ctx, "realtime streaming reserved cumulative quota: "+fmt.Sprintf("%d", quota))
 	return nil
 }
 
 func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, modelName string,
 	usage *dto.RealtimeUsage, extraContent string) {
 
-	var tieredResult *billingexpr.TieredResult
-	tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, billingexpr.TokenParams{
-		P:   float64(usage.InputTokens),
-		C:   float64(usage.OutputTokens),
-		Len: float64(usage.InputTokens),
-	})
-	if tieredOk {
-		tieredResult = tieredRes
-	}
+	quota, tieredResult, _ := calculateWssQuota(relayInfo, usage)
 
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
-	textInputTokens := usage.InputTokenDetails.TextTokens
-	textOutTokens := usage.OutputTokenDetails.TextTokens
-
-	audioInputTokens := usage.InputTokenDetails.AudioTokens
-	audioOutTokens := usage.OutputTokenDetails.AudioTokens
-
 	tokenName := ctx.GetString("token_name")
 	completionRatio := decimal.NewFromFloat(ratio_setting.GetCompletionRatio(modelName))
 	audioRatio := decimal.NewFromFloat(ratio_setting.GetAudioRatio(relayInfo.OriginModelName))
@@ -183,26 +111,6 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
 	modelPrice := relayInfo.PriceData.ModelPrice
 	usePrice := relayInfo.PriceData.UsePrice
-
-	quotaInfo := QuotaInfo{
-		InputDetails: TokenDetails{
-			TextTokens:  textInputTokens,
-			AudioTokens: audioInputTokens,
-		},
-		OutputDetails: TokenDetails{
-			TextTokens:  textOutTokens,
-			AudioTokens: audioOutTokens,
-		},
-		ModelName:  modelName,
-		UsePrice:   usePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: groupRatio,
-	}
-
-	quota := calculateAudioQuota(quotaInfo)
-	if tieredOk {
-		quota = tieredQuota
-	}
 
 	totalTokens := usage.TotalTokens
 	var logContent string
@@ -253,6 +161,54 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 	})
+}
+
+func calculateWssQuota(relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage) (int, *billingexpr.TieredResult, bool) {
+	if relayInfo == nil || usage == nil {
+		return 0, nil, false
+	}
+
+	tieredParams := billingexpr.TokenParams{
+		P:    float64(usage.InputTokens),
+		C:    float64(usage.OutputTokens),
+		Len:  float64(usage.InputTokens),
+		CR:   float64(usage.InputTokenDetails.CachedTokens),
+		CC:   float64(usage.InputTokenDetails.CachedCreationTokens),
+		Img:  float64(usage.InputTokenDetails.ImageTokens),
+		ImgO: float64(usage.OutputTokenDetails.ImageTokens),
+		AI:   float64(usage.InputTokenDetails.AudioTokens),
+		AO:   float64(usage.OutputTokenDetails.AudioTokens),
+	}
+	if snap := relayInfo.TieredBillingSnapshot; snap != nil {
+		usedVars := billingexpr.UsedVars(snap.ExprString)
+		standardUsage := &dto.Usage{
+			PromptTokens:           usage.InputTokens,
+			CompletionTokens:       usage.OutputTokens,
+			PromptTokensDetails:    usage.InputTokenDetails,
+			CompletionTokenDetails: usage.OutputTokenDetails,
+		}
+		tieredParams = BuildTieredTokenParams(standardUsage, false, usedVars)
+	}
+	if tieredOk, tieredQuota, tieredResult := TryTieredSettle(relayInfo, tieredParams); tieredOk {
+		return tieredQuota, tieredResult, true
+	}
+
+	quotaInfo := QuotaInfo{
+		InputDetails: TokenDetails{
+			TextTokens:  usage.InputTokenDetails.TextTokens,
+			AudioTokens: usage.InputTokenDetails.AudioTokens,
+		},
+		OutputDetails: TokenDetails{
+			TextTokens:  usage.OutputTokenDetails.TextTokens,
+			AudioTokens: usage.OutputTokenDetails.AudioTokens,
+		},
+		ModelName:  relayInfo.OriginModelName,
+		UsePrice:   relayInfo.PriceData.UsePrice,
+		ModelPrice: relayInfo.PriceData.ModelPrice,
+		ModelRatio: relayInfo.PriceData.ModelRatio,
+		GroupRatio: relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+	}
+	return calculateAudioQuota(quotaInfo), nil, false
 }
 
 func CalcOpenRouterCacheCreateTokens(usage dto.Usage, priceData types.PriceData) int {
@@ -386,18 +342,10 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 	if relayInfo.IsPlayground {
 		return nil
 	}
-	//if relayInfo.TokenUnlimited {
-	//	return nil
-	//}
-	token, err := model.GetTokenByKey(relayInfo.TokenKey, false)
-	if err != nil {
-		return err
-	}
-	if !relayInfo.TokenUnlimited && token.RemainQuota < quota {
-		return fmt.Errorf("token quota is not enough, token remain quota: %s, need quota: %s", logger.FormatQuota(token.RemainQuota), logger.FormatQuota(quota))
-	}
-	err = model.DecreaseTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, quota)
-	if err != nil {
+	if err := model.ReserveTokenQuota(relayInfo.UserId, relayInfo.TokenId, relayInfo.TokenKey, quota); err != nil {
+		if errors.Is(err, model.ErrInsufficientTokenQuota) {
+			return fmt.Errorf("token quota is not enough, need quota: %s: %w", logger.FormatQuota(quota), err)
+		}
 		return err
 	}
 	return nil
@@ -406,7 +354,8 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQuota int, sendEmail bool) (err error) {
 
 	// 1) Consume from wallet quota OR subscription item
-	if relayInfo != nil && relayInfo.BillingSource == BillingSourceSubscription {
+	isSubscription := relayInfo != nil && relayInfo.BillingSource == BillingSourceSubscription
+	if isSubscription {
 		if relayInfo.SubscriptionId == 0 {
 			return errors.New("subscription id is missing")
 		}
@@ -418,22 +367,17 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 			relayInfo.SubscriptionPostDelta += delta
 		}
 	} else {
-		// Wallet
-		if quota > 0 {
-			err = model.DecreaseUserQuota(relayInfo.UserId, quota, false)
-		} else {
-			err = model.IncreaseUserQuota(relayInfo.UserId, -quota, false)
-		}
-		if err != nil {
+		withToken := !relayInfo.IsPlayground
+		if err = model.AdjustWalletQuota(relayInfo.UserId, relayInfo.TokenId, relayInfo.TokenKey, quota, withToken); err != nil {
 			return err
 		}
 	}
 
-	if !relayInfo.IsPlayground {
+	if isSubscription && !relayInfo.IsPlayground {
 		if quota > 0 {
-			err = model.DecreaseTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, quota)
+			err = model.DecreaseTokenQuotaDirect(relayInfo.TokenId, relayInfo.TokenKey, quota)
 		} else {
-			err = model.IncreaseTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, -quota)
+			err = model.IncreaseTokenQuotaDirect(relayInfo.TokenId, relayInfo.TokenKey, -quota)
 		}
 		if err != nil {
 			return err

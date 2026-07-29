@@ -64,9 +64,9 @@ func HandleOAuth(c *gin.Context) {
 		return
 	}
 
-	// 2. Check if user is already logged in (bind flow)
-	username := session.Get("username")
-	if username != nil {
+	// 2. Check the identity resolved by TryUserAuth (bind flow). Never use
+	// unvalidated identity fields directly from the cookie.
+	if c.GetInt("id") > 0 {
 		handleOAuthBind(c, provider)
 		return
 	}
@@ -162,10 +162,16 @@ func handleOAuthBind(c *gin.Context, provider oauth.Provider) {
 		}
 	}
 
-	// Get current user from session
-	session := sessions.Default(c)
-	id := session.Get("id")
-	user := model.User{Id: id.(int)}
+	// Get current user from the validated request context.
+	userId := c.GetInt("id")
+	if userId == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": i18n.T(c, i18n.MsgAuthNotLoggedIn),
+		})
+		return
+	}
+	user := model.User{Id: userId}
 	err = user.FillUserById()
 	if err != nil {
 		common.ApiError(c, err)

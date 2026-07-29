@@ -29,6 +29,17 @@ var completionRatioMetaOptionKeys = []string{
 	"AudioCompletionRatio",
 }
 
+const (
+	billingModeOptionKey   = "billing_setting.billing_mode"
+	billingExprOptionKey   = "billing_setting.billing_expr"
+	billingConfigOptionKey = "billing_setting.billing_config"
+)
+
+type billingConfigUpdate struct {
+	BillingMode map[string]string `json:"billing_mode"`
+	BillingExpr map[string]string `json:"billing_expr"`
+}
+
 func isPaymentComplianceOptionKey(key string) bool {
 	return strings.HasPrefix(key, "payment_setting.compliance_")
 }
@@ -126,6 +137,48 @@ type OptionUpdateRequest struct {
 	Value any    `json:"value"`
 }
 
+func updateBillingOption(c *gin.Context, key, value string) bool {
+	if key != billingModeOptionKey && key != billingExprOptionKey && key != billingConfigOptionKey {
+		return false
+	}
+
+	var err error
+	switch key {
+	case billingModeOptionKey:
+		err = model.UpdateBillingOption(key, value)
+	case billingExprOptionKey:
+		err = model.UpdateBillingOption(key, value)
+	case billingConfigOptionKey:
+		var update billingConfigUpdate
+		if decodeErr := common.UnmarshalJsonStr(value, &update); decodeErr != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的计费配置: " + decodeErr.Error()})
+			return true
+		}
+		if update.BillingMode == nil || update.BillingExpr == nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的计费配置: billing_mode 和 billing_expr 必须同时提供"})
+			return true
+		}
+		modeBytes, marshalErr := common.Marshal(update.BillingMode)
+		if marshalErr != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": marshalErr.Error()})
+			return true
+		}
+		exprBytes, marshalErr := common.Marshal(update.BillingExpr)
+		if marshalErr != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": marshalErr.Error()})
+			return true
+		}
+		err = model.UpdateBillingOptions(string(modeBytes), string(exprBytes))
+	}
+
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return true
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+	return true
+}
+
 func UpdateOption(c *gin.Context) {
 	var option OptionUpdateRequest
 	err := common.DecodeJson(c.Request.Body, &option)
@@ -145,6 +198,9 @@ func UpdateOption(c *gin.Context) {
 		option.Value = common.Interface2String(option.Value.(int))
 	default:
 		option.Value = fmt.Sprintf("%v", option.Value)
+	}
+	if updateBillingOption(c, option.Key, option.Value.(string)) {
+		return
 	}
 	switch option.Key {
 	case "QuotaForInviter", "QuotaForInvitee":

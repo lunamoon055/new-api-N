@@ -101,13 +101,33 @@ func (t *TwoFA) Delete() error {
 
 	// 使用事务确保原子性
 	return DB.Transaction(func(tx *gorm.DB) error {
+		var persisted TwoFA
+		if err := tx.Unscoped().
+			Select("id", "user_id", "is_enabled").
+			Where("id = ? AND user_id = ?", t.Id, t.UserId).
+			First(&persisted).Error; err != nil {
+			return err
+		}
+
 		// 同时删除相关的备用码记录（硬删除）
 		if err := tx.Unscoped().Where("user_id = ?", t.UserId).Delete(&TwoFABackupCode{}).Error; err != nil {
 			return err
 		}
 
 		// 硬删除2FA记录
-		return tx.Unscoped().Delete(t).Error
+		result := tx.Unscoped().
+			Where("id = ? AND user_id = ?", t.Id, t.UserId).
+			Delete(&TwoFA{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		if persisted.IsEnabled {
+			return BumpUserSessionVersion(tx, t.UserId)
+		}
+		return nil
 	})
 }
 
@@ -165,6 +185,17 @@ func CreateBackupCodes(userId int, codes []string) error {
 			}
 		}
 
+		var enabled bool
+		err := tx.Model(&TwoFA{}).
+			Select("is_enabled").
+			Where("user_id = ?", userId).
+			Scan(&enabled).Error
+		if err != nil {
+			return err
+		}
+		if enabled {
+			return BumpUserSessionVersion(tx, userId)
+		}
 		return nil
 	})
 }
@@ -225,10 +256,31 @@ func DisableTwoFA(userId int) error {
 
 // EnableTwoFA 启用2FA
 func (t *TwoFA) Enable() error {
-	t.IsEnabled = true
-	t.FailedAttempts = 0
-	t.LockedUntil = nil
-	return t.Update()
+	if t.Id == 0 || t.UserId == 0 {
+		return errors.New("2FA记录ID不能为空")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&TwoFA{}).
+			Where("id = ? AND user_id = ? AND is_enabled = ?", t.Id, t.UserId, false).
+			Updates(map[string]interface{}{
+				"is_enabled":      true,
+				"failed_attempts": 0,
+				"locked_until":    nil,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errors.New("2FA记录状态已变更")
+		}
+		if err := BumpUserSessionVersion(tx, t.UserId); err != nil {
+			return err
+		}
+		t.IsEnabled = true
+		t.FailedAttempts = 0
+		t.LockedUntil = nil
+		return nil
+	})
 }
 
 // ValidateTOTPAndUpdateUsage 验证TOTP并更新使用记录

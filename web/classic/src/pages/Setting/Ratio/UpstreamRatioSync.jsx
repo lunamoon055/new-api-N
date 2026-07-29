@@ -566,10 +566,27 @@ export default function UpstreamRatioSync(props) {
       showInfo(t('正在同步价格，请稍候'));
       let success = false;
       try {
-        const updates = Object.entries(finalRatios).map(([key, value]) =>
+        const billingMode = finalRatios['billing_setting.billing_mode'];
+        const billingExpr = finalRatios['billing_setting.billing_expr'];
+        const updates = Object.entries(finalRatios)
+          .filter(
+            ([key]) =>
+              key !== 'billing_setting.billing_mode' &&
+              key !== 'billing_setting.billing_expr',
+          )
+          .map(([key, value]) =>
+            API.put('/api/option/', {
+              key,
+              value: JSON.stringify(value, null, 2),
+            }),
+          );
+        updates.push(
           API.put('/api/option/', {
-            key,
-            value: JSON.stringify(value, null, 2),
+            key: 'billing_setting.billing_config',
+            value: JSON.stringify({
+              billing_mode: billingMode,
+              billing_expr: billingExpr,
+            }),
           }),
         );
 

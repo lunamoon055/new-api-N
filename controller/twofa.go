@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -407,7 +408,7 @@ func Verify2FALogin(c *gin.Context) {
 
 	// 从会话中获取pending用户信息
 	session := sessions.Default(c)
-	pendingUserId := session.Get("pending_user_id")
+	pendingUserId := session.Get(pending2FAUserIDKey)
 	if pendingUserId == nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -417,12 +418,37 @@ func Verify2FALogin(c *gin.Context) {
 	}
 	userId, ok := pendingUserId.(int)
 	if !ok {
+		clearPending2FALogin(session)
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "会话数据无效，请重新登录",
 		})
 		return
 	}
+
+	pendingVersion, versionOK := sessionInt64(session.Get(pending2FAVersionKey))
+	pendingCreatedAt, createdAtOK := sessionInt64(session.Get(pending2FACreatedAtKey))
+	now := time.Now().Unix()
+	if !versionOK || !createdAtOK || pendingVersion < 1 ||
+		pendingCreatedAt > now || now-pendingCreatedAt >= int64(pending2FAMaxAge/time.Second) {
+		clearPending2FALogin(session)
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "会话已过期，请重新登录",
+		})
+		return
+	}
+
+	authState, err := model.GetUserAuthState(userId)
+	if err != nil || authState.Status != common.UserStatusEnabled || authState.SessionVersion != pendingVersion {
+		clearPending2FALogin(session)
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "会话已过期，请重新登录",
+		})
+		return
+	}
+
 	// 获取用户信息
 	user, err := model.GetUserById(userId, false)
 	if err != nil {
@@ -477,12 +503,29 @@ func Verify2FALogin(c *gin.Context) {
 		return
 	}
 
-	// 2FA验证成功，清理pending会话信息并完成登录
-	session.Delete("pending_username")
-	session.Delete("pending_user_id")
-	session.Save()
-
+	// setupLogin clears the pending state and writes a fresh session version.
 	setupLogin(user, c)
+}
+
+func sessionInt64(value any) (int64, bool) {
+	switch parsed := value.(type) {
+	case int64:
+		return parsed, true
+	case int:
+		return int64(parsed), true
+	default:
+		return 0, false
+	}
+}
+
+func clearPending2FALogin(session sessions.Session) {
+	session.Delete(pending2FAUsernameKey)
+	session.Delete(pending2FAUserIDKey)
+	session.Delete(pending2FAVersionKey)
+	session.Delete(pending2FACreatedAtKey)
+	if err := session.Save(); err != nil {
+		common.SysLog("清理过期2FA登录会话失败: " + err.Error())
+	}
 }
 
 // Admin2FAStats 管理员获取2FA统计信息

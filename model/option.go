@@ -1,23 +1,34 @@
 package model
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
+	"gorm.io/gorm"
 )
 
 type Option struct {
 	Key   string `json:"key" gorm:"primaryKey"`
 	Value string `json:"value"`
 }
+
+const (
+	billingModeOptionKey = "billing_setting.billing_mode"
+	billingExprOptionKey = "billing_setting.billing_expr"
+)
+
+var billingOptionsMu sync.Mutex
 
 func AllOption() ([]*Option, error) {
 	var options []*Option
@@ -189,8 +200,27 @@ func InitOptionMap() {
 }
 
 func loadOptionsFromDatabase() {
-	options, _ := AllOption()
+	billingOptionsMu.Lock()
+	options, err := AllOption()
+	if err != nil {
+		billingOptionsMu.Unlock()
+		common.SysError("failed to load options from database: " + err.Error())
+		return
+	}
+
+	optionValues := make(map[string]string, len(options))
 	for _, option := range options {
+		optionValues[option.Key] = option.Value
+	}
+	if err := applyBillingOptionsFromSnapshot(optionValues); err != nil {
+		common.SysError("failed to load billing configuration: " + err.Error())
+	}
+	billingOptionsMu.Unlock()
+
+	for _, option := range options {
+		if option.Key == billingModeOptionKey || option.Key == billingExprOptionKey {
+			continue
+		}
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
 			common.SysLog("failed to update option map: " + err.Error())
@@ -207,19 +237,132 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
+	if key == billingModeOptionKey || key == billingExprOptionKey {
+		return UpdateBillingOption(key, value)
+	}
 	// Save to database first
 	option := Option{
 		Key: key,
 	}
 	// https://gorm.io/docs/update.html#Save-All-Fields
-	DB.FirstOrCreate(&option, Option{Key: key})
+	if err := DB.FirstOrCreate(&option, Option{Key: key}).Error; err != nil {
+		return err
+	}
 	option.Value = value
 	// Save is a combination function.
 	// If save value does not contain primary key, it will execute Create,
 	// otherwise it will execute Update (with all fields).
-	DB.Save(&option)
+	if err := DB.Save(&option).Error; err != nil {
+		return err
+	}
 	// Update OptionMap
 	return updateOptionMap(key, value)
+}
+
+// UpdateBillingOptions validates and persists billing mode/expression maps in
+// one transaction, then publishes the pair to in-memory readers together.
+func UpdateBillingOptions(modeValue, exprValue string) error {
+	billingOptionsMu.Lock()
+	defer billingOptionsMu.Unlock()
+	return updateBillingOptionsLocked(modeValue, exprValue)
+}
+
+// UpdateBillingOption preserves compatibility with callers that still update
+// one legacy key while serializing the read-modify-write with pair updates.
+func UpdateBillingOption(key, value string) error {
+	billingOptionsMu.Lock()
+	defer billingOptionsMu.Unlock()
+
+	common.OptionMapRWMutex.RLock()
+	modeValue := common.OptionMap[billingModeOptionKey]
+	exprValue := common.OptionMap[billingExprOptionKey]
+	common.OptionMapRWMutex.RUnlock()
+	if strings.TrimSpace(modeValue) == "" {
+		modeValue = "{}"
+	}
+	if strings.TrimSpace(exprValue) == "" {
+		exprValue = "{}"
+	}
+
+	switch key {
+	case billingModeOptionKey:
+		modeValue = value
+	case billingExprOptionKey:
+		exprValue = value
+	default:
+		return fmt.Errorf("unsupported billing option key %q", key)
+	}
+	return updateBillingOptionsLocked(modeValue, exprValue)
+}
+
+func updateBillingOptionsLocked(modeValue, exprValue string) error {
+	modes, expressions, err := billing_setting.ParseAndValidateBillingConfig(modeValue, exprValue)
+	if err != nil {
+		return err
+	}
+
+	values := []Option{
+		{Key: billingModeOptionKey, Value: modeValue},
+		{Key: billingExprOptionKey, Value: exprValue},
+	}
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		for i := range values {
+			option := values[i]
+			if err := tx.Save(&option).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	common.OptionMapRWMutex.Lock()
+	if common.OptionMap == nil {
+		common.OptionMap = make(map[string]string)
+	}
+	common.OptionMap[billingModeOptionKey] = modeValue
+	common.OptionMap[billingExprOptionKey] = exprValue
+	common.OptionMapRWMutex.Unlock()
+	billing_setting.ApplyBillingConfig(modes, expressions)
+	InvalidatePricingCache()
+	ratio_setting.InvalidateExposedDataCache()
+	return nil
+}
+
+func applyBillingOptionsFromSnapshot(values map[string]string) error {
+	common.OptionMapRWMutex.RLock()
+	modeValue := common.OptionMap[billingModeOptionKey]
+	exprValue := common.OptionMap[billingExprOptionKey]
+	common.OptionMapRWMutex.RUnlock()
+	if value, ok := values[billingModeOptionKey]; ok {
+		modeValue = value
+	}
+	if value, ok := values[billingExprOptionKey]; ok {
+		exprValue = value
+	}
+	if strings.TrimSpace(modeValue) == "" {
+		modeValue = "{}"
+	}
+	if strings.TrimSpace(exprValue) == "" {
+		exprValue = "{}"
+	}
+
+	modes, expressions, err := billing_setting.ParseAndValidateBillingConfig(modeValue, exprValue)
+	if err != nil {
+		return err
+	}
+	common.OptionMapRWMutex.Lock()
+	if common.OptionMap == nil {
+		common.OptionMap = make(map[string]string)
+	}
+	common.OptionMap[billingModeOptionKey] = modeValue
+	common.OptionMap[billingExprOptionKey] = exprValue
+	common.OptionMapRWMutex.Unlock()
+	billing_setting.ApplyBillingConfig(modes, expressions)
+	InvalidatePricingCache()
+	ratio_setting.InvalidateExposedDataCache()
+	return nil
 }
 
 func updateOptionMap(key string, value string) (err error) {
@@ -228,8 +371,8 @@ func updateOptionMap(key string, value string) (err error) {
 	common.OptionMap[key] = value
 
 	// 检查是否是模型配置 - 使用更规范的方式处理
-	if handleConfigUpdate(key, value) {
-		return nil // 已由配置系统处理
+	if handled, configErr := handleConfigUpdate(key, value); handled {
+		return configErr // 已由配置系统处理
 	}
 
 	// 处理传统配置项...
@@ -552,10 +695,10 @@ func updateOptionMap(key string, value string) (err error) {
 }
 
 // handleConfigUpdate 处理分层配置更新，返回是否已处理
-func handleConfigUpdate(key, value string) bool {
+func handleConfigUpdate(key, value string) (bool, error) {
 	parts := strings.SplitN(key, ".", 2)
 	if len(parts) != 2 {
-		return false // 不是分层配置
+		return false, nil // 不是分层配置
 	}
 
 	configName := parts[0]
@@ -564,14 +707,22 @@ func handleConfigUpdate(key, value string) bool {
 	// 获取配置对象
 	cfg := config.GlobalConfig.Get(configName)
 	if cfg == nil {
-		return false // 未注册的配置
+		return false, nil // 未注册的配置
 	}
 
 	// 更新配置
-	configMap := map[string]string{
-		configKey: value,
+	if configName == "billing_setting" {
+		if err := billing_setting.ApplyAuxiliaryConfig(configKey, value); err != nil {
+			return true, err
+		}
+	} else {
+		configMap := map[string]string{
+			configKey: value,
+		}
+		if err := config.UpdateConfigFromMap(cfg, configMap); err != nil {
+			return true, err
+		}
 	}
-	config.UpdateConfigFromMap(cfg, configMap)
 
 	// 特定配置的后处理
 	if configName == "performance_setting" {
@@ -585,5 +736,5 @@ func handleConfigUpdate(key, value string) bool {
 		system_setting.UpdateAndSyncTheme()
 	}
 
-	return true // 已处理
+	return true, nil // 已处理
 }

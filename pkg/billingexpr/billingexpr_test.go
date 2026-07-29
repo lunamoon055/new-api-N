@@ -301,6 +301,43 @@ func TestQuotaRound(t *testing.T) {
 	}
 }
 
+func TestRunExprRejectsUnsafeResults(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{name: "negative", expr: "-1"},
+		{name: "positive infinity", expr: "p / 0"},
+		{name: "not a number", expr: "0 / 0"},
+		{name: "above business maximum", expr: "2e15"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := billingexpr.RunExpr(tt.expr, billingexpr.TokenParams{P: 1})
+			if err == nil {
+				t.Fatalf("RunExpr(%q) succeeded, want validation error", tt.expr)
+			}
+		})
+	}
+}
+
+func TestQuotaRoundCheckedRejectsUnsafeValues(t *testing.T) {
+	tests := []float64{-1, math.Inf(1), math.NaN(), 500_000_000_000_001}
+	for _, value := range tests {
+		if _, err := billingexpr.QuotaRoundChecked(value, 500_000); err == nil {
+			t.Fatalf("QuotaRoundChecked(%v) succeeded, want validation error", value)
+		}
+	}
+
+	got, err := billingexpr.QuotaRoundChecked(123.5, 500_000)
+	if err != nil {
+		t.Fatalf("QuotaRoundChecked valid value failed: %v", err)
+	}
+	if got != 124 {
+		t.Fatalf("QuotaRoundChecked = %d, want 124", got)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Settlement
 // ---------------------------------------------------------------------------

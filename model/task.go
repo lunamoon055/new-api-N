@@ -14,6 +14,7 @@ import (
 )
 
 type TaskStatus string
+type TaskBillingStatus string
 
 func (t TaskStatus) ToVideoStatus() string {
 	var status string
@@ -42,6 +43,16 @@ const (
 	TaskStatusUnknown               = "UNKNOWN"
 )
 
+const (
+	TaskBillingStatusLegacy          TaskBillingStatus = "LEGACY"
+	TaskBillingStatusSubmitting      TaskBillingStatus = "SUBMITTING"
+	TaskBillingStatusSubmitPending   TaskBillingStatus = "SUBMIT_PENDING"
+	TaskBillingStatusPending         TaskBillingStatus = "PENDING"
+	TaskBillingStatusFinalizePending TaskBillingStatus = "FINALIZE_PENDING"
+	TaskBillingStatusSettled         TaskBillingStatus = "SETTLED"
+	TaskBillingStatusRefunded        TaskBillingStatus = "REFUNDED"
+)
+
 type Task struct {
 	ID         int64                 `json:"id" gorm:"primary_key;AUTO_INCREMENT"`
 	CreatedAt  int64                 `json:"created_at" gorm:"index"`
@@ -64,6 +75,14 @@ type Task struct {
 	// 禁止返回给用户，内部可能包含key等隐私信息
 	PrivateData TaskPrivateData `json:"-" gorm:"column:private_data;type:json"`
 	Data        json.RawMessage `json:"data" gorm:"type:json"`
+	// BillingStatus and BillingTargetQuota form a persistent, retryable billing
+	// state machine. LEGACY is deliberately inert so migrations never replay
+	// historical task charges or refunds.
+	BillingStatus      TaskBillingStatus `json:"-" gorm:"type:varchar(24);not null;default:LEGACY;index"`
+	BillingTargetQuota int               `json:"-" gorm:"not null;default:0"`
+	BillingRetryCount  int               `json:"-" gorm:"not null;default:0"`
+	BillingNextRetryAt int64             `json:"-" gorm:"not null;default:0;index"`
+	BillingLastError   string            `json:"-" gorm:"type:varchar(512);not null;default:''"`
 }
 
 func (t *Task) SetData(data any) {
@@ -102,6 +121,7 @@ type TaskPrivateData struct {
 	UpstreamTaskID string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
 	ResultURL      string `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
+	RequestId      string              `json:"request_id,omitempty"`      // 订阅预扣账本的幂等请求 ID
 	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
 	SubscriptionId int                 `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
 	TokenId        int                 `json:"token_id,omitempty"`        // 令牌 ID，用于令牌额度退款
@@ -179,6 +199,9 @@ type SyncTaskQueryParams struct {
 func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) *Task {
 	properties := Properties{}
 	privateData := TaskPrivateData{}
+	if relayInfo != nil {
+		privateData.RequestId = relayInfo.RequestId
+	}
 	if relayInfo != nil && relayInfo.ChannelMeta != nil {
 		if relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeGemini ||
 			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeVertexAi {
@@ -314,11 +337,101 @@ func GetAllUnFinishSyncTasks(limit int) []*Task {
 	var tasks []*Task
 	var err error
 	// get all tasks progress is not 100%
-	err = DB.Where("progress != ?", "100%").Where("status != ?", TaskStatusFailure).Where("status != ?", TaskStatusSuccess).Limit(limit).Order("id").Find(&tasks).Error
+	err = DB.
+		Where("progress != ?", "100%").
+		Where("status != ?", TaskStatusFailure).
+		Where("status != ?", TaskStatusSuccess).
+		Where("billing_status != ?", TaskBillingStatusSubmitting).
+		Limit(limit).
+		Order("id").
+		Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
 	return tasks
+}
+
+func GetPendingTaskBilling(limit int) []*Task {
+	tasks, _ := QueryPendingTaskBilling(limit)
+	return tasks
+}
+
+func QueryPendingTaskBilling(limit int) ([]*Task, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	now := common.GetTimestamp()
+	tasks := make([]*Task, 0, limit)
+	for _, status := range []TaskBillingStatus{
+		TaskBillingStatusFinalizePending,
+		TaskBillingStatusSubmitPending,
+	} {
+		remaining := limit - len(tasks)
+		if remaining <= 0 {
+			break
+		}
+		var statusTasks []*Task
+		if err := DB.
+			Where("billing_status = ? AND billing_next_retry_at <= ?", status, now).
+			Order("billing_next_retry_at, id").
+			Limit(remaining).
+			Find(&statusTasks).Error; err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, statusTasks...)
+	}
+	return tasks, nil
+}
+
+func ScheduleTaskBillingRetry(id int64, status TaskBillingStatus, nextRetryAt int64, lastError string) error {
+	if id <= 0 {
+		return gorm.ErrRecordNotFound
+	}
+	if len(lastError) > 512 {
+		lastError = lastError[:512]
+	}
+	result := DB.Model(&Task{}).
+		Where("id = ? AND billing_status = ?", id, status).
+		Updates(map[string]any{
+			"billing_retry_count":   gorm.Expr("billing_retry_count + ?", 1),
+			"billing_next_retry_at": nextRetryAt,
+			"billing_last_error":    lastError,
+			"updated_at":            common.GetTimestamp(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func GetStaleSubmittingTaskBilling(cutoffUnix int64, limit int) []*Task {
+	if limit <= 0 {
+		return nil
+	}
+	var tasks []*Task
+	err := DB.
+		Where("billing_status = ? AND updated_at < ?", TaskBillingStatusSubmitting, cutoffUnix).
+		Order("updated_at, id").
+		Limit(limit).
+		Find(&tasks).Error
+	if err != nil {
+		return nil
+	}
+	return tasks
+}
+
+func GetTaskByID(id int64) (*Task, error) {
+	if id <= 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var task Task
+	if err := DB.First(&task, id).Error; err != nil {
+		return nil, err
+	}
+	return &task, nil
 }
 
 func GetByOnlyTaskId(taskId string) (*Task, bool, error) {
@@ -371,13 +484,19 @@ func (Task *Task) Insert() error {
 }
 
 type taskSnapshot struct {
-	Status     TaskStatus
-	Progress   string
-	StartTime  int64
-	FinishTime int64
-	FailReason string
-	ResultURL  string
-	Data       json.RawMessage
+	Status             TaskStatus
+	Progress           string
+	StartTime          int64
+	FinishTime         int64
+	FailReason         string
+	ResultURL          string
+	Data               json.RawMessage
+	Quota              int
+	BillingStatus      TaskBillingStatus
+	BillingTargetQuota int
+	BillingRetryCount  int
+	BillingNextRetryAt int64
+	BillingLastError   string
 }
 
 func (s taskSnapshot) Equal(other taskSnapshot) bool {
@@ -387,18 +506,30 @@ func (s taskSnapshot) Equal(other taskSnapshot) bool {
 		s.FinishTime == other.FinishTime &&
 		s.FailReason == other.FailReason &&
 		s.ResultURL == other.ResultURL &&
+		s.Quota == other.Quota &&
+		s.BillingStatus == other.BillingStatus &&
+		s.BillingTargetQuota == other.BillingTargetQuota &&
+		s.BillingRetryCount == other.BillingRetryCount &&
+		s.BillingNextRetryAt == other.BillingNextRetryAt &&
+		s.BillingLastError == other.BillingLastError &&
 		bytes.Equal(s.Data, other.Data)
 }
 
 func (t *Task) Snapshot() taskSnapshot {
 	return taskSnapshot{
-		Status:     t.Status,
-		Progress:   t.Progress,
-		StartTime:  t.StartTime,
-		FinishTime: t.FinishTime,
-		FailReason: t.FailReason,
-		ResultURL:  t.PrivateData.ResultURL,
-		Data:       t.Data,
+		Status:             t.Status,
+		Progress:           t.Progress,
+		StartTime:          t.StartTime,
+		FinishTime:         t.FinishTime,
+		FailReason:         t.FailReason,
+		ResultURL:          t.PrivateData.ResultURL,
+		Data:               t.Data,
+		Quota:              t.Quota,
+		BillingStatus:      t.BillingStatus,
+		BillingTargetQuota: t.BillingTargetQuota,
+		BillingRetryCount:  t.BillingRetryCount,
+		BillingNextRetryAt: t.BillingNextRetryAt,
+		BillingLastError:   t.BillingLastError,
 	}
 }
 
@@ -423,6 +554,28 @@ func (t *Task) UpdateWithStatus(fromStatus TaskStatus) (bool, error) {
 	return result.RowsAffected > 0, nil
 }
 
+// UpdateWithSnapshot guards both task lifecycle and billing state. Polling
+// code must use this variant so a stale progress update cannot overwrite a
+// concurrently completed SUBMIT_PENDING or FINALIZE_PENDING adjustment.
+func (t *Task) UpdateWithSnapshot(snapshot taskSnapshot) (bool, error) {
+	result := DB.Model(t).
+		Where(
+			"status = ? AND billing_status = ? AND quota = ? AND billing_target_quota = ? AND billing_retry_count = ? AND billing_next_retry_at = ?",
+			snapshot.Status,
+			snapshot.BillingStatus,
+			snapshot.Quota,
+			snapshot.BillingTargetQuota,
+			snapshot.BillingRetryCount,
+			snapshot.BillingNextRetryAt,
+		).
+		Select("*").
+		Updates(t)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
 // TaskBulkUpdate performs an unconditional bulk UPDATE by upstream task_id strings.
 // Same caveats as TaskBulkUpdateByID — no CAS guard.
 func TaskBulkUpdate(taskIds []string, params map[string]any) error {
@@ -438,7 +591,7 @@ func TaskBulkUpdate(taskIds []string, params map[string]any) error {
 // WARNING: This function has NO CAS (Compare-And-Swap) guard — it will overwrite
 // any concurrent status changes. DO NOT use in billing/quota lifecycle flows
 // (e.g., timeout, success, failure transitions that trigger refunds or settlements).
-// For status transitions that involve billing, use Task.UpdateWithStatus() instead.
+// For status transitions that involve billing, use Task.UpdateWithSnapshot() instead.
 func TaskBulkUpdateByID(ids []int64, params map[string]any) error {
 	if len(ids) == 0 {
 		return nil

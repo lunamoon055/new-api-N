@@ -319,20 +319,18 @@ export function Composer(props: ComposerProps) {
             </div>
           </>
         )}
-        {props.mode === 'video' && (
+        {props.mode === 'video' && props.videoCapabilities && (
           <>
             <Separator className='my-3' />
             <div
               className={cn(
                 'grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.035]',
-                props.videoCapabilities?.showResolution === false
-                  ? 'sm:grid-cols-3'
-                  : props.videoCapabilities
-                    ? 'sm:grid-cols-4'
-                    : 'sm:grid-cols-2'
+                props.videoCapabilities.showResolution
+                  ? 'sm:grid-cols-4'
+                  : 'sm:grid-cols-3'
               )}
             >
-              {!!props.videoCapabilities?.referenceModes.length && (
+              {!!props.videoCapabilities.referenceModes.length && (
                 <ComposerSelectGroup
                   label={t('Reference mode')}
                   value={props.videoReferences.referenceMode}
@@ -355,7 +353,7 @@ export function Composer(props: ComposerProps) {
                   }
                 />
               )}
-              {!!props.videoCapabilities?.aspectRatios.length && (
+              {!!props.videoCapabilities.aspectRatios.length && (
                 <ComposerSelectGroup
                   label={t('Aspect ratio')}
                   value={props.videoOptions.aspectRatio ?? '9:16'}
@@ -373,7 +371,7 @@ export function Composer(props: ComposerProps) {
                   }
                 />
               )}
-              {props.videoCapabilities?.showResolution !== false && (
+              {props.videoCapabilities.showResolution && (
                 <ComposerSelectGroup
                   label={t('Resolution')}
                   value={props.videoOptions.resolution}

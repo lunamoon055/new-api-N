@@ -210,6 +210,10 @@ function ResultPreview(props: {
           src={props.result.videoUrl}
           className='mx-auto max-h-[48rem] w-auto max-w-full rounded-md bg-black'
         />
+      ) : props.result.outputText ? (
+        <div className='bg-muted/40 max-h-[30rem] overflow-auto rounded-lg p-4 text-left text-sm leading-6 whitespace-pre-wrap'>
+          {props.result.outputText}
+        </div>
       ) : (
         <EmptyMediaResult title={t('Video task is waiting for a result')} />
       )}

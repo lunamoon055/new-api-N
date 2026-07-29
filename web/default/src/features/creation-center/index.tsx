@@ -740,7 +740,7 @@ export function CreationCenter() {
       return
     }
     const mentionedVideoReferences =
-      mode === 'video'
+      mode === 'video' && videoCapabilities
         ? filterCreationVideoReferencesByPromptMentions(
             trimmedPrompt,
             videoReferences,
@@ -780,7 +780,7 @@ export function CreationCenter() {
     setInspectorView('task')
     const createdAt = Date.now()
     const videoRequestOptions =
-      mode === 'video'
+      mode === 'video' && videoCapabilities
         ? getCreationVideoRequestOptions(
             videoOptions,
             selectedModel,
@@ -788,11 +788,11 @@ export function CreationCenter() {
           )
         : undefined
     const normalizedVideoOptions =
-      mode === 'video'
+      mode === 'video' && videoCapabilities
         ? normalizeCreationVideoOptions(videoOptions, selectedModel)
         : undefined
     const normalizedVideoReferences =
-      mode === 'video'
+      mode === 'video' && videoCapabilities
         ? normalizeCreationVideoReferences(
             mentionedVideoReferences ?? videoReferences,
             selectedModel
@@ -992,7 +992,9 @@ export function CreationCenter() {
             models={models}
             selectedModel={selectedModel}
             selectedResolution={
-              mode === 'video' ? videoOptions.resolution : undefined
+              mode === 'video' && videoCapabilities
+                ? videoOptions.resolution
+                : undefined
             }
             modeCounts={modeCounts}
             loading={catalogQuery.isLoading}
@@ -1020,7 +1022,9 @@ export function CreationCenter() {
                   mode={mode}
                   model={selectedModel}
                   selectedResolution={
-                    mode === 'video' ? videoOptions.resolution : undefined
+                    mode === 'video' && videoCapabilities
+                      ? videoOptions.resolution
+                      : undefined
                   }
                 />
               </div>

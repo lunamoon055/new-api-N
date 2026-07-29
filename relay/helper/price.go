@@ -281,7 +281,10 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, promptT
 
 	// Expression coefficients are $/1M tokens prices; convert to quota the same way per-call billing does.
 	quotaBeforeGroup := rawCost / 1_000_000 * common.QuotaPerUnit
-	preConsumedQuota := billingexpr.QuotaRound(quotaBeforeGroup * groupRatioInfo.GroupRatio)
+	preConsumedQuota, err := billingexpr.QuotaRoundChecked(quotaBeforeGroup*groupRatioInfo.GroupRatio, common.QuotaPerUnit)
+	if err != nil {
+		return types.PriceData{}, fmt.Errorf("model %s tiered expr quota invalid: %w", info.OriginModelName, err)
+	}
 
 	freeModel := false
 	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {

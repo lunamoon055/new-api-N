@@ -141,7 +141,9 @@ describe('Sanbao creation model options', () => {
       ['720p', '480p']
     )
     assert.deepEqual(
-      getCreationDurationOptions('sd2满血').slice(0, 3).map((item) => item.value),
+      getCreationDurationOptions('sd2满血')
+        .slice(0, 3)
+        .map((item) => item.value),
       ['4', '5', '6']
     )
     assert.equal(getCreationVideoReferenceLimits('sd2满血').maxAudios, 3)
@@ -170,5 +172,32 @@ describe('Sanbao creation model options', () => {
       referenceVideos: ['https://example.com/ref.mp4'],
       referenceAudios: ['https://example.com/ref.wav'],
     })
+  })
+
+  test('ignores catalog display suffixes when matching videos api models', () => {
+    const model = 'sd2-mini (9图3视频3音频)'
+
+    assert.equal(getCreationVideoCapabilities(model)?.kind, 'videos')
+    assert.deepEqual(
+      getCreationResolutionOptions(model).map((item) => item.value),
+      ['720p', '480p']
+    )
+    assert.deepEqual(getCreationVideoReferenceLimits(model), {
+      maxImages: 9,
+      maxVideos: 3,
+      maxAudios: 3,
+      maxMediaFiles: 15,
+      maxImageSizeMB: 20,
+      maxVideoSizeMB: 200,
+      maxAudioSizeMB: 50,
+      maxImageSizeBytes: 20 * 1024 * 1024,
+      maxVideoSizeBytes: 200 * 1024 * 1024,
+      maxAudioSizeBytes: 50 * 1024 * 1024,
+    })
+
+    assert.equal(
+      getCreationVideoCapabilities('sd2-fast（9图3视频3音频）')?.kind,
+      'videos'
+    )
   })
 })
