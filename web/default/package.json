@@ -90,7 +90,7 @@
     "@tanstack/eslint-plugin-query": "^5.95.2",
     "@tanstack/react-query-devtools": "^5.95.2",
     "@tanstack/react-router-devtools": "1.166.13",
-    "@tanstack/router-plugin": "1.167.23",
+    "@tanstack/router-plugin": "1.168.23",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
