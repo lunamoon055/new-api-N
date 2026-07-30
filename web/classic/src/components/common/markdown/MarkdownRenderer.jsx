@@ -39,7 +39,7 @@ import { useTranslation } from 'react-i18next';
 mermaid.initialize({
   startOnLoad: false,
   theme: 'default',
-  securityLevel: 'loose',
+  securityLevel: 'strict',
 });
 
 export function Mermaid(props) {
@@ -452,6 +452,7 @@ function _MarkdownContent(props) {
             <a
               {...aProps}
               target={target}
+              rel={target === '_blank' ? 'noopener noreferrer' : undefined}
               style={{
                 color: isUserMessage ? '#87CEEB' : 'var(--semi-color-primary)',
                 textDecoration: 'none',

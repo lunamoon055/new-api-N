@@ -25,12 +25,18 @@ import {
   ScrollList,
   ScrollItem,
 } from '@douyinfe/semi-ui';
-import { API, showError, copy, showSuccess } from '../../helpers';
+import {
+  API,
+  showError,
+  copy,
+  showSuccess,
+  normalizeExternalHttpUrl,
+  openExternalHttpUrl,
+} from '../../helpers';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { API_ENDPOINTS } from '../../constants/common.constant';
 import { StatusContext } from '../../context/Status';
 import { useActualTheme } from '../../context/Theme';
-import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
 import {
   IconGithubLogo,
@@ -40,6 +46,8 @@ import {
 } from '@douyinfe/semi-icons';
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
+import MarkdownRenderer from '../../components/common/markdown/MarkdownRenderer';
+import SafeHtml from '../../components/common/SafeHtml';
 import {
   Moonshot,
   OpenAI,
@@ -64,6 +72,8 @@ import {
 } from '@lobehub/icons';
 
 const { Text } = Typography;
+const isHtmlContent = (content) =>
+  typeof content === 'string' && /<\/?[a-z][\s\S]*>/i.test(content);
 
 const Home = () => {
   const { t, i18n } = useTranslation();
@@ -86,23 +96,8 @@ const Home = () => {
     const res = await API.get('/api/home_page_content');
     const { success, message, data } = res.data;
     if (success) {
-      let content = data;
-      if (!data.startsWith('https://')) {
-        content = marked.parse(data);
-      }
-      setHomePageContent(content);
-      localStorage.setItem('home_page_content', content);
-
-      // 如果内容是 URL，则发送主题模式
-      if (data.startsWith('https://')) {
-        const iframe = document.querySelector('iframe');
-        if (iframe) {
-          iframe.onload = () => {
-            iframe.contentWindow.postMessage({ themeMode: actualTheme }, '*');
-            iframe.contentWindow.postMessage({ lang: i18n.language }, '*');
-          };
-        }
-      }
+      setHomePageContent(data);
+      localStorage.setItem('home_page_content', data);
     } else {
       showError(message);
       setHomePageContent('加载首页内容失败...');
@@ -147,6 +142,8 @@ const Home = () => {
     }, 3000);
     return () => clearInterval(timer);
   }, [endpointItems.length]);
+
+  const homePageUrl = normalizeExternalHttpUrl(homePageContent);
 
   return (
     <div className='w-full overflow-x-hidden'>
@@ -230,9 +227,8 @@ const Home = () => {
                       className='flex items-center !rounded-3xl px-6 py-2'
                       icon={<IconGithubLogo />}
                       onClick={() =>
-                        window.open(
+                        openExternalHttpUrl(
                           'https://github.com/QuantumNous/new-api',
-                          '_blank',
                         )
                       }
                     >
@@ -244,7 +240,7 @@ const Home = () => {
                         size={isMobile ? 'default' : 'large'}
                         className='flex items-center !rounded-3xl px-6 py-2'
                         icon={<IconFile />}
-                        onClick={() => window.open(docsLink, '_blank')}
+                        onClick={() => openExternalHttpUrl(docsLink)}
                       >
                         {t('文档')}
                       </Button>
@@ -336,16 +332,31 @@ const Home = () => {
         </div>
       ) : (
         <div className='overflow-x-hidden w-full'>
-          {homePageContent.startsWith('https://') ? (
+          {homePageUrl ? (
             <iframe
-              src={homePageContent}
+              src={homePageUrl}
               className='w-full h-screen border-none'
+              title={t('首页内容')}
+              sandbox='allow-forms allow-popups allow-scripts'
+              referrerPolicy='no-referrer'
+              onLoad={(event) => {
+                const targetOrigin = new URL(homePageUrl).origin;
+                event.currentTarget.contentWindow?.postMessage(
+                  { themeMode: actualTheme },
+                  targetOrigin,
+                );
+                event.currentTarget.contentWindow?.postMessage(
+                  { lang: i18n.language },
+                  targetOrigin,
+                );
+              }}
             />
+          ) : isHtmlContent(homePageContent) ? (
+            <SafeHtml html={homePageContent} className='mt-[60px]' />
           ) : (
-            <div
-              className='mt-[60px]'
-              dangerouslySetInnerHTML={{ __html: homePageContent }}
-            />
+            <div className='mt-[60px]'>
+              <MarkdownRenderer content={homePageContent} />
+            </div>
           )}
         </div>
       )}

@@ -25,6 +25,7 @@ import {
 } from './utils';
 import axios from 'axios';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
+import { normalizeExternalHttpUrl } from './safeUrl';
 
 export let API = axios.create({
   baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
@@ -36,19 +37,21 @@ export let API = axios.create({
   },
 });
 
-
 function redirectToOAuthUrl(url, options = {}) {
   const { openInNewTab = false } = options;
-  const targetUrl = typeof url === 'string' ? url : url.toString();
+  const targetUrl = normalizeExternalHttpUrl(
+    typeof url === 'string' ? url : url.toString(),
+  );
+  if (!targetUrl) return false;
 
   if (openInNewTab) {
-    window.open(targetUrl, '_blank');
-    return;
+    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    return true;
   }
 
   window.location.assign(targetUrl);
+  return true;
 }
-
 
 function patchAPIInstance(instance) {
   const originalGet = instance.get.bind(instance);

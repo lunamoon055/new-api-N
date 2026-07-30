@@ -220,7 +220,7 @@ func isDomainListed(domain string, list []string) bool {
 
 	domain = strings.ToLower(domain)
 	for _, item := range list {
-		item = strings.ToLower(strings.TrimSpace(item))
+		item = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(item), "."))
 		if item == "" {
 			continue
 		}

@@ -196,6 +196,30 @@ func TestUpdateSunoTasks_UnknownUpstreamIDDoesNotPanic(t *testing.T) {
 	})
 }
 
+func TestUpdateSunoTasks_UnsuccessfulResponseReturnsError(t *testing.T) {
+	truncate(t)
+	disablePollingTestMemoryCache(t)
+
+	const channelID = 54
+	seedChannel(t, channelID)
+	setPollingTestChannelBaseURL(t, channelID)
+	installSunoPollingTestAdaptor(t, `{
+		"code":"error",
+		"message":"upstream polling failed",
+		"data":[]
+	}`)
+
+	err := updateSunoTasks(
+		context.Background(),
+		channelID,
+		[]string{"requested_upstream_id"},
+		map[string]*model.Task{},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsuccessful task response")
+}
+
 func TestSubmittingTaskSkippedByPollingAndRecoveredWhenStale(t *testing.T) {
 	truncate(t)
 	ctx := context.Background()

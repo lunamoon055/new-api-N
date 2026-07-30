@@ -28,6 +28,8 @@ import {
   renderQuotaWithAmount,
   copy,
   getQuotaPerUnit,
+  normalizeExternalHttpUrl,
+  openExternalHttpUrl,
 } from '../../helpers';
 import { Modal, Toast } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
@@ -188,7 +190,9 @@ const TopUp = () => {
       showError(t('超级管理员未设置充值链接！'));
       return;
     }
-    window.open(topUpLink, '_blank');
+    if (!openExternalHttpUrl(topUpLink)) {
+      showError(t('支付跳转地址无效'));
+    }
   };
 
   const preTopUp = async (payment) => {
@@ -294,14 +298,22 @@ const TopUp = () => {
         if (message === 'success') {
           if (payWay === 'stripe') {
             // Stripe 支付回调处理
-            window.open(data.pay_link, '_blank');
+            if (!openExternalHttpUrl(data.pay_link)) {
+              showError(t('支付跳转地址无效'));
+              return;
+            }
           } else {
             // 普通支付表单提交
             let params = data;
-            let url = res.data.url;
+            let url = normalizeExternalHttpUrl(res.data.url);
+            if (!url) {
+              showError(t('支付跳转地址无效'));
+              return;
+            }
             let form = document.createElement('form');
             form.action = url;
             form.method = 'POST';
+            form.rel = 'noopener noreferrer';
             let isSafari =
               navigator.userAgent.indexOf('Safari') > -1 &&
               navigator.userAgent.indexOf('Chrome') < 1;
@@ -397,7 +409,9 @@ const TopUp = () => {
       if (res !== undefined) {
         const { message, data } = res.data;
         if (message === 'success' && data?.payment_url) {
-          window.open(data.payment_url, '_blank');
+          if (!openExternalHttpUrl(data.payment_url)) {
+            showError(t('支付跳转地址无效'));
+          }
         } else {
           showError(data || t('支付请求失败'));
         }
@@ -455,7 +469,9 @@ const TopUp = () => {
         if (message === 'success') {
           const checkoutUrl = data?.checkout_url || '';
           if (checkoutUrl) {
-            window.open(checkoutUrl, '_blank');
+            if (!openExternalHttpUrl(checkoutUrl)) {
+              showError(t('支付跳转地址无效'));
+            }
           } else {
             showError(t('支付请求失败'));
           }
@@ -503,7 +519,9 @@ const TopUp = () => {
 
   const processCreemCallback = (data) => {
     // 与 Stripe 保持一致的实现方式
-    window.open(data.checkout_url, '_blank');
+    if (!openExternalHttpUrl(data?.checkout_url)) {
+      showError(t('支付跳转地址无效'));
+    }
   };
 
   const getUserQuota = async () => {

@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { normalizeExternalHttpUrl } from '@/lib/safe-url'
 import {
   PAYMENT_TYPES,
   DEFAULT_PRESET_MULTIPLIERS,
@@ -44,10 +45,14 @@ function isSafariBrowser(): boolean {
 export function submitPaymentForm(
   url: string,
   params: Record<string, unknown>
-): void {
+): boolean {
+  const safeUrl = normalizeExternalHttpUrl(url)
+  if (!safeUrl) return false
+
   const form = document.createElement('form')
-  form.action = url
+  form.action = safeUrl
   form.method = 'POST'
+  form.rel = 'noopener noreferrer'
 
   // Don't open in new tab for Safari
   if (!isSafariBrowser()) {
@@ -66,6 +71,7 @@ export function submitPaymentForm(
   document.body.appendChild(form)
   form.submit()
   document.body.removeChild(form)
+  return true
 }
 
 /**

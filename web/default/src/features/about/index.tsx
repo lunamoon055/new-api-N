@@ -20,18 +20,11 @@ import { useQuery } from '@tanstack/react-query'
 import { Construction } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Markdown } from '@/components/ui/markdown'
+import { SafeHtml } from '@/components/ui/safe-html'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
+import { normalizeExternalHttpUrl } from '@/lib/safe-url'
 import { getAboutContent } from './api'
-
-function isValidUrl(value: string) {
-  try {
-    const url = new URL(value)
-    return url.protocol === 'http:' || url.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
 
 function isLikelyHtml(value: string) {
   return /<\/?[a-z][\s\S]*>/i.test(value)
@@ -131,7 +124,8 @@ export function About() {
 
   const rawContent = data?.data?.trim() ?? ''
   const hasContent = rawContent.length > 0
-  const isUrl = hasContent && isValidUrl(rawContent)
+  const aboutUrl = hasContent ? normalizeExternalHttpUrl(rawContent) : null
+  const isUrl = aboutUrl !== null
   const isHtml = hasContent && !isUrl && isLikelyHtml(rawContent)
 
   if (isLoading) {
@@ -159,9 +153,11 @@ export function About() {
     return (
       <PublicLayout showMainContainer={false}>
         <iframe
-          src={rawContent}
+          src={aboutUrl}
           className='h-[calc(100vh-3.5rem)] w-full border-0'
           title={t('About')}
+          sandbox='allow-forms allow-popups allow-scripts'
+          referrerPolicy='no-referrer'
         />
       </PublicLayout>
     )
@@ -171,9 +167,9 @@ export function About() {
     <PublicLayout>
       <div className='mx-auto max-w-6xl px-4 py-8'>
         {isHtml ? (
-          <div
+          <SafeHtml
+            html={rawContent}
             className='prose prose-neutral dark:prose-invert max-w-none'
-            dangerouslySetInnerHTML={{ __html: rawContent }}
           />
         ) : (
           <Markdown className='prose-neutral dark:prose-invert max-w-none'>

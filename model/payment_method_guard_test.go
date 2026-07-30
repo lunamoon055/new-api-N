@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -100,6 +101,64 @@ func TestRechargeWaffoPancake_RejectsMismatchedPaymentMethod(t *testing.T) {
 	require.NotNil(t, topUp)
 	assert.Equal(t, common.TopUpStatusPending, topUp.Status)
 	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 101))
+}
+
+func TestRechargeEpayConcurrentCallbacksCreditOnce(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	common.QuotaPerUnit = 100
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+
+	const userID = 102
+	insertUserForPaymentGuardTest(t, userID, 50)
+	insertTopUpForPaymentGuardTest(t, "epay-idempotent", userID, PaymentProviderEpay)
+
+	const workerCount = 8
+	start := make(chan struct{})
+	errs := make(chan error, workerCount)
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- RechargeEpay("epay-idempotent", "alipay", "127.0.0.1")
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	assert.Equal(t, 250, getUserQuotaForPaymentGuardTest(t, userID))
+
+	topUp := GetTopUpByTradeNo("epay-idempotent")
+	require.NotNil(t, topUp)
+	assert.Equal(t, common.TopUpStatusSuccess, topUp.Status)
+	assert.Equal(t, "alipay", topUp.PaymentMethod)
+
+	var logCount int64
+	require.NoError(t, LOG_DB.Model(&Log{}).
+		Where("user_id = ? AND type = ?", userID, LogTypeTopup).
+		Count(&logCount).Error)
+	assert.Equal(t, int64(1), logCount)
+}
+
+func TestRechargeEpayRejectsMismatchedPaymentProvider(t *testing.T) {
+	truncateTables(t)
+
+	insertUserForPaymentGuardTest(t, 103, 0)
+	insertTopUpForPaymentGuardTest(t, "epay-provider-guard", 103, PaymentProviderStripe)
+
+	err := RechargeEpay("epay-provider-guard", "alipay", "127.0.0.1")
+	require.ErrorIs(t, err, ErrPaymentMethodMismatch)
+	assert.Equal(t, common.TopUpStatusPending, getTopUpStatusForPaymentGuardTest(t, "epay-provider-guard"))
+	assert.Zero(t, getUserQuotaForPaymentGuardTest(t, 103))
 }
 
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {

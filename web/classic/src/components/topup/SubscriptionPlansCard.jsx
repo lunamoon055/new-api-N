@@ -30,7 +30,14 @@ import {
   Tooltip,
   Typography,
 } from '@douyinfe/semi-ui';
-import { API, showError, showSuccess, renderQuota } from '../../helpers';
+import {
+  API,
+  showError,
+  showSuccess,
+  renderQuota,
+  normalizeExternalHttpUrl,
+  openExternalHttpUrl,
+} from '../../helpers';
 import { getCurrencyConfig } from '../../helpers/render';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import SubscriptionPurchaseModal from './modals/SubscriptionPurchaseModal';
@@ -50,9 +57,13 @@ function getEpayMethods(payMethods = []) {
 
 // 提交易支付表单
 function submitEpayForm({ url, params }) {
+  const safeUrl = normalizeExternalHttpUrl(url);
+  if (!safeUrl) return false;
+
   const form = document.createElement('form');
-  form.action = url;
+  form.action = safeUrl;
   form.method = 'POST';
+  form.rel = 'noopener noreferrer';
   const isSafari =
     navigator.userAgent.indexOf('Safari') > -1 &&
     navigator.userAgent.indexOf('Chrome') < 1;
@@ -67,6 +78,7 @@ function submitEpayForm({ url, params }) {
   document.body.appendChild(form);
   form.submit();
   document.body.removeChild(form);
+  return true;
 }
 
 const SubscriptionPlansCard = ({
@@ -124,7 +136,10 @@ const SubscriptionPlansCard = ({
         plan_id: selectedPlan.plan.id,
       });
       if (res.data?.message === 'success') {
-        window.open(res.data.data?.pay_link, '_blank');
+        if (!openExternalHttpUrl(res.data.data?.pay_link)) {
+          showError(t('支付跳转地址无效'));
+          return;
+        }
         showSuccess(t('已打开支付页面'));
         closeBuy();
       } else {
@@ -152,7 +167,10 @@ const SubscriptionPlansCard = ({
         plan_id: selectedPlan.plan.id,
       });
       if (res.data?.message === 'success') {
-        window.open(res.data.data?.checkout_url, '_blank');
+        if (!openExternalHttpUrl(res.data.data?.checkout_url)) {
+          showError(t('支付跳转地址无效'));
+          return;
+        }
         showSuccess(t('已打开支付页面'));
         closeBuy();
       } else {
@@ -181,7 +199,10 @@ const SubscriptionPlansCard = ({
         payment_method: selectedEpayMethod,
       });
       if (res.data?.message === 'success') {
-        submitEpayForm({ url: res.data.url, params: res.data.data });
+        if (!submitEpayForm({ url: res.data.url, params: res.data.data })) {
+          showError(t('支付跳转地址无效'));
+          return;
+        }
         showSuccess(t('已发起支付'));
         closeBuy();
       } else {

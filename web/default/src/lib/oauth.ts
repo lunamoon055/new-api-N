@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from './api'
+import { normalizeExternalHttpUrl, openExternalHttpUrl } from './safe-url'
 
 // ============================================================================
 // OAuth URL Builders
@@ -52,8 +53,11 @@ export function buildOIDCOAuthUrl(
   authUrl: string,
   clientId: string,
   state: string
-): string {
-  const url = new URL(authUrl)
+): string | null {
+  const safeAuthUrl = normalizeExternalHttpUrl(authUrl)
+  if (!safeAuthUrl) return null
+
+  const url = new URL(safeAuthUrl)
   url.searchParams.set('client_id', clientId)
   url.searchParams.set('redirect_uri', `${window.location.origin}/oauth/oidc`)
   url.searchParams.set('response_type', 'code')
@@ -104,7 +108,7 @@ export async function handleGitHubOAuth(clientId: string): Promise<void> {
   if (!state) return
 
   const url = buildGitHubOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+  openExternalHttpUrl(url)
 }
 
 /**
@@ -115,7 +119,7 @@ export async function handleDiscordOAuth(clientId: string): Promise<void> {
   if (!state) return
 
   const url = buildDiscordOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+  openExternalHttpUrl(url)
 }
 
 /**
@@ -129,7 +133,7 @@ export async function handleOIDCOAuth(
   if (!state) return
 
   const url = buildOIDCOAuthUrl(authUrl, clientId, state)
-  window.open(url, '_blank')
+  if (url) openExternalHttpUrl(url)
 }
 
 /**
@@ -140,5 +144,5 @@ export async function handleLinuxDOOAuth(clientId: string): Promise<void> {
   if (!state) return
 
   const url = buildLinuxDOOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+  openExternalHttpUrl(url)
 }

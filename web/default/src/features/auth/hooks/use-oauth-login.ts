@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
+import { normalizeExternalHttpUrl } from '@/lib/safe-url'
 import { getOAuthState } from '../api'
 import {
   buildGitHubOAuthUrl,
@@ -156,6 +157,10 @@ export function useOAuthLogin(status: SystemStatus | null) {
         status.oidc_client_id,
         state
       )
+      if (!url) {
+        toast.error(t('Invalid OAuth authorization URL'))
+        return
+      }
       window.open(url, '_self')
     } catch (_error) {
       toast.error(t('Failed to start OIDC login'))
@@ -202,7 +207,14 @@ export function useOAuthLogin(status: SystemStatus | null) {
       }
 
       const redirectUri = `${window.location.origin}/oauth/${provider.slug}`
-      const url = new URL(provider.authorization_endpoint)
+      const safeEndpoint = normalizeExternalHttpUrl(
+        provider.authorization_endpoint
+      )
+      if (!safeEndpoint) {
+        toast.error(t('Invalid OAuth authorization URL'))
+        return
+      }
+      const url = new URL(safeEndpoint)
       url.searchParams.set('client_id', provider.client_id)
       url.searchParams.set('redirect_uri', redirectUri)
       url.searchParams.set('response_type', 'code')

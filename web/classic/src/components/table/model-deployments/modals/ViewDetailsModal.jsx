@@ -48,6 +48,7 @@ import {
   showError,
   showSuccess,
   timestamp2string,
+  openExternalHttpUrl,
 } from '../../../../helpers';
 
 const { Text, Title } = Typography;
@@ -431,11 +432,7 @@ const ViewDetailsModal = ({ visible, onCancel, deployment, t }) => {
                               size='small'
                               theme='light'
                               onClick={() =>
-                                window.open(
-                                  ctr.public_url,
-                                  '_blank',
-                                  'noopener,noreferrer',
-                                )
+                                openExternalHttpUrl(ctr.public_url)
                               }
                             >
                               {t('访问容器')}

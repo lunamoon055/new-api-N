@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -95,18 +94,18 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 	//return fmt.Errorf("get Video Task status code: %d", resp.StatusCode)
 	//}
 	defer resp.Body.Close()
-	responseBody, err := io.ReadAll(resp.Body)
+	responseBody, err := common.ReadResponseBodyWithLimit(resp.Body, common.MaxUpstreamResponseBodyBytes)
 	if err != nil {
-		return fmt.Errorf("readAll failed for task %s: %w", taskId, err)
+		return fmt.Errorf("read response failed for task %s: %w", taskId, err)
 	}
 
-	logger.LogDebug(ctx, "UpdateVideoSingleTask response: %s", responseBody)
+	logger.LogDebug(ctx, "UpdateVideoSingleTask response bytes: %d", len(responseBody))
 
 	taskResult := &relaycommon.TaskInfo{}
 	// try parse as New API response format
 	var responseItems dto.TaskResponse[model.Task]
 	if err = common.Unmarshal(responseBody, &responseItems); err == nil && responseItems.IsSuccess() {
-		logger.LogDebug(ctx, "UpdateVideoSingleTask parsed as new api response format: %+v", responseItems)
+		logger.LogDebug(ctx, "UpdateVideoSingleTask parsed as new api response format")
 		t := responseItems.Data
 		taskResult.TaskID = t.TaskID
 		taskResult.Status = string(t.Status)
@@ -120,7 +119,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		task.Data = redactVideoResponseBody(responseBody)
 	}
 
-	logger.LogDebug(ctx, "UpdateVideoSingleTask taskResult: %+v", taskResult)
+	logger.LogDebug(ctx, "UpdateVideoSingleTask parsed status: %s", taskResult.Status)
 
 	now := time.Now().Unix()
 	if taskResult.Status == "" {

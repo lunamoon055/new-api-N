@@ -18,14 +18,18 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState } from 'react';
-import { API, showError } from '../../helpers';
-import { marked } from 'marked';
+import { API, normalizeExternalHttpUrl, showError } from '../../helpers';
 import { Empty } from '@douyinfe/semi-ui';
 import {
   IllustrationConstruction,
   IllustrationConstructionDark,
 } from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
+import MarkdownRenderer from '../../components/common/markdown/MarkdownRenderer';
+import SafeHtml from '../../components/common/SafeHtml';
+
+const isHtmlContent = (content) =>
+  typeof content === 'string' && /<\/?[a-z][\s\S]*>/i.test(content);
 
 const About = () => {
   const { t } = useTranslation();
@@ -38,12 +42,8 @@ const About = () => {
     const res = await API.get('/api/about');
     const { success, message, data } = res.data;
     if (success) {
-      let aboutContent = data;
-      if (!data.startsWith('https://')) {
-        aboutContent = marked.parse(data);
-      }
-      setAbout(aboutContent);
-      localStorage.setItem('about', aboutContent);
+      setAbout(data);
+      localStorage.setItem('about', data);
     } else {
       showError(message);
       setAbout(t('加载关于内容失败...'));
@@ -58,6 +58,7 @@ const About = () => {
   const emptyStyle = {
     padding: '24px',
   };
+  const aboutUrl = normalizeExternalHttpUrl(about);
 
   const customDescription = (
     <div style={{ textAlign: 'center' }}>
@@ -153,16 +154,20 @@ const About = () => {
         </div>
       ) : (
         <>
-          {about.startsWith('https://') ? (
+          {aboutUrl ? (
             <iframe
-              src={about}
+              src={aboutUrl}
               style={{ width: '100%', height: '100vh', border: 'none' }}
+              title={t('关于')}
+              sandbox='allow-forms allow-popups allow-scripts'
+              referrerPolicy='no-referrer'
             />
+          ) : isHtmlContent(about) ? (
+            <SafeHtml html={about} style={{ fontSize: 'larger' }} />
           ) : (
-            <div
-              style={{ fontSize: 'larger' }}
-              dangerouslySetInnerHTML={{ __html: about }}
-            ></div>
+            <div style={{ fontSize: 'larger' }}>
+              <MarkdownRenderer content={about} />
+            </div>
           )}
         </>
       )}
