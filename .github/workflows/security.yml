@@ -46,6 +46,12 @@ jobs:
           go-version: '1.26.5'
           cache: true
 
+      - name: Prepare embedded frontend placeholders
+        run: |
+          mkdir -p web/default/dist web/classic/dist
+          printf '%s\n' '<!doctype html><title>CI placeholder</title>' > web/default/dist/index.html
+          printf '%s\n' '<!doctype html><title>CI placeholder</title>' > web/classic/dist/index.html
+
       - name: Verify modules
         run: go mod verify
 
