@@ -16,24 +16,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Code, Table, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  createModelMappingRow,
+  parseModelMappingRows,
+  type ModelMappingRow,
+} from '../lib/model-mapping-state'
 
 type ModelMappingEditorProps = {
   value: string
   onChange: (value: string) => void
   disabled?: boolean
-}
-
-type MappingRow = {
-  id: string
-  from: string
-  to: string
 }
 
 export function ModelMappingEditor({
@@ -43,37 +42,39 @@ export function ModelMappingEditor({
 }: ModelMappingEditorProps) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<'visual' | 'json'>('visual')
-  const [rows, setRows] = useState<MappingRow[]>([])
+  const [rows, setRows] = useState<ModelMappingRow[]>(
+    () => parseModelMappingRows(value) ?? []
+  )
   const [jsonValue, setJsonValue] = useState(value)
+  const lastEmittedValueRef = useRef<string | null>(null)
 
-  const parseJsonToRows = (json: string) => {
-    try {
-      if (!json.trim()) {
-        setRows([])
-        return
-      }
-      const parsed = JSON.parse(json)
-      const newRows: MappingRow[] = Object.entries(parsed).map(
-        ([from, to], index) => ({
-          id: `${Date.now()}-${index}`,
-          from,
-          to: String(to),
-        })
-      )
-      setRows(newRows)
-    } catch (_error) {
-      // Invalid JSON, keep current rows
-    }
-  }
+  const syncRowsFromJson = useCallback((json: string) => {
+    setRows((currentRows) => {
+      return parseModelMappingRows(json, currentRows) ?? currentRows
+    })
+  }, [])
+
+  const emitValue = useCallback(
+    (nextValue: string) => {
+      lastEmittedValueRef.current = nextValue
+      setJsonValue(nextValue)
+      onChange(nextValue)
+    },
+    [onChange]
+  )
 
   // Parse JSON to rows when value changes externally
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setJsonValue(value)
-    parseJsonToRows(value)
-  }, [value])
+    if (lastEmittedValueRef.current === value) {
+      lastEmittedValueRef.current = null
+      return
+    }
+    syncRowsFromJson(value)
+  }, [syncRowsFromJson, value])
 
-  const convertRowsToJson = (updatedRows: MappingRow[]): string => {
+  const convertRowsToJson = (updatedRows: ModelMappingRow[]): string => {
     if (updatedRows.length === 0) {
       return ''
     }
@@ -87,11 +88,7 @@ export function ModelMappingEditor({
   }
 
   const handleAddRow = () => {
-    const newRow: MappingRow = {
-      id: `${Date.now()}`,
-      from: '',
-      to: '',
-    }
+    const newRow = createModelMappingRow()
     const updatedRows = [...rows, newRow]
     setRows(updatedRows)
   }
@@ -100,8 +97,7 @@ export function ModelMappingEditor({
     const updatedRows = rows.filter((row) => row.id !== id)
     setRows(updatedRows)
     const json = convertRowsToJson(updatedRows)
-    setJsonValue(json)
-    onChange(json)
+    emitValue(json)
   }
 
   const handleRowChange = (
@@ -114,14 +110,12 @@ export function ModelMappingEditor({
     )
     setRows(updatedRows)
     const json = convertRowsToJson(updatedRows)
-    setJsonValue(json)
-    onChange(json)
+    emitValue(json)
   }
 
   const handleJsonChange = (newJson: string) => {
-    setJsonValue(newJson)
-    onChange(newJson)
-    parseJsonToRows(newJson)
+    emitValue(newJson)
+    syncRowsFromJson(newJson)
   }
 
   const handleFillTemplate = () => {
@@ -130,21 +124,19 @@ export function ModelMappingEditor({
       null,
       2
     )
-    setJsonValue(template)
-    onChange(template)
-    parseJsonToRows(template)
+    emitValue(template)
+    syncRowsFromJson(template)
   }
 
   const toggleMode = () => {
     if (mode === 'visual') {
       // Switching to JSON mode: sync rows to JSON
       const json = convertRowsToJson(rows)
-      setJsonValue(json)
-      onChange(json)
+      emitValue(json)
       setMode('json')
     } else {
       // Switching to visual mode: sync JSON to rows
-      parseJsonToRows(jsonValue)
+      syncRowsFromJson(jsonValue)
       setMode('visual')
     }
   }

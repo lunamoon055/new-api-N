@@ -1,0 +1,124 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+.creation-video-waiting {
+  background:
+    radial-gradient(
+      circle at 50% 44%,
+      rgb(255 255 255 / 0.98) 0%,
+      rgb(249 251 255 / 0.96) 42%,
+      rgb(242 248 252 / 0.94) 100%
+    ),
+    linear-gradient(135deg, rgb(224 247 255 / 0.46), rgb(241 233 255 / 0.46));
+}
+
+.dark .creation-video-waiting {
+  background:
+    radial-gradient(
+      circle at 50% 44%,
+      rgb(20 30 43 / 0.98) 0%,
+      rgb(10 18 28 / 0.98) 56%,
+      rgb(7 13 21 / 1) 100%
+    ),
+    linear-gradient(135deg, rgb(8 97 126 / 0.2), rgb(91 52 135 / 0.2));
+}
+
+.creation-video-waiting__wave {
+  position: absolute;
+  inset: -8% -12%;
+  width: 124%;
+  height: 116%;
+  max-width: none;
+  will-change: transform;
+}
+
+.creation-video-waiting__wave--front {
+  animation: creation-video-aurora-drift-front 12s ease-in-out infinite;
+}
+
+.creation-video-waiting__wave--back {
+  animation: creation-video-aurora-drift-back 15s ease-in-out infinite;
+}
+
+.creation-video-waiting__orb {
+  position: absolute;
+  width: min(36rem, 70vw);
+  aspect-ratio: 1.7;
+  border-radius: 9999px;
+  filter: blur(72px);
+  opacity: 0.22;
+  will-change: transform;
+  animation: creation-video-aurora-orb 10s ease-in-out infinite;
+}
+
+.creation-video-waiting__icon {
+  animation: creation-video-icon-breathe 2.8s ease-in-out infinite;
+}
+
+@keyframes creation-video-aurora-drift-front {
+  0%,
+  100% {
+    transform: translate3d(-1.5%, 0, 0) scale(1.01);
+  }
+  50% {
+    transform: translate3d(1.5%, -1.75%, 0) scale(1.025);
+  }
+}
+
+@keyframes creation-video-aurora-drift-back {
+  0%,
+  100% {
+    transform: translate3d(1.5%, -0.5%, 0) scale(1.02);
+  }
+  50% {
+    transform: translate3d(-1.5%, 1.5%, 0) scale(1.035);
+  }
+}
+
+@keyframes creation-video-aurora-orb {
+  0%,
+  100% {
+    transform: translate3d(-6%, 0, 0) scale(0.98);
+  }
+  50% {
+    transform: translate3d(6%, -4%, 0) scale(1.04);
+  }
+}
+
+@keyframes creation-video-icon-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 12px 40px rgb(56 189 248 / 0.12),
+      0 0 0 6px rgb(255 255 255 / 0.2);
+  }
+  50% {
+    box-shadow:
+      0 16px 48px rgb(139 92 246 / 0.2),
+      0 0 0 9px rgb(255 255 255 / 0.3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .creation-video-waiting__wave,
+  .creation-video-waiting__orb,
+  .creation-video-waiting__icon {
+    animation: none !important;
+    will-change: auto;
+  }
+}

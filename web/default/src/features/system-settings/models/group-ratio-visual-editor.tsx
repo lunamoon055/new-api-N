@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useMemo, useCallback, memo } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, memo } from 'react'
 import {
   Pencil,
   Plus,
@@ -59,6 +59,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { safeJsonParse } from '../utils/json-parser'
+import {
+  classifyGroupPricingEcho,
+  createGroupPricingEchoGuard,
+  type GroupPricingEchoGuard,
+} from './group-pricing-state'
 
 type GroupRatioVisualEditorProps = {
   groupRatio: string
@@ -142,19 +147,6 @@ function serializeGroupPricingRows(rows: GroupPricingRow[]) {
     GroupRatio: JSON.stringify(groupRatio, null, 2),
     UserUsableGroups: JSON.stringify(userUsableGroups, null, 2),
   }
-}
-
-function sourceGroupPricingSignature(
-  groupRatio: string,
-  userUsableGroups: string
-): string {
-  return JSON.stringify({
-    groupRatio: safeJsonParse(groupRatio, { fallback: {}, silent: true }),
-    userUsableGroups: safeJsonParse(userUsableGroups, {
-      fallback: {},
-      silent: true,
-    }),
-  })
 }
 
 export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
@@ -419,7 +411,6 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
   return (
     <div className='space-y-4'>
       <GroupPricingTable
-        key={sourceGroupPricingSignature(groupRatio, userUsableGroups)}
         groupRatio={groupRatio}
         userUsableGroups={userUsableGroups}
         onChange={onChange}
@@ -793,15 +784,38 @@ function GroupPricingTable({
   const [rows, setRows] = useState<GroupPricingRow[]>(() =>
     buildGroupPricingRows(groupRatio, userUsableGroups)
   )
+  const echoGuardRef = useRef<GroupPricingEchoGuard | null>(null)
+
+  useEffect(() => {
+    const echo = classifyGroupPricingEcho(
+      echoGuardRef.current,
+      groupRatio,
+      userUsableGroups
+    )
+    if (echo.expected) {
+      if (echo.complete) {
+        echoGuardRef.current = null
+      }
+      return
+    }
+
+    echoGuardRef.current = null
+    setRows(buildGroupPricingRows(groupRatio, userUsableGroups))
+  }, [groupRatio, userUsableGroups])
 
   const emitRows = useCallback(
     (nextRows: GroupPricingRow[]) => {
       setRows(nextRows)
       const serialized = serializeGroupPricingRows(nextRows)
+      echoGuardRef.current = createGroupPricingEchoGuard(
+        groupRatio,
+        userUsableGroups,
+        serialized
+      )
       onChange('GroupRatio', serialized.GroupRatio)
       onChange('UserUsableGroups', serialized.UserUsableGroups)
     },
-    [onChange]
+    [groupRatio, onChange, userUsableGroups]
   )
 
   const updateRow = useCallback(

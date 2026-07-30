@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { Image, MessageSquare, RefreshCw, Timer, Video } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
@@ -32,7 +33,12 @@ import {
   getCreationCountdownSeconds,
   getCreationTimedOut,
 } from '../session'
+import {
+  getVideoGenerationWaitingPhase,
+  type VideoGenerationWaitingPhase,
+} from '../lib/preview-state'
 import type { CreationMode, CreationModel, CreationResult } from '../types'
+import './creation-video-waiting.css'
 
 type CreationPreviewProps = {
   className?: string
@@ -47,6 +53,11 @@ type CreationPreviewProps = {
 
 export function CreationPreview(props: CreationPreviewProps) {
   const { t } = useTranslation()
+  const videoWaitingPhase = getVideoGenerationWaitingPhase({
+    mode: props.mode,
+    submitting: props.submitting,
+    result: props.result,
+  })
 
   return (
     <section
@@ -71,8 +82,21 @@ export function CreationPreview(props: CreationPreviewProps) {
         )}
       </div>
 
-      <div className='flex min-h-[calc(28rem-3rem)] items-center justify-center bg-slate-50/70 p-4 sm:p-6 dark:bg-[#0b1118]'>
-        {props.submitting ? (
+      <div
+        className={cn(
+          'min-h-[calc(28rem-3rem)] bg-slate-50/70 dark:bg-[#0b1118]',
+          videoWaitingPhase
+            ? 'relative'
+            : 'flex items-center justify-center p-4 sm:p-6'
+        )}
+      >
+        {videoWaitingPhase ? (
+          <VideoGenerationWaiting
+            phase={videoWaitingPhase}
+            result={props.result}
+            now={props.now}
+          />
+        ) : props.submitting ? (
           <SubmittingPreview mode={props.mode} />
         ) : props.result ? (
           <ResultPreview
@@ -86,6 +110,225 @@ export function CreationPreview(props: CreationPreviewProps) {
         )}
       </div>
     </section>
+  )
+}
+
+function VideoGenerationWaiting(props: {
+  phase: VideoGenerationWaitingPhase
+  result?: CreationResult
+  now: number
+}) {
+  const { t } = useTranslation()
+  const requestAccepted = props.phase !== 'submitting'
+  const countdownSeconds = props.result
+    ? getCreationCountdownSeconds(
+        props.result.createdAt,
+        props.result.estimateSeconds,
+        props.now
+      )
+    : 0
+  const timedOut = props.result
+    ? getCreationTimedOut(
+        props.result.createdAt,
+        props.result.estimateSeconds,
+        props.now
+      )
+    : false
+  const hasEstimate = Boolean(
+    props.result?.createdAt && props.result.estimateSeconds
+  )
+  const currentStageLabel =
+    props.phase === 'queued' ? t('Queued') : t('Processing')
+  const stages = [
+    {
+      label: requestAccepted ? t('Submitted') : t('Submitting'),
+      state: requestAccepted ? 'done' : 'active',
+    },
+    {
+      label: currentStageLabel,
+      state: requestAccepted ? 'active' : 'pending',
+    },
+    {
+      label: t('Completed'),
+      state: 'pending',
+    },
+  ] as const
+
+  return (
+    <div className='creation-video-waiting relative isolate flex min-h-[calc(28rem-3rem)] w-full items-center justify-center overflow-hidden px-5 py-10 sm:px-8'>
+      <div
+        aria-hidden='true'
+        className='pointer-events-none absolute inset-0 overflow-hidden'
+      >
+        <div className='creation-video-waiting__orb top-[18%] left-[18%] bg-cyan-300 dark:bg-cyan-600' />
+        <div className='creation-video-waiting__orb right-[12%] bottom-[12%] bg-violet-300 [animation-delay:-5s] dark:bg-violet-700' />
+        <svg
+          className='creation-video-waiting__wave creation-video-waiting__wave--back opacity-55 dark:opacity-45'
+          viewBox='0 0 1200 420'
+          preserveAspectRatio='none'
+        >
+          <defs>
+            <linearGradient
+              id='creation-aurora-back'
+              x1='0'
+              y1='0'
+              x2='1'
+              y2='0'
+            >
+              <stop offset='0%' stopColor='#67e8f9' stopOpacity='0' />
+              <stop offset='24%' stopColor='#38bdf8' stopOpacity='0.55' />
+              <stop offset='68%' stopColor='#a78bfa' stopOpacity='0.5' />
+              <stop offset='100%' stopColor='#c4b5fd' stopOpacity='0' />
+            </linearGradient>
+            <filter
+              id='creation-aurora-back-blur'
+              x='-20%'
+              y='-40%'
+              width='140%'
+              height='180%'
+            >
+              <feGaussianBlur stdDeviation='22' />
+            </filter>
+          </defs>
+          <path
+            d='M-100 270 C120 430 220 65 455 215 S760 85 970 255 S1210 345 1330 155'
+            fill='none'
+            stroke='url(#creation-aurora-back)'
+            strokeWidth='72'
+            filter='url(#creation-aurora-back-blur)'
+          />
+        </svg>
+        <svg
+          className='creation-video-waiting__wave creation-video-waiting__wave--front opacity-75 dark:opacity-60'
+          viewBox='0 0 1200 420'
+          preserveAspectRatio='none'
+        >
+          <defs>
+            <linearGradient
+              id='creation-aurora-front'
+              x1='0'
+              y1='0'
+              x2='1'
+              y2='0'
+            >
+              <stop offset='0%' stopColor='#bae6fd' stopOpacity='0' />
+              <stop offset='22%' stopColor='#22d3ee' stopOpacity='0.62' />
+              <stop offset='60%' stopColor='#e0e7ff' stopOpacity='0.48' />
+              <stop offset='82%' stopColor='#8b5cf6' stopOpacity='0.48' />
+              <stop offset='100%' stopColor='#ddd6fe' stopOpacity='0' />
+            </linearGradient>
+            <filter
+              id='creation-aurora-front-blur'
+              x='-20%'
+              y='-30%'
+              width='140%'
+              height='160%'
+            >
+              <feGaussianBlur stdDeviation='8' />
+            </filter>
+          </defs>
+          <path
+            d='M-120 315 C115 410 240 115 465 245 S760 125 945 275 S1180 365 1320 195'
+            fill='none'
+            stroke='url(#creation-aurora-front)'
+            strokeWidth='18'
+            filter='url(#creation-aurora-front-blur)'
+          />
+          <path
+            d='M-120 315 C115 410 240 115 465 245 S760 125 945 275 S1180 365 1320 195'
+            fill='none'
+            stroke='url(#creation-aurora-front)'
+            strokeWidth='2'
+          />
+        </svg>
+      </div>
+
+      <div className='relative z-10 flex w-full max-w-md flex-col items-center gap-5 text-center'>
+        <div className='creation-video-waiting__icon flex size-16 items-center justify-center rounded-2xl border border-white/75 bg-white/60 text-sky-500 backdrop-blur-md dark:border-white/15 dark:bg-white/10 dark:text-cyan-300'>
+          <Video className='size-7' strokeWidth={1.8} />
+        </div>
+
+        <div aria-live='polite' aria-atomic='true' className='grid gap-2'>
+          <h3 className='text-base font-semibold tracking-tight sm:text-lg'>
+            {t('Video is being generated')}
+          </h3>
+          <p className='text-muted-foreground text-xs leading-5 sm:text-sm'>
+            {props.phase === 'submitting'
+              ? t(
+                  'Please keep this page open while the request is being submitted.'
+                )
+              : t('The model is processing the scene. Please wait.')}
+          </p>
+        </div>
+
+        {hasEstimate &&
+          (countdownSeconds > 0 ? (
+            <Badge
+              variant='secondary'
+              className='border-border/60 bg-background/65 h-7 gap-1.5 border px-3 font-normal shadow-sm backdrop-blur-md'
+            >
+              <Timer className='size-3.5!' />
+              <span className='tabular-nums'>
+                {t('Estimated remaining')}{' '}
+                {formatCreationCountdown(countdownSeconds)}
+              </span>
+            </Badge>
+          ) : timedOut ? (
+            <p className='border-amber-500/20 bg-amber-500/10 text-amber-700 max-w-sm rounded-full border px-3 py-1.5 text-[11px] leading-4 dark:text-amber-300'>
+              {t(
+                'Generation is taking longer than expected. You can refresh later or check the task log.'
+              )}
+            </p>
+          ) : null)}
+
+        <div
+          className='relative grid w-full max-w-sm grid-cols-3'
+          aria-label={t('Processing')}
+        >
+          <div
+            aria-hidden='true'
+            className='bg-border/70 absolute top-[5px] right-[16.667%] left-[16.667%] h-px'
+          >
+            <div
+              className={cn(
+                'h-full bg-cyan-500 transition-[width] duration-500 motion-reduce:transition-none',
+                requestAccepted ? 'w-1/2' : 'w-0'
+              )}
+            />
+          </div>
+          {stages.map((stage) => (
+            <div
+              key={stage.label}
+              className='relative z-10 flex flex-col items-center gap-2'
+            >
+              <span
+                aria-hidden='true'
+                className={cn(
+                  'size-2.5 rounded-full border-2 transition-colors motion-reduce:transition-none',
+                  stage.state === 'active' &&
+                    'border-cyan-500 bg-cyan-500 ring-4 ring-cyan-500/10',
+                  stage.state === 'done' && 'border-cyan-500 bg-cyan-500',
+                  stage.state === 'pending' &&
+                    'border-muted-foreground/30 bg-background'
+                )}
+              />
+              <span
+                className={cn(
+                  'text-[11px] font-medium',
+                  stage.state === 'active'
+                    ? 'text-cyan-700 dark:text-cyan-300'
+                    : stage.state === 'done'
+                      ? 'text-foreground/75'
+                      : 'text-muted-foreground'
+                )}
+              >
+                {stage.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
