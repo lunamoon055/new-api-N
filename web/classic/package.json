@@ -8,7 +8,7 @@
     "@douyinfe/semi-ui": "2.72.2",
     "@lobehub/icons": "^2.0.0",
     "@visactor/react-vchart": "~1.8.8",
-    "@visactor/vchart": "~1.8.8",
+    "@visactor/vchart": "~2.1.4",
     "@visactor/vchart-semi-theme": "~1.8.8",
     "axios": "1.18.1",
     "clsx": "^2.1.1",
