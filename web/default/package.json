@@ -33,7 +33,7 @@
     "@visactor/vchart": "^2.0.13",
     "ai": "^6.0.27",
     "auto-skeleton-react": "^1.0.5",
-    "axios": "^1.18.1",
+    "axios": "^1.19.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
