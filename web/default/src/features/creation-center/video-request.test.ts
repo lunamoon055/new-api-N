@@ -115,6 +115,57 @@ describe('Creation Center video request payload', () => {
     )
   })
 
+  test('submits the 993 fixed-resolution models without an unsupported resolution field', () => {
+    for (const model of ['sd2-1080P(993按秒)', 'sd2-4k(993按秒)']) {
+      assert.deepEqual(
+        buildCreationVideoSubmitRequest({
+          model: createVideoModel(model),
+          prompt: '生成一段城市延时摄影',
+          videoOptions: {
+            resolution: '480p',
+            duration: '8',
+            aspectRatio: '16:9',
+          },
+        }),
+        {
+          endpoint: '/api/creation/video/async-generations',
+          payload: {
+            model,
+            prompt: '生成一段城市延时摄影',
+            duration: 8,
+            ratio: '16:9',
+          },
+          transport: 'async-video',
+        }
+      )
+    }
+  })
+
+  test('submits the 993 720p model with the selected resolution', () => {
+    assert.deepEqual(
+      buildCreationVideoSubmitRequest({
+        model: createVideoModel('sd2-720P(993)'),
+        prompt: '生成一段城市延时摄影',
+        videoOptions: {
+          resolution: '480p',
+          duration: '6',
+          aspectRatio: '9:16',
+        },
+      }),
+      {
+        endpoint: '/api/creation/video/async-generations',
+        payload: {
+          model: 'sd2-720P(993)',
+          prompt: '生成一段城市延时摄影',
+          duration: 6,
+          ratio: '9:16',
+          resolution: '480p',
+        },
+        transport: 'async-video',
+      }
+    )
+  })
+
   test('keeps dedicated request fields for adapted video models', () => {
     assert.deepEqual(
       buildCreationVideoSubmitRequest({

@@ -98,6 +98,7 @@ export type CreationVideoCapability = {
   aspectRatios: CreationAspectRatio[]
   referenceModes: CreationVideoReferenceMode[]
   showResolution: boolean
+  includeResolutionInRequest: boolean
   durationControl: 'menu' | 'select'
   referenceLimits: CreationVideoReferenceLimits
   concurrencyOptions?: number[]
@@ -155,7 +156,7 @@ type SanbaoCreationVideoRequestOptions = {
 type VideosApiCreationVideoRequestOptions = {
   duration: number
   ratio: CreationAspectRatio
-  resolution: '480p' | '720p'
+  resolution?: '480p' | '720p'
   estimateSeconds: number
   referenceImages?: string[]
   referenceVideos?: string[]
@@ -287,6 +288,7 @@ const SORA2_VIDEO_CAPABILITY: CreationVideoCapability = {
   aspectRatios: ['9:16', '16:9'],
   referenceModes: ['image'],
   showResolution: false,
+  includeResolutionInRequest: false,
   durationControl: 'select',
   referenceLimits: SORA2_REFERENCE_LIMITS,
 }
@@ -298,6 +300,7 @@ const VIDEO2_720P_CAPABILITY: CreationVideoCapability = {
   aspectRatios: ['9:16', '16:9', '1:1'],
   referenceModes: ['image', 'video', 'multimodal'],
   showResolution: true,
+  includeResolutionInRequest: true,
   durationControl: 'menu',
   referenceLimits: VIDEO2_REFERENCE_LIMITS,
 }
@@ -314,6 +317,7 @@ const VIDEOS_API_CAPABILITY: CreationVideoCapability = {
   aspectRatios: ['16:9', '9:16', '1:1'],
   referenceModes: ['image', 'video', 'multimodal'],
   showResolution: true,
+  includeResolutionInRequest: true,
   durationControl: 'menu',
   referenceLimits: VIDEOS_API_REFERENCE_LIMITS,
 }
@@ -321,6 +325,25 @@ const VIDEOS_API_CAPABILITY: CreationVideoCapability = {
 const VIDEOS_4_API_CAPABILITY: CreationVideoCapability = {
   ...VIDEOS_API_CAPABILITY,
   referenceLimits: VIDEO2_REFERENCE_LIMITS,
+}
+
+const SD2_1080P_API_CAPABILITY: CreationVideoCapability = {
+  ...VIDEOS_API_CAPABILITY,
+  resolutions: ['1080p'],
+  showResolution: false,
+  includeResolutionInRequest: false,
+}
+
+const SD2_4K_API_CAPABILITY: CreationVideoCapability = {
+  ...VIDEOS_API_CAPABILITY,
+  resolutions: ['4k'],
+  showResolution: false,
+  includeResolutionInRequest: false,
+}
+
+const SD2_720P_API_CAPABILITY: CreationVideoCapability = {
+  ...VIDEOS_API_CAPABILITY,
+  resolutions: ['720p', '480p'],
 }
 
 const VIDEO_MODEL_ID_ALIASES: Record<string, string> = {
@@ -348,6 +371,9 @@ const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
   'sd2-mini': VIDEOS_API_CAPABILITY,
   'sd2-fast': VIDEOS_API_CAPABILITY,
   sd2满血: VIDEOS_API_CAPABILITY,
+  'sd2-1080p': SD2_1080P_API_CAPABILITY,
+  'sd2-4k': SD2_4K_API_CAPABILITY,
+  'sd2-720p': SD2_720P_API_CAPABILITY,
 }
 
 export const DEFAULT_CREATION_VIDEO_OPTIONS: CreationVideoOptions = {
@@ -535,6 +561,7 @@ function getSanbaoVideoCapability(
       : ['9:16', '16:9', '1:1'],
     referenceModes: referenceModes.length ? referenceModes : ['image'],
     showResolution: true,
+    includeResolutionInRequest: true,
     durationControl: 'select',
     referenceLimits,
     concurrencyOptions: metadata.concurrency_options,
@@ -587,7 +614,12 @@ export function getCreationResolutionOptions(model?: CreationModelInput) {
     return capability.resolutions.map(getResolutionOption)
   }
   if (capability?.kind === 'videos') {
-    return VIDEOS_API_CREATION_RESOLUTION_OPTIONS
+    return capability.resolutions.map(
+      (value) =>
+        VIDEOS_API_CREATION_RESOLUTION_OPTIONS.find(
+          (item) => item.value === value
+        ) ?? getResolutionOption(value)
+    )
   }
   if (capability?.kind === 'video2') {
     return capability.resolutions.includes('480p')
@@ -1185,8 +1217,11 @@ export function getCreationVideoRequestOptions(
     const request: VideosApiCreationVideoRequestOptions = {
       duration: Number(normalizedOptions.duration),
       ratio: normalizedOptions.aspectRatio ?? capability.aspectRatios[0],
-      resolution: normalizedOptions.resolution === '480p' ? '480p' : '720p',
       estimateSeconds: duration.estimateSeconds,
+    }
+    if (capability.includeResolutionInRequest) {
+      request.resolution =
+        normalizedOptions.resolution === '480p' ? '480p' : '720p'
     }
     if (imageUrls.length) request.referenceImages = imageUrls
     if (videoUrls.length) request.referenceVideos = videoUrls

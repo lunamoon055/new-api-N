@@ -252,4 +252,55 @@ describe('Sanbao creation model options', () => {
       'videos'
     )
   })
+
+  test('uses fixed resolutions for the 993 1080p and 4k models', () => {
+    for (const [model, expectedResolution] of [
+      ['sd2-1080P(993按秒)', '1080p'],
+      ['sd2-4k(993按秒)', '4k'],
+    ] as const) {
+      const capability = getCreationVideoCapabilities(model)
+      assert.equal(capability?.kind, 'videos')
+      assert.equal(capability?.showResolution, false)
+      assert.equal(capability?.includeResolutionInRequest, false)
+      assert.deepEqual(
+        getCreationResolutionOptions(model).map((item) => item.value),
+        [expectedResolution]
+      )
+
+      const options = normalizeCreationVideoOptions(
+        { resolution: '480p', duration: '8', aspectRatio: '16:9' },
+        model
+      )
+      assert.equal(options.resolution, expectedResolution)
+      assert.deepEqual(getCreationVideoRequestOptions(options, model), {
+        duration: 8,
+        ratio: '16:9',
+        estimateSeconds: 180,
+      })
+    }
+  })
+
+  test('offers 480p and 720p for the 993 720p model', () => {
+    const model = 'sd2-720P(993)'
+    const capability = getCreationVideoCapabilities(model)
+
+    assert.equal(capability?.kind, 'videos')
+    assert.equal(capability?.showResolution, true)
+    assert.equal(capability?.includeResolutionInRequest, true)
+    assert.deepEqual(
+      getCreationResolutionOptions(model).map((item) => item.value),
+      ['720p', '480p']
+    )
+
+    const options = normalizeCreationVideoOptions(
+      { resolution: '480p', duration: '6', aspectRatio: '9:16' },
+      model
+    )
+    assert.deepEqual(getCreationVideoRequestOptions(options, model), {
+      duration: 6,
+      ratio: '9:16',
+      resolution: '480p',
+      estimateSeconds: 150,
+    })
+  })
 })
