@@ -66,8 +66,10 @@ type incomingRequest struct {
 	StartImageURL  referenceValue   `json:"start_image_url,omitempty"`
 	EndImageURL    referenceValue   `json:"end_image_url,omitempty"`
 	VideoURL       referenceValue   `json:"video_url,omitempty"`
+	Videos         []referenceValue `json:"videos,omitempty"`
 	VideoReference []referenceValue `json:"video_reference,omitempty"`
 	AudioURL       referenceValue   `json:"audio_url,omitempty"`
+	Audios         []referenceValue `json:"audios,omitempty"`
 }
 
 type referenceValue struct {
@@ -146,12 +148,16 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		info.Action = constant.TaskActionTextGenerate
 	}
 	c.Set(sanbaoRequestContextKey, req)
-	c.Set("task_request", relaycommon.TaskSubmitReq{
+	taskRequest := relaycommon.TaskSubmitReq{
 		Prompt:     req.Prompt,
 		Model:      req.Model,
 		Duration:   req.Duration,
 		Resolution: req.Resolution,
-	})
+		Images:     assetURLs(req.imageAssets()),
+		Videos:     assetURLs(req.videoAssets()),
+		Audios:     assetURLs(req.audioAssets()),
+	}
+	c.Set("task_request", taskRequest)
 	return nil
 }
 
@@ -381,14 +387,33 @@ func (req incomingRequest) imageAssets() []any {
 }
 
 func (req incomingRequest) videoAssets() []any {
-	values := make([]referenceValue, 0, 1+len(req.VideoReference))
+	values := make([]referenceValue, 0, 1+len(req.Videos)+len(req.VideoReference))
 	values = append(values, req.VideoURL)
+	values = append(values, req.Videos...)
 	values = append(values, req.VideoReference...)
 	return taggedAssets(values, "参考视频")
 }
 
 func (req incomingRequest) audioAssets() []any {
-	return taggedAssets([]referenceValue{req.AudioURL}, "参考音频")
+	values := make([]referenceValue, 0, 1+len(req.Audios))
+	values = append(values, req.AudioURL)
+	values = append(values, req.Audios...)
+	return taggedAssets(values, "参考音频")
+}
+
+func assetURLs(assets []any) []string {
+	result := make([]string, 0, len(assets))
+	for _, asset := range assets {
+		record, ok := asset.(map[string]any)
+		if !ok {
+			continue
+		}
+		url, _ := record["url"].(string)
+		if strings.TrimSpace(url) != "" {
+			result = append(result, strings.TrimSpace(url))
+		}
+	}
+	return result
 }
 
 func taggedAssets(values []referenceValue, tagPrefix string) []any {

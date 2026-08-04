@@ -303,6 +303,7 @@ func ensurePersistentTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo,
 	task := model.InitTask(platform, info)
 	if request, err := relaycommon.GetTaskRequest(c); err == nil {
 		task.Properties.Input = request.Prompt
+		task.Properties.InputImages, task.Properties.InputVideos, task.Properties.InputAudios = request.InputMaterialURLs()
 	}
 	task.PrivateData.BillingSource = info.BillingSource
 	task.PrivateData.SubscriptionId = info.SubscriptionId
@@ -654,11 +655,28 @@ func mapTaskStatusToSimple(status model.TaskStatus) string {
 }
 
 func TaskModel2Dto(task *model.Task) *dto.TaskDto {
+	return taskModel2Dto(task, false)
+}
+
+// TaskModel2DtoWithInputMaterials is reserved for task-log responses to root
+// users. All other task DTO paths use TaskModel2Dto so uploaded material URLs
+// are redacted by default.
+func TaskModel2DtoWithInputMaterials(task *model.Task) *dto.TaskDto {
+	return taskModel2Dto(task, true)
+}
+
+func taskModel2Dto(task *model.Task, includeInputMaterials bool) *dto.TaskDto {
 	resultURL := task.GetResultURL()
 	if service.IsTaskVideoProxyURL(resultURL, task.TaskID) {
 		if dataURL := service.ExtractTaskDataVideoURL(task); dataURL != "" {
 			resultURL = dataURL
 		}
+	}
+	properties := task.Properties
+	if !includeInputMaterials {
+		properties.InputImages = nil
+		properties.InputVideos = nil
+		properties.InputAudios = nil
 	}
 
 	return &dto.TaskDto{
@@ -680,7 +698,7 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 		StartTime:  task.StartTime,
 		FinishTime: task.FinishTime,
 		Progress:   task.Progress,
-		Properties: task.Properties,
+		Properties: properties,
 		Username:   task.Username,
 		Data:       task.Data,
 	}

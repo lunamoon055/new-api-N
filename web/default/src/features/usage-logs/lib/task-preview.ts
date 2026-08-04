@@ -27,6 +27,35 @@ const VIDEO_ACTIONS = new Set<string>([
   TASK_ACTIONS.REMIX_GENERATE,
 ])
 
+export type TaskInputMaterialKind = 'image' | 'video' | 'audio'
+
+export interface TaskInputMaterial {
+  kind: TaskInputMaterialKind
+  url: string
+}
+
+const TASK_INPUT_KEYS: Record<TaskInputMaterialKind, string[]> = {
+  image: [
+    'input_images',
+    'image',
+    'images',
+    'image_url',
+    'image_urls',
+    'input_reference',
+    'referenceImages',
+    'start_image_url',
+    'end_image_url',
+  ],
+  video: [
+    'input_videos',
+    'video_url',
+    'videos',
+    'video_reference',
+    'referenceVideos',
+  ],
+  audio: ['input_audios', 'audio_url', 'audios', 'referenceAudios'],
+}
+
 export function isTaskLogVideoTask(log: Pick<TaskLog, 'action'>) {
   return VIDEO_ACTIONS.has(log.action)
 }
@@ -65,6 +94,43 @@ export function getTaskLogPrompt(
   if (propertiesPrompt) return propertiesPrompt
 
   return findFirstPrompt(log.data)
+}
+
+export function getTaskLogInputMaterials(
+  log: Pick<TaskLog, 'properties'>
+): TaskInputMaterial[] {
+  const properties = parseJsonRecord(log.properties)
+  if (!properties) return []
+
+  const result: TaskInputMaterial[] = []
+  const seen = new Set<string>()
+  const collect = (record: Record<string, unknown>) => {
+    for (const kind of ['image', 'video', 'audio'] as const) {
+      for (const key of TASK_INPUT_KEYS[kind]) {
+        for (const url of findMaterialUrls(record[key])) {
+          const identity = `${kind}:${url}`
+          if (seen.has(identity)) continue
+          seen.add(identity)
+          result.push({ kind, url })
+        }
+      }
+    }
+  }
+
+  collect(properties)
+  for (const key of ['request', 'body', 'payload']) {
+    const nested = parseJsonRecord(properties[key])
+    if (nested) collect(nested)
+  }
+
+  return result
+}
+
+export function getVisibleTaskLogInputMaterials(
+  log: Pick<TaskLog, 'properties'>,
+  canViewInputMaterials: boolean
+): TaskInputMaterial[] {
+  return canViewInputMaterials ? getTaskLogInputMaterials(log) : []
 }
 
 function normalizePreviewUrl(url: string | undefined) {
@@ -183,6 +249,60 @@ function findFirstVideoUrl(value: unknown, taskId?: string): string | null {
 
 function normalizePrompt(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function parseJsonRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) {
+      return null
+    }
+    try {
+      return parseJsonRecord(JSON.parse(trimmed))
+    } catch {
+      return null
+    }
+  }
+
+  if (!value || Array.isArray(value) || typeof value !== 'object') return null
+  return value as Record<string, unknown>
+}
+
+function normalizeMaterialUrl(value: unknown) {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  const lower = trimmed.toLowerCase()
+  if (
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    trimmed.startsWith('/')
+  ) {
+    return trimmed
+  }
+  return null
+}
+
+function findMaterialUrls(value: unknown): string[] {
+  const directUrl = normalizeMaterialUrl(value)
+  if (directUrl) return [directUrl]
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return []
+    try {
+      return findMaterialUrls(JSON.parse(trimmed))
+    } catch {
+      return []
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(findMaterialUrls)
+  }
+
+  if (!value || typeof value !== 'object') return []
+  const record = value as Record<string, unknown>
+  return ['url', 'previewUrl'].flatMap((key) => findMaterialUrls(record[key]))
 }
 
 function findFirstPrompt(value: unknown): string | null {

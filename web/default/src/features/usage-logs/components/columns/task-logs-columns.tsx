@@ -19,6 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
+import { Link02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Film, MessageSquareText, Music } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
@@ -32,6 +34,7 @@ import { taskActionMapper, taskStatusMapper } from '../../lib/mappers'
 import {
   getTaskLogPrompt,
   getTaskLogVideoPreviewUrl,
+  getVisibleTaskLogInputMaterials,
 } from '../../lib/task-preview'
 import type { TaskLog } from '../../types'
 import {
@@ -124,34 +127,88 @@ function VideoPreviewCell({ log }: { log: TaskLog }) {
   )
 }
 
-function PromptCell({ log }: { log: TaskLog }) {
+function PromptCell({
+  log,
+  canViewInputMaterials,
+}: {
+  log: TaskLog
+  canViewInputMaterials: boolean
+}) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const prompt = getTaskLogPrompt(log)
+  const inputMaterials = getVisibleTaskLogInputMaterials(
+    log,
+    canViewInputMaterials
+  )
+  const firstMaterial = inputMaterials[0]
 
-  if (!prompt) {
+  if (!prompt && !firstMaterial) {
     return <span className='text-muted-foreground/60 text-xs'>-</span>
   }
 
   return (
     <>
-      <button
-        type='button'
-        className='group flex max-w-[220px] items-center gap-1 text-left text-xs'
-        onClick={() => setOpen(true)}
-        title={t('Click to view full prompt')}
-      >
-        <MessageSquareText className='text-muted-foreground size-3 shrink-0' />
-        <span className='text-muted-foreground truncate leading-snug group-hover:underline'>
-          {prompt}
-        </span>
-      </button>
-      <PromptDialog prompt={prompt} open={open} onOpenChange={setOpen} />
+      <div className='flex max-w-[280px] flex-col gap-1'>
+        {prompt && (
+          <button
+            type='button'
+            className='group flex min-w-0 items-center gap-1 text-left text-xs'
+            onClick={() => setOpen(true)}
+            title={t('Click to view full prompt')}
+          >
+            <MessageSquareText className='text-muted-foreground size-3 shrink-0' />
+            <span className='text-muted-foreground truncate leading-snug group-hover:underline'>
+              {prompt}
+            </span>
+          </button>
+        )}
+        {firstMaterial && (
+          <div className='flex min-w-0 items-center gap-1 text-[11px]'>
+            <button
+              type='button'
+              className='text-foreground flex shrink-0 items-center gap-1 font-medium hover:underline'
+              onClick={() => setOpen(true)}
+              title={t('View details')}
+            >
+              <HugeiconsIcon
+                icon={Link02Icon}
+                strokeWidth={2}
+                className='text-muted-foreground size-3'
+              />
+              <span>
+                {t('{{count}} reference asset(s)', {
+                  count: inputMaterials.length,
+                })}
+              </span>
+            </button>
+            <a
+              href={firstMaterial.url}
+              target='_blank'
+              rel='noreferrer'
+              className='text-muted-foreground min-w-0 truncate underline-offset-4 hover:underline'
+              title={firstMaterial.url}
+              onClick={(event) => event.stopPropagation()}
+            >
+              {firstMaterial.url}
+            </a>
+          </div>
+        )}
+      </div>
+      <PromptDialog
+        prompt={prompt ?? ''}
+        inputMaterials={inputMaterials}
+        open={open}
+        onOpenChange={setOpen}
+      />
     </>
   )
 }
 
-export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
+export function useTaskLogsColumns(
+  isAdmin: boolean,
+  canViewInputMaterials: boolean
+): ColumnDef<TaskLog>[] {
   const { t } = useTranslation()
   const columns: ColumnDef<TaskLog>[] = [
     {
@@ -261,10 +318,15 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title={t('Prompt')} />
       ),
-      cell: ({ row }) => <PromptCell log={row.original} />,
+      cell: ({ row }) => (
+        <PromptCell
+          log={row.original}
+          canViewInputMaterials={canViewInputMaterials}
+        />
+      ),
       meta: { label: t('Prompt'), mobileHidden: true },
-      size: 200,
-      maxSize: 220,
+      size: 260,
+      maxSize: 300,
     },
     createDurationColumn<TaskLog>({
       submitTimeKey: 'submit_time',

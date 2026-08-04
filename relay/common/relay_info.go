@@ -676,12 +676,42 @@ type TaskRelayInfo struct {
 	LockedChannel any
 }
 
+type TaskReference struct {
+	URL        string `json:"url,omitempty"`
+	PreviewURL string `json:"previewUrl,omitempty"`
+}
+
+func (r *TaskReference) UnmarshalJSON(data []byte) error {
+	var directURL string
+	if err := common.Unmarshal(data, &directURL); err == nil {
+		r.URL = directURL
+		return nil
+	}
+
+	type taskReferenceAlias TaskReference
+	var reference taskReferenceAlias
+	if err := common.Unmarshal(data, &reference); err != nil {
+		return err
+	}
+	*r = TaskReference(reference)
+	return nil
+}
+
 type TaskSubmitReq struct {
 	Prompt          string                 `json:"prompt"`
 	Model           string                 `json:"model,omitempty"`
 	Mode            string                 `json:"mode,omitempty"`
 	Image           string                 `json:"image,omitempty"`
 	Images          []string               `json:"images,omitempty"`
+	ImageURL        string                 `json:"image_url,omitempty"`
+	ImageURLs       []string               `json:"image_urls,omitempty"`
+	StartImageURL   string                 `json:"start_image_url,omitempty"`
+	EndImageURL     string                 `json:"end_image_url,omitempty"`
+	VideoURL        string                 `json:"video_url,omitempty"`
+	Videos          []string               `json:"videos,omitempty"`
+	VideoReference  []TaskReference        `json:"video_reference,omitempty"`
+	AudioURL        string                 `json:"audio_url,omitempty"`
+	Audios          []string               `json:"audios,omitempty"`
 	Size            string                 `json:"size,omitempty"`
 	Ratio           string                 `json:"ratio,omitempty"`
 	Resolution      string                 `json:"resolution,omitempty"`
@@ -701,10 +731,70 @@ func (t *TaskSubmitReq) GetPrompt() string {
 func (t *TaskSubmitReq) HasImage() bool {
 	return t.Image != "" ||
 		len(t.Images) > 0 ||
+		t.ImageURL != "" ||
+		len(t.ImageURLs) > 0 ||
+		t.StartImageURL != "" ||
+		t.EndImageURL != "" ||
+		t.VideoURL != "" ||
+		len(t.Videos) > 0 ||
+		len(t.VideoReference) > 0 ||
+		t.AudioURL != "" ||
+		len(t.Audios) > 0 ||
 		t.InputReference != "" ||
 		len(t.ReferenceImages) > 0 ||
 		len(t.ReferenceVideos) > 0 ||
 		len(t.ReferenceAudios) > 0
+}
+
+// InputMaterialURLs returns user-supplied reference links grouped by media
+// type. Inline data URLs are intentionally excluded to avoid duplicating large
+// base64 payloads in task history.
+func (t TaskSubmitReq) InputMaterialURLs() (images, videos, audios []string) {
+	images = normalizeTaskMaterialURLs(
+		[]string{t.Image, t.ImageURL, t.InputReference, t.StartImageURL, t.EndImageURL},
+		t.Images,
+		t.ImageURLs,
+		t.ReferenceImages,
+	)
+
+	videoReferences := make([]string, 0, len(t.VideoReference))
+	for _, reference := range t.VideoReference {
+		videoReferences = append(videoReferences, reference.URL, reference.PreviewURL)
+	}
+	videos = normalizeTaskMaterialURLs(
+		[]string{t.VideoURL},
+		t.Videos,
+		videoReferences,
+		t.ReferenceVideos,
+	)
+	audios = normalizeTaskMaterialURLs(
+		[]string{t.AudioURL},
+		t.Audios,
+		t.ReferenceAudios,
+	)
+	return
+}
+
+func normalizeTaskMaterialURLs(groups ...[]string) []string {
+	result := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, group := range groups {
+		for _, value := range group {
+			trimmed := strings.TrimSpace(value)
+			lower := strings.ToLower(trimmed)
+			if trimmed == "" || (!strings.HasPrefix(lower, "http://") &&
+				!strings.HasPrefix(lower, "https://") &&
+				!strings.HasPrefix(trimmed, "/")) {
+				continue
+			}
+			if _, ok := seen[trimmed]; ok {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {

@@ -128,6 +128,45 @@ func TestValidateImageRequestSetsImageAction(t *testing.T) {
 	require.Equal(t, "imageGenerate", info.Action)
 }
 
+func TestValidateVideoRequestKeepsCreationCenterReferenceLinks(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/video/async-generations", bytes.NewBufferString(`{
+		"model":"site-video",
+		"prompt":"参考用户素材",
+		"images":["https://cdn.example/ref.png"],
+		"videos":["https://cdn.example/ref.mp4"],
+		"audios":["https://cdn.example/ref.wav"]
+	}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	info := &relaycommon.RelayInfo{
+		RequestURLPath: "/v1/video/async-generations",
+		ChannelMeta:    &relaycommon.ChannelMeta{},
+		TaskRelayInfo:  &relaycommon.TaskRelayInfo{},
+	}
+	adaptor := &TaskAdaptor{}
+
+	taskErr := adaptor.ValidateRequestAndSetAction(c, info)
+	require.Nil(t, taskErr)
+
+	taskRequest, err := relaycommon.GetTaskRequest(c)
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://cdn.example/ref.png"}, taskRequest.Images)
+	require.Equal(t, []string{"https://cdn.example/ref.mp4"}, taskRequest.Videos)
+	require.Equal(t, []string{"https://cdn.example/ref.wav"}, taskRequest.Audios)
+
+	reader, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	body, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, common.Unmarshal(body, &payload))
+	require.Len(t, payload["images"], 1)
+	require.Len(t, payload["videos"], 1)
+	require.Len(t, payload["audios"], 1)
+}
+
 func TestBuildRequestBodyUploadsReferenceAssetToSanbao(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	var uploadPath string

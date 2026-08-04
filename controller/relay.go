@@ -681,6 +681,7 @@ func attachTaskPromptFromRequest(c *gin.Context, task *model.Task) {
 	taskReq, err := relaycommon.GetTaskRequest(c)
 	if err == nil {
 		task.Properties.Input = taskReq.Prompt
+		task.Properties.InputImages, task.Properties.InputVideos, task.Properties.InputAudios = taskReq.InputMaterialURLs()
 	}
 }
 

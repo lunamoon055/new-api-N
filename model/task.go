@@ -95,9 +95,12 @@ func (t *Task) GetData(v any) error {
 }
 
 type Properties struct {
-	Input             string `json:"input"`
-	UpstreamModelName string `json:"upstream_model_name,omitempty"`
-	OriginModelName   string `json:"origin_model_name,omitempty"`
+	Input             string   `json:"input"`
+	InputImages       []string `json:"input_images,omitempty"`
+	InputVideos       []string `json:"input_videos,omitempty"`
+	InputAudios       []string `json:"input_audios,omitempty"`
+	UpstreamModelName string   `json:"upstream_model_name,omitempty"`
+	OriginModelName   string   `json:"origin_model_name,omitempty"`
 }
 
 func (m *Properties) Scan(val interface{}) error {
@@ -110,7 +113,12 @@ func (m *Properties) Scan(val interface{}) error {
 }
 
 func (m Properties) Value() (driver.Value, error) {
-	if m == (Properties{}) {
+	if m.Input == "" &&
+		len(m.InputImages) == 0 &&
+		len(m.InputVideos) == 0 &&
+		len(m.InputAudios) == 0 &&
+		m.UpstreamModelName == "" &&
+		m.OriginModelName == "" {
 		return nil, nil
 	}
 	return common.Marshal(m)

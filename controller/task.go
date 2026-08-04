@@ -38,7 +38,7 @@ func GetAllTask(c *gin.Context) {
 	items := model.TaskGetAllTasks(pageInfo.GetStartIdx(), pageInfo.GetPageSize(), queryParams)
 	total := model.TaskCountAllTasks(queryParams)
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(tasksToDto(items, true))
+	pageInfo.SetItems(tasksToDto(items, true, canViewTaskInputMaterials(c.GetInt("role"))))
 	common.ApiSuccess(c, pageInfo)
 }
 
@@ -62,7 +62,7 @@ func GetUserTask(c *gin.Context) {
 	items := model.TaskGetAllUserTask(userId, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), queryParams)
 	total := model.TaskCountAllUserTask(userId, queryParams)
 	pageInfo.SetTotal(int(total))
-	pageInfo.SetItems(tasksToDto(items, false))
+	pageInfo.SetItems(tasksToDto(items, false, canViewTaskInputMaterials(c.GetInt("role"))))
 	common.ApiSuccess(c, pageInfo)
 }
 
@@ -90,7 +90,11 @@ func GetUserFailedTaskCount(c *gin.Context) {
 	common.ApiSuccess(c, gin.H{"count": total})
 }
 
-func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {
+func canViewTaskInputMaterials(role int) bool {
+	return role == common.RoleRootUser
+}
+
+func tasksToDto(tasks []*model.Task, fillUser bool, includeInputMaterials bool) []*dto.TaskDto {
 	var userIdMap map[int]*model.UserBase
 	if fillUser {
 		userIdMap = make(map[int]*model.UserBase)
@@ -112,7 +116,11 @@ func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {
 				task.Username = user.Username
 			}
 		}
-		result[i] = relay.TaskModel2Dto(task)
+		if includeInputMaterials {
+			result[i] = relay.TaskModel2DtoWithInputMaterials(task)
+		} else {
+			result[i] = relay.TaskModel2Dto(task)
+		}
 	}
 	return result
 }

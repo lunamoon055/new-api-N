@@ -64,6 +64,50 @@ func TestTaskModel2DtoIncludesPromptFromTaskProperties(t *testing.T) {
 	require.Equal(t, "a cinematic product video", dto.Prompt)
 }
 
+func TestTaskModel2DtoRedactsInputMaterialsByDefault(t *testing.T) {
+	task := &model.Task{
+		TaskID: "task_public",
+		Properties: model.Properties{
+			Input:       "a cinematic product video",
+			InputImages: []string{"https://cdn.example.com/reference.png"},
+			InputVideos: []string{"https://cdn.example.com/reference.mp4"},
+			InputAudios: []string{"https://cdn.example.com/reference.wav"},
+		},
+	}
+
+	dto := TaskModel2Dto(task)
+	properties, ok := dto.Properties.(model.Properties)
+	require.True(t, ok)
+	require.Equal(t, "a cinematic product video", properties.Input)
+	require.Empty(t, properties.InputImages)
+	require.Empty(t, properties.InputVideos)
+	require.Empty(t, properties.InputAudios)
+	require.Equal(t, []string{"https://cdn.example.com/reference.png"}, task.Properties.InputImages)
+
+	payload, err := common.Marshal(dto)
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), "input_images")
+	require.NotContains(t, string(payload), "reference.png")
+}
+
+func TestTaskModel2DtoWithInputMaterialsIncludesRootOnlyFields(t *testing.T) {
+	task := &model.Task{
+		TaskID: "task_public",
+		Properties: model.Properties{
+			InputImages: []string{"https://cdn.example.com/reference.png"},
+			InputVideos: []string{"https://cdn.example.com/reference.mp4"},
+			InputAudios: []string{"https://cdn.example.com/reference.wav"},
+		},
+	}
+
+	dto := TaskModel2DtoWithInputMaterials(task)
+	properties, ok := dto.Properties.(model.Properties)
+	require.True(t, ok)
+	require.Equal(t, task.Properties.InputImages, properties.InputImages)
+	require.Equal(t, task.Properties.InputVideos, properties.InputVideos)
+	require.Equal(t, task.Properties.InputAudios, properties.InputAudios)
+}
+
 func TestIsTaskSubmitSuccessStatusAcceptsAny2xx(t *testing.T) {
 	require.True(t, isTaskSubmitSuccessStatus(http.StatusOK))
 	require.True(t, isTaskSubmitSuccessStatus(http.StatusCreated))
