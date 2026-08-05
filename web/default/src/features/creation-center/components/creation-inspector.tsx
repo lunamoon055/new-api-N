@@ -658,6 +658,30 @@ function getInspectorAssets(
       ]
     }
   )
+  const frameAssets = [
+    {
+      reference: props.videoReferences.startImageUrl,
+      label: t('Start frame'),
+      removeIndex: 0,
+    },
+    {
+      reference: props.videoReferences.endImageUrl,
+      label: t('End frame'),
+      removeIndex: 1,
+    },
+  ].flatMap((item) => {
+    const url = getCreationReferenceURL(item.reference)
+    if (!url) return []
+    return [
+      {
+        id: `video-frame-reference-${item.removeIndex}-${url}`,
+        kind: 'image' as const,
+        label: item.label,
+        previewUrl: getCreationReferencePreviewURL(item.reference),
+        onRemove: () => props.onRemoveVideoReferenceImage(item.removeIndex),
+      },
+    ]
+  })
   const videoAssets = props.videoReferences.videoUrls.flatMap(
     (reference, index) => {
       const url = getCreationReferenceURL(reference)
@@ -689,7 +713,13 @@ function getInspectorAssets(
     }
   )
 
-  return [...genericAssets, ...imageAssets, ...videoAssets, ...audioAssets]
+  return [
+    ...genericAssets,
+    ...imageAssets,
+    ...frameAssets,
+    ...videoAssets,
+    ...audioAssets,
+  ]
 }
 
 function getResultProgress(result: CreationResult) {

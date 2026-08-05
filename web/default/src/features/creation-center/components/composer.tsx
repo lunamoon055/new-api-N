@@ -49,6 +49,7 @@ import {
   type CreationImageOptions,
   type CreationImageReferenceLimits,
   type CreationImageReferences,
+  getCreationPromptMaxLength,
   getCreationReferenceURL,
   normalizeCreationVideoReferences,
   type CreationAspectRatio,
@@ -101,6 +102,7 @@ export function Composer(props: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [mentionTrigger, setMentionTrigger] =
     useState<PromptMentionTrigger | null>(null)
+  const promptMaxLength = getCreationPromptMaxLength(props.model)
   const canSubmit = !!props.prompt.trim() && !!props.model && !props.submitting
   const referenceMentionItems = useMemo(
     () =>
@@ -159,7 +161,7 @@ export function Composer(props: ComposerProps) {
           <span className='truncate text-sm font-semibold'>{t('Prompt')}</span>
         </div>
         <span className='text-muted-foreground text-xs tabular-nums'>
-          {props.prompt.length}/5000
+          {props.prompt.length}/{promptMaxLength}
         </span>
       </div>
 
@@ -171,7 +173,7 @@ export function Composer(props: ComposerProps) {
                 ref={textareaRef}
                 aria-label={t('Prompt')}
                 value={props.prompt}
-                maxLength={5000}
+                maxLength={promptMaxLength}
                 onChange={(event) => {
                   props.onPromptChange(event.target.value)
                   updateMentionTrigger(
@@ -265,14 +267,18 @@ export function Composer(props: ComposerProps) {
               </div>
             )}
             {props.mode === 'video' && props.videoCapabilities && (
-              <VideoReferenceFields
-                value={props.videoReferences}
-                onFilesSelected={props.onVideoReferenceFilesSelected}
-                onRemoveImage={props.onRemoveVideoReferenceImage}
-                onRemoveVideo={props.onRemoveVideoReferenceVideo}
-                onRemoveAudio={props.onRemoveVideoReferenceAudio}
-                capability={props.videoCapabilities}
-              />
+              <>
+                {props.videoReferences.referenceMode !== 'text' && (
+                  <VideoReferenceFields
+                    value={props.videoReferences}
+                    onFilesSelected={props.onVideoReferenceFilesSelected}
+                    onRemoveImage={props.onRemoveVideoReferenceImage}
+                    onRemoveVideo={props.onRemoveVideoReferenceVideo}
+                    onRemoveAudio={props.onRemoveVideoReferenceAudio}
+                    capability={props.videoCapabilities}
+                  />
+                )}
+              </>
             )}
             {props.mode === 'image' && props.imageReferencesSupported && (
               <ImageReferenceFields
@@ -419,7 +425,8 @@ function supportsReferenceMentions(capability?: CreationVideoCapability) {
   return (
     capability?.kind === 'video2' ||
     capability?.kind === 'sanbao' ||
-    capability?.kind === 'videos'
+    capability?.kind === 'videos' ||
+    capability?.kind === 'minimax-h3'
   )
 }
 
@@ -460,8 +467,11 @@ function getReferenceModeLabel(
   value: CreationVideoReferenceMode,
   t: (key: string) => string
 ) {
+  if (value === 'text') return t('Text to video')
   if (value === 'video') return t('Video reference')
   if (value === 'multimodal') return t('Multimodal reference')
+  if (value === 'frames') return t('Start/end frames')
+  if (value === 'image-audio') return t('Image and audio reference')
   return t('Image reference')
 }
 

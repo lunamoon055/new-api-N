@@ -4,6 +4,7 @@ var ModelList = []string{
 	"sora2",
 	"sora-2",
 	"sora-2-pro",
+	"minimax-h3",
 	"video-2.0",
 	"video-2.0-fast",
 	"video-2.0-mini",

@@ -47,6 +47,8 @@ const IMAGE_REFERENCE_ACCEPT =
 const VIDEO_REFERENCE_ACCEPT = 'video/mp4,.mp4'
 const AUDIO_REFERENCE_ACCEPT =
   'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,.mp3,.wav'
+const MINIMAX_H3_AUDIO_REFERENCE_ACCEPT =
+  'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/aac,audio/x-aac,audio/ogg,application/ogg,audio/webm,.mp3,.wav,.m4a,.aac,.ogg,.webm'
 
 type ReferencePreview = {
   kind: 'image' | 'video' | 'audio'
@@ -70,16 +72,38 @@ export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
   const limits =
     props.capability?.referenceLimits ?? getCreationVideoReferenceLimits()
   const showImages =
-    (referenceMode === 'image' || referenceMode === 'multimodal') &&
+    (referenceMode === 'image' ||
+      referenceMode === 'multimodal' ||
+      referenceMode === 'frames' ||
+      referenceMode === 'image-audio') &&
     limits.maxImages > 0
   const showVideos =
     (referenceMode === 'video' || referenceMode === 'multimodal') &&
     limits.maxVideos > 0
-  const showAudio = referenceMode === 'multimodal' && limits.maxAudios > 0
+  const showAudio =
+    (referenceMode === 'multimodal' || referenceMode === 'image-audio') &&
+    limits.maxAudios > 0
   const imageReferences = showImages
-    ? props.value.imageUrls.filter((reference) =>
-        getCreationReferenceURL(reference)
-      )
+    ? referenceMode === 'frames'
+      ? [
+          {
+            reference: props.value.startImageUrl,
+            label: t('Start frame'),
+            removeIndex: 0,
+          },
+          {
+            reference: props.value.endImageUrl,
+            label: t('End frame'),
+            removeIndex: 1,
+          },
+        ].filter((item) => getCreationReferenceURL(item.reference))
+      : props.value.imageUrls
+          .filter((reference) => getCreationReferenceURL(reference))
+          .map((reference, index) => ({
+            reference,
+            label: `${t('Reference image')} ${index + 1}`,
+            removeIndex: index,
+          }))
     : []
   const videoReferences = showVideos
     ? props.value.videoUrls.filter((reference) =>
@@ -143,20 +167,20 @@ export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
         </Field>
         {!!referenceCount && (
           <div className='flex max-w-full flex-wrap gap-1.5'>
-            {imageReferences.map((reference, index) => (
+            {imageReferences.map((item, index) => (
               <ReferenceChip
-                key={`image-${getCreationReferenceURL(reference)}-${index}`}
+                key={`image-${getCreationReferenceURL(item.reference)}-${index}`}
                 icon={<FileImage className='size-3 shrink-0' />}
-                label={`${t('Reference image')} ${index + 1}`}
-                removeLabel={`${t('Remove reference image')} ${index + 1}`}
+                label={item.label}
+                removeLabel={`${t('Remove reference image')}: ${item.label}`}
                 onOpen={() =>
                   setPreview({
                     kind: 'image',
-                    url: getCreationReferencePreviewURL(reference),
-                    title: `${t('Reference image')} ${index + 1}`,
+                    url: getCreationReferencePreviewURL(item.reference),
+                    title: item.label,
                   })
                 }
-                onRemove={() => props.onRemoveImage(index)}
+                onRemove={() => props.onRemoveImage(item.removeIndex)}
               />
             ))}
             {videoReferences.map((reference, index) => (
@@ -281,8 +305,11 @@ function getReferenceAccept(
   mode: CreationVideoReferenceMode,
   limits: CreationVideoCapability['referenceLimits']
 ) {
-  if (mode === 'image') return IMAGE_REFERENCE_ACCEPT
+  if (mode === 'image' || mode === 'frames') return IMAGE_REFERENCE_ACCEPT
   if (mode === 'video') return VIDEO_REFERENCE_ACCEPT
+  if (mode === 'image-audio') {
+    return [IMAGE_REFERENCE_ACCEPT, MINIMAX_H3_AUDIO_REFERENCE_ACCEPT].join(',')
+  }
   return [
     limits.maxImages > 0 ? IMAGE_REFERENCE_ACCEPT : '',
     limits.maxVideos > 0 ? VIDEO_REFERENCE_ACCEPT : '',
@@ -297,6 +324,23 @@ function getReferenceUploadTip(
   limits: CreationVideoCapability['referenceLimits'],
   t: (key: string, options?: Record<string, unknown>) => string
 ) {
+  if (mode === 'frames') {
+    return t(
+      'Tip: Upload one start frame and one end frame. Each image must not exceed {{size}} MB.',
+      { size: limits.maxImageSizeMB }
+    )
+  }
+  if (mode === 'image-audio') {
+    return t(
+      'Tip: Upload up to {{imageCount}} images and one audio file. Audio requires an image, supports MP3, WAV, M4A, AAC, OGG, or WebM, lasts {{min}}-{{max}} seconds, and must not exceed {{audioSize}} MB.',
+      {
+        imageCount: limits.maxImages,
+        min: limits.minReferenceAudioDurationSeconds ?? 2,
+        max: limits.maxReferenceAudioDurationSeconds ?? 15,
+        audioSize: limits.maxAudioSizeMB,
+      }
+    )
+  }
   if (mode === 'video') {
     return t(
       'Tip: Reference videos support MP4. Up to {{count}} videos, {{size}} MB each.',
@@ -338,8 +382,17 @@ function getUploadDisabled(props: {
   if (props.mode === 'image') {
     return props.imageCount >= props.limits.maxImages
   }
+  if (props.mode === 'frames') {
+    return props.imageCount >= 2
+  }
   if (props.mode === 'video') {
     return props.videoCount >= props.limits.maxVideos
+  }
+  if (props.mode === 'image-audio') {
+    return (
+      props.imageCount >= props.limits.maxImages &&
+      props.audioCount >= props.limits.maxAudios
+    )
   }
   return (
     props.imageCount >= props.limits.maxImages &&

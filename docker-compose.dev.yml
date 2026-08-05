@@ -30,6 +30,8 @@ services:
       - frontend_node_modules:/app/node_modules
     environment:
       - VITE_REACT_APP_SERVER_URL=http://new-api:3000
+      # Docker Desktop bind mounts can miss native file events on macOS.
+      - RSBUILD_WATCH_POLL_INTERVAL=500
     depends_on:
       new-api:
         condition: service_started

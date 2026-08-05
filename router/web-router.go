@@ -33,6 +33,9 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 	router.NoRoute(func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")
 		if strings.HasPrefix(c.Request.RequestURI, "/v1") || strings.HasPrefix(c.Request.RequestURI, "/api") || strings.HasPrefix(c.Request.RequestURI, "/assets") || strings.HasPrefix(c.Request.RequestURI, "/static") {
+			if middleware.IsStaticAssetPath(c.Request.URL.Path) {
+				middleware.SetNoStore(c)
+			}
 			controller.RelayNotFound(c)
 			return
 		}

@@ -14,11 +14,17 @@ export default defineConfig(({ envMode }) => {
     'http://localhost:3000'
 
   const isProd = envMode === 'production'
+  const watchPollInterval = Number.parseInt(
+    process.env.RSBUILD_WATCH_POLL_INTERVAL || '',
+    10
+  )
+  const shouldPollForChanges =
+    !isProd && Number.isFinite(watchPollInterval) && watchPollInterval > 0
   const devProxy = Object.fromEntries(
     (['/api', '/mj', '/pg', '/v1'] as const).map((key) => [
       key,
       { target: serverUrl, changeOrigin: true },
-    ]),
+    ])
   ) as Record<string, { target: string; changeOrigin: boolean }>
 
   return {
@@ -89,6 +95,9 @@ export default defineConfig(({ envMode }) => {
     },
     tools: {
       rspack: {
+        watchOptions: shouldPollForChanges
+          ? { poll: watchPollInterval }
+          : undefined,
         plugins: [
           tanstackRouter({
             target: 'react',

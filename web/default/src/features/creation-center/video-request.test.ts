@@ -192,6 +192,47 @@ describe('Creation Center video request payload', () => {
     )
   })
 
+  test('submits MiniMax H3 with documented image and audio fields', () => {
+    assert.deepEqual(
+      buildCreationVideoSubmitRequest({
+        model: createVideoModel('minimax-h3'),
+        prompt: '让图中角色跟随音乐跳舞',
+        videoOptions: {
+          resolution: '480p',
+          duration: '8',
+          aspectRatio: '4:3',
+        },
+        videoReferences: {
+          referenceMode: 'image-audio',
+          imageUrls: [
+            { url: 'https://example.com/character.png' },
+            { url: 'https://example.com/scene.png' },
+          ],
+          startImageUrl: '',
+          endImageUrl: '',
+          videoUrls: [],
+          audioUrls: [{ url: 'https://example.com/music.ogg' }],
+          audioUrl: { url: 'https://example.com/music.ogg' },
+        },
+      }),
+      {
+        endpoint: '/api/creation/video/async-generations',
+        payload: {
+          model: 'minimax-h3',
+          prompt: '让图中角色跟随音乐跳舞',
+          duration: 8,
+          aspect_ratio: '4:3',
+          image_urls: [
+            'https://example.com/character.png',
+            'https://example.com/scene.png',
+          ],
+          audio_url: 'https://example.com/music.ogg',
+        },
+        transport: 'async-video',
+      }
+    )
+  })
+
   test('keeps prompt-only payloads on explicit video endpoints', () => {
     assert.deepEqual(
       buildCreationVideoSubmitRequest({

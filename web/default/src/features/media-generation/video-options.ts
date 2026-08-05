@@ -20,7 +20,8 @@ For commercial licensing, please contact support@quantumnous.com
 export type CreationResolution = '480p' | '720p' | '1080p' | '2k' | '4k'
 export type CreationAspectRatio = string
 export type CreationDuration = string
-export type CreationVideoReferenceMode = 'image' | 'video' | 'multimodal'
+export type CreationVideoReferenceMode =
+  'text' | 'image' | 'video' | 'multimodal' | 'frames' | 'image-audio'
 type Sora2AspectRatio = '9:16' | '16:9'
 
 export type CreationVideoOptions = {
@@ -57,6 +58,7 @@ export type CreationModelMetadataLike = {
   ratios?: string[]
   aspect_ratios?: string[]
   durations?: Array<number | string>
+  max_prompt_length?: number
   max_images?: number
   max_videos?: number
   max_audios?: number
@@ -89,10 +91,12 @@ export type CreationVideoReferenceLimits = {
   maxAudioSizeMB: number
   minReferenceVideoDurationSeconds?: number
   maxReferenceVideoDurationSeconds?: number
+  minReferenceAudioDurationSeconds?: number
+  maxReferenceAudioDurationSeconds?: number
 }
 
 export type CreationVideoCapability = {
-  kind: 'sora2' | 'video2' | 'videos' | 'sanbao'
+  kind: 'sora2' | 'video2' | 'videos' | 'sanbao' | 'minimax-h3'
   durations: string[]
   resolutions: CreationResolution[]
   aspectRatios: CreationAspectRatio[]
@@ -101,6 +105,7 @@ export type CreationVideoCapability = {
   includeResolutionInRequest: boolean
   durationControl: 'menu' | 'select'
   referenceLimits: CreationVideoReferenceLimits
+  maxPromptLength?: number
   concurrencyOptions?: number[]
 }
 
@@ -141,6 +146,17 @@ type Video2CreationVideoRequestOptions = {
   audio_url?: string
 }
 
+type MiniMaxH3CreationVideoRequestOptions = {
+  duration: number
+  aspect_ratio: CreationAspectRatio
+  estimateSeconds: number
+  image_url?: string
+  image_urls?: string[]
+  start_image_url?: string
+  end_image_url?: string
+  audio_url?: string
+}
+
 type SanbaoCreationVideoRequestOptions = {
   duration: number
   ratio: CreationAspectRatio
@@ -166,6 +182,7 @@ type VideosApiCreationVideoRequestOptions = {
 export type CreationVideoRequestOptions =
   | LegacyCreationVideoRequestOptions
   | Video2CreationVideoRequestOptions
+  | MiniMaxH3CreationVideoRequestOptions
   | SanbaoCreationVideoRequestOptions
   | VideosApiCreationVideoRequestOptions
 
@@ -199,6 +216,15 @@ const VIDEOS_API_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
   maxImageSizeMB: 20,
   maxVideoSizeMB: 200,
   maxAudioSizeMB: 50,
+}
+
+const MINIMAX_H3_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
+  ...VIDEO2_REFERENCE_LIMITS,
+  maxImages: 5,
+  maxVideos: 0,
+  maxAudios: 1,
+  minReferenceAudioDurationSeconds: 2,
+  maxReferenceAudioDurationSeconds: 15,
 }
 
 const SORA2_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
@@ -270,6 +296,10 @@ const SORA2_CREATION_RESOLUTION_OPTIONS: ResolutionOption[] = [
 
 const VIDEO2_DURATIONS = Array.from({ length: 12 }, (_, index) =>
   String(index + 4)
+)
+
+const MINIMAX_H3_DURATIONS = Array.from({ length: 11 }, (_, index) =>
+  String(index + 5)
 )
 
 const VIDEO2_DURATION_OPTIONS: DurationOption[] = VIDEO2_DURATIONS.map(
@@ -346,6 +376,19 @@ const SD2_720P_API_CAPABILITY: CreationVideoCapability = {
   resolutions: ['720p', '480p'],
 }
 
+const MINIMAX_H3_CAPABILITY: CreationVideoCapability = {
+  kind: 'minimax-h3',
+  durations: MINIMAX_H3_DURATIONS,
+  resolutions: ['2k'],
+  aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+  referenceModes: ['text', 'image', 'frames', 'image-audio'],
+  showResolution: false,
+  includeResolutionInRequest: false,
+  durationControl: 'menu',
+  referenceLimits: MINIMAX_H3_REFERENCE_LIMITS,
+  maxPromptLength: 2000,
+}
+
 const VIDEO_MODEL_ID_ALIASES: Record<string, string> = {
   'sd2-mini': 'videos-mini',
   'sd2-fast': 'videos-fast',
@@ -374,6 +417,7 @@ const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
   'sd2-1080p': SD2_1080P_API_CAPABILITY,
   'sd2-4k': SD2_4K_API_CAPABILITY,
   'sd2-720p': SD2_720P_API_CAPABILITY,
+  'minimax-h3': MINIMAX_H3_CAPABILITY,
 }
 
 export const DEFAULT_CREATION_VIDEO_OPTIONS: CreationVideoOptions = {
@@ -382,7 +426,7 @@ export const DEFAULT_CREATION_VIDEO_OPTIONS: CreationVideoOptions = {
 }
 
 export const EMPTY_CREATION_VIDEO_REFERENCES: CreationVideoReferences = {
-  referenceMode: 'image',
+  referenceMode: 'text',
   imageUrls: [],
   startImageUrl: '',
   endImageUrl: '',
@@ -407,6 +451,14 @@ const VIDEO_REFERENCE_IMAGE_EXTENSIONS = [
 
 const VIDEO_REFERENCE_VIDEO_EXTENSIONS = ['mp4']
 const VIDEO_REFERENCE_AUDIO_EXTENSIONS = ['mp3', 'wav']
+const MINIMAX_H3_REFERENCE_AUDIO_EXTENSIONS = [
+  'mp3',
+  'wav',
+  'm4a',
+  'aac',
+  'ogg',
+  'webm',
+]
 const VIDEO_REFERENCE_IMAGE_MIME_TYPES = [
   'image/avif',
   'image/gif',
@@ -421,6 +473,16 @@ const VIDEO_REFERENCE_AUDIO_MIME_TYPES = [
   'audio/wav',
   'audio/wave',
   'audio/x-wav',
+]
+const MINIMAX_H3_REFERENCE_AUDIO_MIME_TYPES = [
+  ...VIDEO_REFERENCE_AUDIO_MIME_TYPES,
+  'audio/mp4',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/x-aac',
+  'audio/ogg',
+  'application/ogg',
+  'audio/webm',
 ]
 
 function getModelId(model?: CreationModelInput) {
@@ -459,11 +521,22 @@ function getCreationModelIdCandidates(model?: CreationModelInput) {
   return [...new Set(candidates.filter(Boolean))]
 }
 
-function isVideosApiModel(model?: CreationModelInput) {
+function hasStaticVideoCapabilityKind(
+  model: CreationModelInput | undefined,
+  kind: CreationVideoCapability['kind']
+) {
   return getCreationModelIdCandidates(model).some((candidate) => {
     const capability = VIDEO_CAPABILITIES[candidate]
-    return capability?.kind === 'videos'
+    return capability?.kind === kind
   })
+}
+
+function isVideosApiModel(model?: CreationModelInput) {
+  return hasStaticVideoCapabilityKind(model, 'videos')
+}
+
+function isMiniMaxH3Model(model?: CreationModelInput) {
+  return hasStaticVideoCapabilityKind(model, 'minimax-h3')
 }
 
 function isSanbaoMetadata(
@@ -527,7 +600,7 @@ function buildSanbaoReferenceLimits(
 function getSanbaoVideoCapability(
   model?: CreationModelInput
 ): CreationVideoCapability | undefined {
-  if (isVideosApiModel(model)) return undefined
+  if (isVideosApiModel(model) || isMiniMaxH3Model(model)) return undefined
   const metadata = getModelMetadata(model)
   if (!isSanbaoMetadata(metadata)) return undefined
   const mediaType = getSanbaoMediaType(metadata)
@@ -608,6 +681,17 @@ export function getCreationVideoCapabilities(model?: CreationModelInput) {
   return undefined
 }
 
+export function getCreationPromptMaxLength(model?: CreationModelInput) {
+  const capabilityLimit = getCreationVideoCapabilities(model)?.maxPromptLength
+  if (capabilityLimit) return capabilityLimit
+
+  const metadataLimit = getModelMetadata(model)?.max_prompt_length
+  if (Number.isInteger(metadataLimit) && Number(metadataLimit) > 0) {
+    return Number(metadataLimit)
+  }
+  return 5000
+}
+
 export function getCreationResolutionOptions(model?: CreationModelInput) {
   const capability = getCreationVideoCapabilities(model)
   if (capability?.kind === 'sanbao' && capability.resolutions.length) {
@@ -626,6 +710,9 @@ export function getCreationResolutionOptions(model?: CreationModelInput) {
       ? VIDEO2_480P_CREATION_RESOLUTION_OPTIONS
       : VIDEO2_720P_CREATION_RESOLUTION_OPTIONS
   }
+  if (capability?.kind === 'minimax-h3') {
+    return capability.resolutions.map(getResolutionOption)
+  }
   if (capability?.kind === 'sora2') return SORA2_CREATION_RESOLUTION_OPTIONS
   return CREATION_RESOLUTION_OPTIONS
 }
@@ -640,6 +727,9 @@ export function getCreationDurationOptions(model?: CreationModelInput) {
   }
   if (capability?.kind === 'video2') {
     return VIDEO2_DURATION_OPTIONS
+  }
+  if (capability?.kind === 'minimax-h3') {
+    return capability.durations.map(getDurationOption)
   }
   if (capability?.kind === 'sora2') return SORA2_CREATION_DURATION_OPTIONS
   return CREATION_DURATION_OPTIONS
@@ -692,7 +782,7 @@ export function getCreationVideoOptionsError(
     !Number.isInteger(duration) ||
     !capability?.durations.includes(String(duration))
   ) {
-    if (capability?.kind === 'sanbao') {
+    if (capability?.kind === 'sanbao' || capability?.kind === 'minimax-h3') {
       return 'This model does not support the selected duration.'
     }
     return 'Duration must be between 4 and 15 seconds.'
@@ -711,7 +801,7 @@ export function getCreationVideoReferenceLimits(
 
 function emptyCreationVideoReferences(): CreationVideoReferences {
   return {
-    referenceMode: 'image',
+    referenceMode: 'text',
     imageUrls: [],
     startImageUrl: '',
     endImageUrl: '',
@@ -768,7 +858,7 @@ function normalizeReferenceMode(
 ): CreationVideoReferenceMode {
   return value && capability.referenceModes.includes(value)
     ? value
-    : (capability.referenceModes[0] ?? 'image')
+    : (capability.referenceModes[0] ?? 'text')
 }
 
 export function normalizeCreationVideoReferences(
@@ -784,8 +874,10 @@ export function normalizeCreationVideoReferences(
   )
   const supportsMultiMedia =
     referenceMode === 'multimodal' && capability.referenceLimits.maxAudios > 0
+  const supportsImageAudio =
+    referenceMode === 'image-audio' && capability.referenceLimits.maxAudios > 0
   const imageUrls =
-    referenceMode === 'image' || supportsMultiMedia
+    referenceMode === 'image' || supportsMultiMedia || supportsImageAudio
       ? cleanReferenceValues(references?.imageUrls ?? [])
       : []
   const videoUrls =
@@ -793,9 +885,19 @@ export function normalizeCreationVideoReferences(
       ? cleanReferenceValues(references?.videoUrls ?? [])
       : []
   const audioUrls =
-    supportsMultiMedia && capability.referenceLimits.maxAudios > 0
+    (supportsMultiMedia || supportsImageAudio) &&
+    capability.referenceLimits.maxAudios > 0
       ? mergeReferenceValues(references?.audioUrls, references?.audioUrl)
       : []
+
+  if (referenceMode === 'frames') {
+    return {
+      ...emptyCreationVideoReferences(),
+      referenceMode,
+      startImageUrl: normalizeReferenceString(references?.startImageUrl),
+      endImageUrl: normalizeReferenceString(references?.endImageUrl),
+    }
+  }
 
   if (referenceMode === 'image') {
     return {
@@ -824,6 +926,24 @@ export function normalizeCreationVideoReferences(
       startImageUrl: '',
       endImageUrl: '',
       videoUrls: limitedVideoUrls,
+      audioUrls: limitedAudioUrls,
+      audioUrl: getCreationReferenceURL(limitedAudioUrls[0])
+        ? limitedAudioUrls[0]
+        : '',
+    }
+  }
+
+  if (capability.kind === 'minimax-h3') {
+    const limitedAudioUrls = audioUrls.slice(
+      0,
+      capability.referenceLimits.maxAudios
+    )
+    return {
+      referenceMode,
+      imageUrls,
+      startImageUrl: '',
+      endImageUrl: '',
+      videoUrls: [],
       audioUrls: limitedAudioUrls,
       audioUrl: getCreationReferenceURL(limitedAudioUrls[0])
         ? limitedAudioUrls[0]
@@ -1014,6 +1134,35 @@ export function getCreationVideoReferenceError(
     (normalized.endImageUrl ? 1 : 0)
   const audioCount = normalized.audioUrls.length
   const referenceLimits = capability.referenceLimits
+  if (
+    capability.kind === 'minimax-h3' &&
+    normalized.referenceMode === 'image' &&
+    normalized.imageUrls.length === 0
+  ) {
+    return 'Image reference mode requires at least one image reference.'
+  }
+  if (
+    capability.kind === 'minimax-h3' &&
+    normalized.referenceMode === 'frames' &&
+    (!normalized.startImageUrl || !normalized.endImageUrl)
+  ) {
+    return 'Start/end frame mode requires both a start frame and an end frame.'
+  }
+  if (
+    capability.kind === 'minimax-h3' &&
+    normalized.referenceMode === 'image-audio' &&
+    audioCount > 0 &&
+    normalized.imageUrls.length === 0
+  ) {
+    return 'Audio reference requires at least one image reference.'
+  }
+  if (
+    capability.kind === 'minimax-h3' &&
+    normalized.referenceMode === 'image-audio' &&
+    (normalized.imageUrls.length === 0 || audioCount === 0)
+  ) {
+    return 'Image and audio mode requires at least one image and one audio reference.'
+  }
   if (capability.kind === 'sora2' && imageCount > 1) {
     return 'Sora2 accepts at most 1 reference image.'
   }
@@ -1023,6 +1172,9 @@ export function getCreationVideoReferenceError(
     }
     if (capability.kind === 'videos') {
       return 'Videos API accepts at most 9 image references.'
+    }
+    if (capability.kind === 'minimax-h3') {
+      return 'MiniMax H3 accepts at most 5 image references.'
     }
     return 'Video2 accepts at most 4 image references.'
   }
@@ -1106,11 +1258,18 @@ export function getCreationVideoReferenceError(
       (url) =>
         !hasAllowedReferenceFormat(
           url,
-          VIDEO_REFERENCE_AUDIO_EXTENSIONS,
-          VIDEO_REFERENCE_AUDIO_MIME_TYPES
+          capability.kind === 'minimax-h3'
+            ? MINIMAX_H3_REFERENCE_AUDIO_EXTENSIONS
+            : VIDEO_REFERENCE_AUDIO_EXTENSIONS,
+          capability.kind === 'minimax-h3'
+            ? MINIMAX_H3_REFERENCE_AUDIO_MIME_TYPES
+            : VIDEO_REFERENCE_AUDIO_MIME_TYPES
         )
     )
   ) {
+    if (capability.kind === 'minimax-h3') {
+      return 'Reference audio format must be MP3, WAV, M4A, AAC, OGG, or WebM.'
+    }
     return 'Reference audio format must be MP3 or WAV.'
   }
   return undefined
@@ -1195,14 +1354,6 @@ export function getCreationVideoRequestOptions(
     }
     return request
   }
-  const request: Video2CreationVideoRequestOptions = {
-    duration: Number(normalizedOptions.duration),
-    aspect_ratio: normalizedOptions.aspectRatio ?? capability.aspectRatios[0],
-    resolution: normalizedOptions.resolution === '480p' ? '480p' : '720p',
-    async: true,
-    estimateSeconds: duration.estimateSeconds,
-  }
-
   const imageUrls = normalizedReferences.imageUrls
     .map(getCreationReferenceURL)
     .filter(Boolean)
@@ -1227,6 +1378,43 @@ export function getCreationVideoRequestOptions(
     if (videoUrls.length) request.referenceVideos = videoUrls
     if (audioUrls.length) request.referenceAudios = audioUrls
     return request
+  }
+
+  if (capability.kind === 'minimax-h3') {
+    const request: MiniMaxH3CreationVideoRequestOptions = {
+      duration: Number(normalizedOptions.duration),
+      aspect_ratio: normalizedOptions.aspectRatio ?? capability.aspectRatios[0],
+      estimateSeconds: duration.estimateSeconds,
+    }
+    if (normalizedReferences.referenceMode === 'frames') {
+      if (normalizedReferences.startImageUrl) {
+        request.start_image_url = normalizedReferences.startImageUrl
+      }
+      if (normalizedReferences.endImageUrl) {
+        request.end_image_url = normalizedReferences.endImageUrl
+      }
+      return request
+    }
+    if (imageUrls.length === 1) {
+      request.image_url = imageUrls[0]
+    } else if (imageUrls.length > 1) {
+      request.image_urls = imageUrls
+    }
+    if (
+      normalizedReferences.referenceMode === 'image-audio' &&
+      audioUrls.length
+    ) {
+      request.audio_url = audioUrls[0]
+    }
+    return request
+  }
+
+  const request: Video2CreationVideoRequestOptions = {
+    duration: Number(normalizedOptions.duration),
+    aspect_ratio: normalizedOptions.aspectRatio ?? capability.aspectRatios[0],
+    resolution: normalizedOptions.resolution === '480p' ? '480p' : '720p',
+    async: true,
+    estimateSeconds: duration.estimateSeconds,
   }
 
   if (imageUrls.length === 1) {

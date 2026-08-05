@@ -80,7 +80,7 @@ func isAsyncGenerationsModel(modelName string) bool {
 		return true
 	}
 	switch normalizedModelName {
-	case "sora2", "sora-2", "kling-v3", "ko3", "veo31", "veo31-fast", "veo31-ref", "grok-imagine-video":
+	case "sora2", "sora-2", "minimax-h3", "kling-v3", "ko3", "veo31", "veo31-fast", "veo31-ref", "grok-imagine-video":
 		return true
 	default:
 		return false
@@ -335,8 +335,9 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	}
 
 	modelName, _ := body["model"].(string)
+	originModelName, _ := body["origin_model"].(string)
 	uri := fmt.Sprintf("%s/v1/videos/%s", baseUrl, taskID)
-	if isAsyncGenerationsModel(modelName) {
+	if isAsyncGenerationsModel(modelName) || isAsyncGenerationsModel(originModelName) {
 		uri = fmt.Sprintf("%s/v1/video/async-generations/%s", baseUrl, taskID)
 	}
 

@@ -15,8 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestModelListIncludesLinkskySora2(t *testing.T) {
+func TestModelListIncludesSupportedVideoModels(t *testing.T) {
 	require.Contains(t, ModelList, "sora2")
+	require.Contains(t, ModelList, "minimax-h3")
 	require.Contains(t, ModelList, "video-2.0")
 	require.Contains(t, ModelList, "video-2.0-fast")
 	require.Contains(t, ModelList, "video-2.0-mini")
@@ -28,6 +29,42 @@ func TestModelListIncludesLinkskySora2(t *testing.T) {
 	require.Contains(t, ModelList, "veo31-fast")
 	require.Contains(t, ModelList, "veo31-ref")
 	require.Contains(t, ModelList, "grok-imagine-video")
+}
+
+func TestMiniMaxH3RequestBodyPassesDocumentedFieldsThrough(t *testing.T) {
+	c := newVideo2JSONContext(t, `{
+		"model":"minimax-h3",
+		"prompt":"demo",
+		"duration":8,
+		"aspect_ratio":"21:9",
+		"image_urls":["https://cdn.example/one.png","https://cdn.example/two.png"],
+		"audio_url":"https://cdn.example/audio.ogg"
+	}`)
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "minimax-h3",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "minimax-h3",
+		},
+	}
+	adaptor := &TaskAdaptor{}
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, common.Unmarshal(encoded, &got))
+	require.Equal(t, "minimax-h3", got["model"])
+	require.Equal(t, "demo", got["prompt"])
+	require.Equal(t, float64(8), got["duration"])
+	require.Equal(t, "21:9", got["aspect_ratio"])
+	require.Equal(t, []any{"https://cdn.example/one.png", "https://cdn.example/two.png"}, got["image_urls"])
+	require.Equal(t, "https://cdn.example/audio.ogg", got["audio_url"])
+	require.NotContains(t, got, "resolution")
+	require.NotContains(t, got, "async")
 }
 
 func TestBuildRequestURLUsesAsyncGenerationsForLinkskyDocPath(t *testing.T) {
@@ -155,6 +192,7 @@ func TestFetchTaskUsesAsyncGenerationsForLinkskyVideoModels(t *testing.T) {
 		"video-2.0-480p",
 		"video-2.0-fast-480p",
 		"video-2.0-mini-480p",
+		"minimax-h3",
 		"ko3",
 		"veo31",
 		"veo31-fast",
@@ -182,6 +220,28 @@ func TestFetchTaskUsesAsyncGenerationsForLinkskyVideoModels(t *testing.T) {
 			require.Equal(t, "/v1/video/async-generations/task_upstream", gotPath)
 		})
 	}
+}
+
+func TestFetchTaskUsesOriginModelWhenUpstreamModelIsMapped(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"task_upstream","status":"running"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	adaptor := &TaskAdaptor{}
+	resp, err := adaptor.FetchTask(server.URL, "sk-test", map[string]any{
+		"task_id":      "task_upstream",
+		"model":        "provider-specific-h3",
+		"origin_model": "minimax-h3",
+	}, "")
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	_ = resp.Body.Close()
+	require.Equal(t, "/v1/video/async-generations/task_upstream", gotPath)
 }
 
 func TestParseTaskResultTreatsRunningAsInProgress(t *testing.T) {

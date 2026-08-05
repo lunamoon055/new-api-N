@@ -27,6 +27,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { ThemeCustomizationProvider } from '@/context/theme-customization-provider'
 import { useSystemConfig } from '@/hooks/use-system-config'
+import { clearChunkLoadRecovery } from '@/lib/chunk-load-recovery'
 import { Toaster } from '@/components/ui/sonner'
 import { NavigationProgress } from '@/components/navigation-progress'
 import { GeneralError } from '@/features/errors/general-error'
@@ -43,6 +44,13 @@ function RootComponent() {
     if (aff) {
       saveAffiliateCode(aff)
     }
+  }, [])
+
+  useEffect(() => {
+    // Keep the marker briefly so an immediately repeated chunk error cannot
+    // create a reload loop. A healthy app start clears it for future deploys.
+    const timer = window.setTimeout(clearChunkLoadRecovery, 60_000)
+    return () => window.clearTimeout(timer)
   }, [])
 
   return (

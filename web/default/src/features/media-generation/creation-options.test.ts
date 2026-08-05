@@ -26,11 +26,14 @@ import {
 } from './image-options'
 import {
   getCreationDurationOptions,
+  getCreationPromptMaxLength,
   getCreationResolutionOptions,
   getCreationVideoCapabilities,
+  getCreationVideoReferenceError,
   getCreationVideoReferenceLimits,
   getCreationVideoRequestOptions,
   normalizeCreationVideoOptions,
+  normalizeCreationVideoReferences,
 } from './video-options'
 
 const sanbaoImageModel = {
@@ -302,5 +305,214 @@ describe('Sanbao creation model options', () => {
       resolution: '480p',
       estimateSeconds: 150,
     })
+  })
+})
+
+describe('MiniMax H3 creation model options', () => {
+  const model = 'minimax-h3'
+
+  test('matches the documented controls and limits', () => {
+    const capability = getCreationVideoCapabilities(model)
+
+    assert.equal(capability?.kind, 'minimax-h3')
+    assert.equal(capability?.showResolution, false)
+    assert.equal(capability?.includeResolutionInRequest, false)
+    assert.deepEqual(capability?.aspectRatios, [
+      '16:9',
+      '9:16',
+      '1:1',
+      '4:3',
+      '3:4',
+      '21:9',
+    ])
+    assert.deepEqual(capability?.referenceModes, [
+      'text',
+      'image',
+      'frames',
+      'image-audio',
+    ])
+    assert.deepEqual(
+      getCreationDurationOptions(model).map((item) => item.value),
+      ['5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15']
+    )
+    assert.deepEqual(
+      getCreationResolutionOptions(model).map((item) => item.value),
+      ['2k']
+    )
+    assert.deepEqual(getCreationVideoReferenceLimits(model), {
+      maxImages: 5,
+      maxVideos: 0,
+      maxAudios: 1,
+      maxMediaFiles: undefined,
+      maxImageSizeBytes: 20 * 1024 * 1024,
+      maxVideoSizeBytes: 200 * 1024 * 1024,
+      maxAudioSizeBytes: 15 * 1024 * 1024,
+      maxImageSizeMB: 20,
+      maxVideoSizeMB: 200,
+      maxAudioSizeMB: 15,
+      minReferenceAudioDurationSeconds: 2,
+      maxReferenceAudioDurationSeconds: 15,
+    })
+    assert.equal(getCreationPromptMaxLength(model), 2000)
+  })
+
+  test('keeps the documented H3 contract when catalog metadata is present', () => {
+    const catalogModel = {
+      id: 'minimax-h3',
+      metadata: {
+        provider: 'sanbao',
+        type: 'video',
+        durations: [5, 10],
+        resolutions: ['720p'],
+        max_prompt_length: 5000,
+      },
+    }
+
+    const capability = getCreationVideoCapabilities(catalogModel)
+    assert.equal(capability?.kind, 'minimax-h3')
+    assert.deepEqual(
+      getCreationDurationOptions(catalogModel).map((item) => item.value),
+      ['5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15']
+    )
+    assert.equal(getCreationPromptMaxLength(catalogModel), 2000)
+  })
+
+  test('builds text, multi-image, frame, and image-audio requests', () => {
+    const options = normalizeCreationVideoOptions(
+      { resolution: '480p', duration: '8', aspectRatio: '21:9' },
+      model
+    )
+    assert.deepEqual(options, {
+      resolution: '2k',
+      duration: '8',
+      aspectRatio: '21:9',
+    })
+    assert.deepEqual(getCreationVideoRequestOptions(options, model), {
+      duration: 8,
+      aspect_ratio: '21:9',
+      estimateSeconds: 180,
+    })
+
+    assert.deepEqual(
+      getCreationVideoRequestOptions(options, model, {
+        referenceMode: 'image',
+        imageUrls: [
+          { url: 'https://example.com/one.png' },
+          { url: 'https://example.com/two.png' },
+        ],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [],
+        audioUrls: [],
+        audioUrl: '',
+      }),
+      {
+        duration: 8,
+        aspect_ratio: '21:9',
+        estimateSeconds: 180,
+        image_urls: [
+          'https://example.com/one.png',
+          'https://example.com/two.png',
+        ],
+      }
+    )
+
+    assert.deepEqual(
+      getCreationVideoRequestOptions(options, model, {
+        referenceMode: 'frames',
+        imageUrls: [],
+        startImageUrl: 'https://example.com/start.png',
+        endImageUrl: 'https://example.com/end.png',
+        videoUrls: [],
+        audioUrls: [],
+        audioUrl: '',
+      }),
+      {
+        duration: 8,
+        aspect_ratio: '21:9',
+        estimateSeconds: 180,
+        start_image_url: 'https://example.com/start.png',
+        end_image_url: 'https://example.com/end.png',
+      }
+    )
+
+    assert.deepEqual(
+      getCreationVideoRequestOptions(options, model, {
+        referenceMode: 'image-audio',
+        imageUrls: [{ url: 'https://example.com/scene.png' }],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [],
+        audioUrls: [{ url: 'https://example.com/sound.m4a' }],
+        audioUrl: { url: 'https://example.com/sound.m4a' },
+      }),
+      {
+        duration: 8,
+        aspect_ratio: '21:9',
+        estimateSeconds: 180,
+        image_url: 'https://example.com/scene.png',
+        audio_url: 'https://example.com/sound.m4a',
+      }
+    )
+  })
+
+  test('enforces H3 reference-mode combinations and formats', () => {
+    const missingImage = normalizeCreationVideoReferences(
+      { referenceMode: 'image' },
+      model
+    )
+    assert.equal(
+      getCreationVideoReferenceError(model, missingImage),
+      'Image reference mode requires at least one image reference.'
+    )
+
+    const incompleteFrames = normalizeCreationVideoReferences(
+      {
+        referenceMode: 'frames',
+        startImageUrl: 'https://example.com/start.png',
+      },
+      model
+    )
+    assert.equal(
+      getCreationVideoReferenceError(model, incompleteFrames),
+      'Start/end frame mode requires both a start frame and an end frame.'
+    )
+
+    const audioWithoutImage = normalizeCreationVideoReferences(
+      {
+        referenceMode: 'image-audio',
+        audioUrls: ['https://example.com/sound.m4a'],
+      },
+      model
+    )
+    assert.equal(
+      getCreationVideoReferenceError(model, audioWithoutImage),
+      'Audio reference requires at least one image reference.'
+    )
+
+    const imageWithoutAudio = normalizeCreationVideoReferences(
+      {
+        referenceMode: 'image-audio',
+        imageUrls: ['https://example.com/scene.png'],
+      },
+      model
+    )
+    assert.equal(
+      getCreationVideoReferenceError(model, imageWithoutAudio),
+      'Image and audio mode requires at least one image and one audio reference.'
+    )
+
+    const validExtendedAudio = normalizeCreationVideoReferences(
+      {
+        referenceMode: 'image-audio',
+        imageUrls: ['https://example.com/scene.png'],
+        audioUrls: ['https://example.com/sound.webm'],
+      },
+      model
+    )
+    assert.equal(
+      getCreationVideoReferenceError(model, validExtendedAudio),
+      undefined
+    )
   })
 })

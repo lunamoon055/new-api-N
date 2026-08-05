@@ -35,6 +35,14 @@ const AUDIO_MIME_BY_EXTENSION: Record<string, string> = {
   wav: 'audio/wav',
 }
 
+const MINIMAX_H3_AUDIO_MIME_BY_EXTENSION: Record<string, string> = {
+  ...AUDIO_MIME_BY_EXTENSION,
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  ogg: 'audio/ogg',
+  webm: 'audio/webm',
+}
+
 const AUDIO_MIME_TYPES = [
   'audio/mpeg',
   'audio/mp3',
@@ -42,6 +50,19 @@ const AUDIO_MIME_TYPES = [
   'audio/wave',
   'audio/x-wav',
 ]
+
+const MINIMAX_H3_AUDIO_MIME_TYPES = [
+  ...AUDIO_MIME_TYPES,
+  'audio/mp4',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/x-aac',
+  'audio/ogg',
+  'application/ogg',
+  'audio/webm',
+]
+
+export type ReferenceAudioProfile = 'default' | 'minimax-h3'
 
 type ReferenceFileLike = Pick<File, 'name' | 'type'>
 
@@ -64,8 +85,17 @@ export function getReferenceVideoMime(file: ReferenceFileLike) {
   return getReferenceMime(file, VIDEO_MIME_BY_EXTENSION)
 }
 
-export function getReferenceAudioMime(file: ReferenceFileLike) {
-  return getReferenceMime(file, AUDIO_MIME_BY_EXTENSION, AUDIO_MIME_TYPES)
+export function getReferenceAudioMime(
+  file: ReferenceFileLike,
+  profile: ReferenceAudioProfile = 'default'
+) {
+  return profile === 'minimax-h3'
+    ? getReferenceMime(
+        file,
+        MINIMAX_H3_AUDIO_MIME_BY_EXTENSION,
+        MINIMAX_H3_AUDIO_MIME_TYPES
+      )
+    : getReferenceMime(file, AUDIO_MIME_BY_EXTENSION, AUDIO_MIME_TYPES)
 }
 
 export function isReferenceImageFile(file: ReferenceFileLike) {
@@ -76,6 +106,39 @@ export function isReferenceVideoFile(file: ReferenceFileLike) {
   return !!getReferenceVideoMime(file)
 }
 
-export function isReferenceAudioFile(file: ReferenceFileLike) {
-  return !!getReferenceAudioMime(file)
+export function isReferenceAudioFile(
+  file: ReferenceFileLike,
+  profile: ReferenceAudioProfile = 'default'
+) {
+  return !!getReferenceAudioMime(file, profile)
+}
+
+export async function getReferenceAudioDurationSeconds(file: File) {
+  if (
+    typeof document === 'undefined' ||
+    typeof URL === 'undefined' ||
+    typeof URL.createObjectURL !== 'function'
+  ) {
+    return undefined
+  }
+
+  const objectURL = URL.createObjectURL(file)
+  return new Promise<number | undefined>((resolve) => {
+    const audio = document.createElement('audio')
+    let settled = false
+    const finish = (duration?: number) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      audio.removeAttribute('src')
+      URL.revokeObjectURL(objectURL)
+      resolve(duration)
+    }
+    const timeout = setTimeout(() => finish(), 10_000)
+    audio.preload = 'metadata'
+    audio.onloadedmetadata = () =>
+      finish(Number.isFinite(audio.duration) ? audio.duration : undefined)
+    audio.onerror = () => finish()
+    audio.src = objectURL
+  })
 }

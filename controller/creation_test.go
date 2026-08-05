@@ -144,6 +144,38 @@ func TestCreationReferenceFileUploadAndFetch(t *testing.T) {
 			data:        []byte("fake mp3 content"),
 			wantType:    "audio/mpeg",
 		},
+		{
+			name:        "audio m4a",
+			kind:        "audio",
+			filename:    "reference.m4a",
+			contentType: "audio/mp4",
+			data:        []byte("fake m4a content"),
+			wantType:    "audio/mp4",
+		},
+		{
+			name:        "audio aac",
+			kind:        "audio",
+			filename:    "reference.aac",
+			contentType: "audio/aac",
+			data:        []byte("fake aac content"),
+			wantType:    "audio/aac",
+		},
+		{
+			name:        "audio ogg",
+			kind:        "audio",
+			filename:    "reference.ogg",
+			contentType: "audio/ogg",
+			data:        []byte("fake ogg content"),
+			wantType:    "audio/ogg",
+		},
+		{
+			name:        "audio webm",
+			kind:        "audio",
+			filename:    "reference.webm",
+			contentType: "audio/webm",
+			data:        []byte("fake webm content"),
+			wantType:    "audio/webm",
+		},
 	}
 
 	for _, tt := range tests {

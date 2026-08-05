@@ -46,11 +46,18 @@ var creationReferenceFileTypes = map[string]creationReferenceFileType{
 		kind:     "audio",
 		maxBytes: 15 << 20,
 		extensions: map[string]string{
-			"audio/mp3":   ".mp3",
-			"audio/mpeg":  ".mp3",
-			"audio/wav":   ".wav",
-			"audio/wave":  ".wav",
-			"audio/x-wav": ".wav",
+			"audio/mp3":       ".mp3",
+			"audio/mpeg":      ".mp3",
+			"audio/wav":       ".wav",
+			"audio/wave":      ".wav",
+			"audio/x-wav":     ".wav",
+			"audio/mp4":       ".m4a",
+			"audio/x-m4a":     ".m4a",
+			"audio/aac":       ".aac",
+			"audio/x-aac":     ".aac",
+			"audio/ogg":       ".ogg",
+			"application/ogg": ".ogg",
+			"audio/webm":      ".webm",
 		},
 	},
 }
@@ -217,6 +224,14 @@ func creationReferenceFileMimeFromName(name string) string {
 		return "audio/mpeg"
 	case ".wav":
 		return "audio/wav"
+	case ".m4a":
+		return "audio/mp4"
+	case ".aac":
+		return "audio/aac"
+	case ".ogg":
+		return "audio/ogg"
+	case ".webm":
+		return "audio/webm"
 	default:
 		return ""
 	}

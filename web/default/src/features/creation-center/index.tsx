@@ -53,12 +53,15 @@ import {
   EMPTY_CREATION_IMAGE_REFERENCES,
   DEFAULT_CREATION_VIDEO_OPTIONS,
   EMPTY_CREATION_VIDEO_REFERENCES,
+  composeCreationPrompt,
   filterCreationVideoReferencesByPromptMentions,
   getCreationImageAspectRatioOptions,
   getCreationImageReferenceError,
   getCreationImageReferenceLimits,
+  getCreationReferenceURL,
   getCreationDurationOptions,
   getCreationHistoryStorageKey,
+  getCreationPromptMaxLength,
   getCreationResolutionOptions,
   supportsCreationImageReferences,
   getCreationVideoCapabilities,
@@ -87,6 +90,7 @@ import type {
   CreationResult,
 } from './types'
 import {
+  getReferenceAudioDurationSeconds,
   getReferenceAudioMime,
   getReferenceImageMime,
   getReferenceVideoMime,
@@ -443,18 +447,26 @@ export function CreationCenter() {
 
     const referenceMode = videoReferences.referenceMode
     const videoReferenceLimits = getCreationVideoReferenceLimits(selectedModel)
+    const audioProfile =
+      videoCapabilities?.kind === 'minimax-h3'
+        ? ('minimax-h3' as const)
+        : ('default' as const)
     const acceptsImages =
-      (referenceMode === 'image' || referenceMode === 'multimodal') &&
+      (referenceMode === 'image' ||
+        referenceMode === 'multimodal' ||
+        referenceMode === 'frames' ||
+        referenceMode === 'image-audio') &&
       videoReferenceLimits.maxImages > 0
     const acceptsVideos =
       (referenceMode === 'video' || referenceMode === 'multimodal') &&
       videoReferenceLimits.maxVideos > 0
     const acceptsAudio =
-      referenceMode === 'multimodal' && videoReferenceLimits.maxAudios > 0
+      (referenceMode === 'multimodal' || referenceMode === 'image-audio') &&
+      videoReferenceLimits.maxAudios > 0
     const acceptedFiles = files.filter((file) => {
       if (acceptsImages && isReferenceImageFile(file)) return true
       if (acceptsVideos && isReferenceVideoFile(file)) return true
-      if (acceptsAudio && isReferenceAudioFile(file)) return true
+      if (acceptsAudio && isReferenceAudioFile(file, audioProfile)) return true
       return false
     })
 
@@ -466,7 +478,11 @@ export function CreationCenter() {
       toast.error(t('Choose supported reference files.'))
     }
 
-    const currentImageCount = videoReferences.imageUrls.filter(Boolean).length
+    const currentImageCount =
+      referenceMode === 'frames'
+        ? Number(Boolean(videoReferences.startImageUrl)) +
+          Number(Boolean(videoReferences.endImageUrl))
+        : videoReferences.imageUrls.filter(Boolean).length
     const currentVideoCount = videoReferences.videoUrls.filter(Boolean).length
     const currentAudioCount = videoReferences.audioUrls.filter(Boolean).length
     const maxMediaFiles = videoReferenceLimits.maxMediaFiles
@@ -482,7 +498,9 @@ export function CreationCenter() {
         : Number.POSITIVE_INFINITY
     const referenceImageFiles: File[] = []
     const referenceVideoFiles: File[] = []
-    const referenceAudioFiles: File[] = []
+    let referenceAudioFiles: File[] = []
+    const maxImageCount =
+      referenceMode === 'frames' ? 2 : videoReferenceLimits.maxImages
     let imageOversizedCount = 0
     let videoOversizedCount = 0
     let audioOversizedCount = 0
@@ -497,7 +515,7 @@ export function CreationCenter() {
           imageOversizedCount += 1
           continue
         }
-        if (currentImageCount + referenceImageFiles.length >= videoReferenceLimits.maxImages) {
+        if (currentImageCount + referenceImageFiles.length >= maxImageCount) {
           imageLimitHit = true
           continue
         }
@@ -517,7 +535,10 @@ export function CreationCenter() {
           videoOversizedCount += 1
           continue
         }
-        if (currentVideoCount + referenceVideoFiles.length >= videoReferenceLimits.maxVideos) {
+        if (
+          currentVideoCount + referenceVideoFiles.length >=
+          videoReferenceLimits.maxVideos
+        ) {
           videoLimitHit = true
           continue
         }
@@ -532,12 +553,15 @@ export function CreationCenter() {
         continue
       }
 
-      if (acceptsAudio && isReferenceAudioFile(file)) {
+      if (acceptsAudio && isReferenceAudioFile(file, audioProfile)) {
         if (file.size > videoReferenceLimits.maxAudioSizeBytes) {
           audioOversizedCount += 1
           continue
         }
-        if (currentAudioCount + referenceAudioFiles.length >= videoReferenceLimits.maxAudios) {
+        if (
+          currentAudioCount + referenceAudioFiles.length >=
+          videoReferenceLimits.maxAudios
+        ) {
           audioLimitHit = true
           continue
         }
@@ -552,6 +576,41 @@ export function CreationCenter() {
       }
     }
 
+    let audioDurationInvalidCount = 0
+    const minAudioDuration =
+      videoReferenceLimits.minReferenceAudioDurationSeconds
+    const maxAudioDuration =
+      videoReferenceLimits.maxReferenceAudioDurationSeconds
+    if (
+      referenceAudioFiles.length &&
+      (minAudioDuration !== undefined || maxAudioDuration !== undefined)
+    ) {
+      const durations = await Promise.all(
+        referenceAudioFiles.map(getReferenceAudioDurationSeconds)
+      )
+      referenceAudioFiles = referenceAudioFiles.filter((_, index) => {
+        const duration = durations[index]
+        if (duration === undefined) return true
+        const allowed =
+          (minAudioDuration === undefined || duration >= minAudioDuration) &&
+          (maxAudioDuration === undefined || duration <= maxAudioDuration)
+        if (!allowed) audioDurationInvalidCount += 1
+        return allowed
+      })
+    }
+
+    if (audioDurationInvalidCount > 0) {
+      toast.error(
+        t(
+          'Reference audio duration must be between {{min}} and {{max}} seconds.',
+          {
+            min: minAudioDuration ?? 0,
+            max: maxAudioDuration ?? 0,
+          }
+        )
+      )
+    }
+
     if (
       !referenceImageFiles.length &&
       !referenceVideoFiles.length &&
@@ -563,7 +622,7 @@ export function CreationCenter() {
     if (imageLimitHit) {
       toast.error(
         t('This model accepts at most {{count}} image references.', {
-          count: videoReferenceLimits.maxImages,
+          count: maxImageCount,
         })
       )
     }
@@ -637,7 +696,7 @@ export function CreationCenter() {
           createUploadedReferenceValue(
             file,
             'audio',
-            getReferenceAudioMime(file)
+            getReferenceAudioMime(file, audioProfile)
           )
         )
       )
@@ -645,18 +704,39 @@ export function CreationCenter() {
       toast.error(t('Unable to upload reference file.'))
       return
     }
-    setVideoReferences((current) =>
-      normalizeCreationVideoReferences(
+    setVideoReferences((current) => {
+      if (referenceMode === 'frames') {
+        const frameURLs = imageUrls.map(getCreationReferenceURL)
+        let startImageUrl = current.startImageUrl
+        let endImageUrl = current.endImageUrl
+        for (const url of frameURLs) {
+          if (!startImageUrl) {
+            startImageUrl = url
+          } else if (!endImageUrl) {
+            endImageUrl = url
+          }
+        }
+        return normalizeCreationVideoReferences(
+          {
+            ...current,
+            startImageUrl,
+            endImageUrl,
+          },
+          selectedModel
+        )
+      }
+      const nextAudioUrls = [...current.audioUrls, ...audioUrls]
+      return normalizeCreationVideoReferences(
         {
           ...current,
           imageUrls: [...current.imageUrls, ...imageUrls],
           videoUrls: [...current.videoUrls, ...videoUrls],
-          audioUrls: [...current.audioUrls, ...audioUrls],
-          audioUrl: [...current.audioUrls, ...audioUrls][0] ?? current.audioUrl,
+          audioUrls: nextAudioUrls,
+          audioUrl: nextAudioUrls[0] ?? current.audioUrl,
         },
         selectedModel
       )
-    )
+    })
     toast.success(t('Reference assets added.'))
   }
 
@@ -682,8 +762,18 @@ export function CreationCenter() {
   }
 
   const removeVideoReferenceImage = (index: number) => {
-    setVideoReferences((current) =>
-      normalizeCreationVideoReferences(
+    setVideoReferences((current) => {
+      if (current.referenceMode === 'frames') {
+        return normalizeCreationVideoReferences(
+          {
+            ...current,
+            startImageUrl: index === 0 ? '' : current.startImageUrl,
+            endImageUrl: index === 1 ? '' : current.endImageUrl,
+          },
+          selectedModel
+        )
+      }
+      return normalizeCreationVideoReferences(
         {
           ...current,
           imageUrls: current.imageUrls.filter(
@@ -692,7 +782,7 @@ export function CreationCenter() {
         },
         selectedModel
       )
-    )
+    })
   }
 
   const removeVideoReferenceVideo = (index: number) => {
@@ -737,6 +827,15 @@ export function CreationCenter() {
     const trimmedPrompt = prompt.trim()
     if (!trimmedPrompt) {
       toast.error(t('Write a prompt before submitting.'))
+      return
+    }
+    const promptMaxLength = getCreationPromptMaxLength(selectedModel)
+    if (composeCreationPrompt(trimmedPrompt, assets).length > promptMaxLength) {
+      toast.error(
+        t('Prompt must not exceed {{count}} characters.', {
+          count: promptMaxLength,
+        })
+      )
       return
     }
     const mentionedVideoReferences =
