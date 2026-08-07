@@ -14,6 +14,7 @@ import (
 )
 
 type videosRequest struct {
+	Model           string   `json:"model,omitempty"`
 	Prompt          string   `json:"prompt"`
 	Duration        *int     `json:"duration,omitempty"`
 	Ratio           string   `json:"ratio,omitempty"`
@@ -21,6 +22,8 @@ type videosRequest struct {
 	ReferenceImages []string `json:"referenceImages,omitempty"`
 	ReferenceVideos []string `json:"referenceVideos,omitempty"`
 	ReferenceAudios []string `json:"referenceAudios,omitempty"`
+	StartImageURL   string   `json:"start_image_url,omitempty"`
+	EndImageURL     string   `json:"end_image_url,omitempty"`
 	FirstImage      string   `json:"first_image,omitempty"`
 	LastImage       string   `json:"last_image,omitempty"`
 }
@@ -33,6 +36,11 @@ type videosReferenceLimits struct {
 
 func normalizeVideosModelName(modelName string) string {
 	normalized := strings.ToLower(strings.TrimSpace(modelName))
+	if index := strings.IndexAny(normalized, "(（"); index == 0 {
+		if closeIndex := strings.IndexAny(normalized, ")）"); closeIndex > 0 {
+			normalized = strings.TrimSpace(normalized[closeIndex+1:])
+		}
+	}
 	for _, delimiters := range [][2]string{{"(", ")"}, {"（", "）"}} {
 		if !strings.HasSuffix(normalized, delimiters[1]) {
 			continue
@@ -55,6 +63,9 @@ func isVideos4ModelName(modelName string) bool {
 
 func isVideosModelName(modelName string) bool {
 	normalizedModelName := normalizeVideosModelName(modelName)
+	if isSeedance2ModelName(normalizedModelName) {
+		return true
+	}
 	switch normalizedModelName {
 	case "videos-standard", "videos-fast", "videos-mini",
 		"videos-4", "videos-4-fast", "videos-4-mini":

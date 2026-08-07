@@ -115,6 +115,42 @@ describe('Creation Center video request payload', () => {
     )
   })
 
+  test('routes the prefixed Seedance mapping with nested-reference fields', () => {
+    assert.deepEqual(
+      buildCreationVideoSubmitRequest({
+        model: createVideoModel('(线路3)sd-2.0-933'),
+        prompt: '让角色从起点走到终点',
+        videoOptions: {
+          resolution: '480p',
+          duration: '10',
+          aspectRatio: '4:3',
+        },
+        videoReferences: {
+          referenceMode: 'frames',
+          imageUrls: [],
+          startImageUrl: 'https://example.com/start.png',
+          endImageUrl: 'https://example.com/end.png',
+          videoUrls: [],
+          audioUrls: [],
+          audioUrl: '',
+        },
+      }),
+      {
+        endpoint: '/api/creation/video/async-generations',
+        payload: {
+          model: '(线路3)sd-2.0-933',
+          prompt: '让角色从起点走到终点',
+          duration: 10,
+          ratio: '4:3',
+          resolution: '720p',
+          start_image_url: 'https://example.com/start.png',
+          end_image_url: 'https://example.com/end.png',
+        },
+        transport: 'async-video',
+      }
+    )
+  })
+
   test('submits the 993 fixed-resolution models without an unsupported resolution field', () => {
     for (const model of ['sd2-1080P(993按秒)', 'sd2-4k(993按秒)']) {
       assert.deepEqual(

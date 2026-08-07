@@ -121,6 +121,68 @@ func TestBuildRequestURLKeepsVideos4CatalogModelsOnStandardEndpoint(t *testing.T
 	}
 }
 
+func TestBuildRequestURLUsesVideosAPIForSeedanceAlias(t *testing.T) {
+	adaptor := &TaskAdaptor{baseURL: "https://api.example.com"}
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "(线路3)sd-2.0-933",
+		RequestURLPath:  "/v1/video/async-generations",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "sd-2-c8",
+		},
+	}
+
+	got, err := adaptor.BuildRequestURL(info)
+
+	require.NoError(t, err)
+	require.Equal(t, "https://api.example.com/v1/videos", got)
+}
+
+func TestSeedanceRequestUsesDocumentedNestedBody(t *testing.T) {
+	c := newVideo2JSONContext(t, `{
+		"model":"(线路3)sd-2.0-933",
+		"prompt":"让角色向前走",
+		"duration":10,
+		"ratio":"4:3",
+		"resolution":"720p",
+		"start_image_url":"https://cdn.example/start.png",
+		"end_image_url":"https://cdn.example/end.png",
+		"referenceImages":["https://cdn.example/ref.png"],
+		"referenceVideos":["https://cdn.example/ref.mp4"],
+		"referenceAudios":["https://cdn.example/ref.mp3"]
+	}`)
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "(线路3)sd-2.0-933",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "sd-2-c8",
+		},
+	}
+	adaptor := &TaskAdaptor{}
+
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+
+	var got seedance2Request
+	require.NoError(t, common.Unmarshal(encoded, &got))
+	require.Equal(t, "sd-2-c8", got.Model)
+	require.Equal(t, "让角色向前走", got.Input.Prompt)
+	require.Equal(t, "720p", got.Parameters.Resolution)
+	require.Equal(t, "4:3", got.Parameters.Ratio)
+	require.NotNil(t, got.Parameters.Duration)
+	require.Equal(t, 10, *got.Parameters.Duration)
+	require.Equal(t, []seedance2Media{
+		{Type: "first_frame", URL: "https://cdn.example/start.png"},
+		{Type: "last_frame", URL: "https://cdn.example/end.png"},
+		{Type: "reference_image", URL: "https://cdn.example/ref.png"},
+		{Type: "reference_video", URL: "https://cdn.example/ref.mp4"},
+		{Type: "reference_voice", URL: "https://cdn.example/ref.mp3"},
+	}, got.Input.Media)
+}
+
 func TestFetchTaskUsesAsyncGenerationsForSora2(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -273,6 +335,49 @@ func TestParseTaskResultCapturesCompletedMetadataURL(t *testing.T) {
 	require.Equal(t, "https://cdn.example/video.mp4", result.Url)
 }
 
+func TestParseTaskResultAcceptsNumericSeconds(t *testing.T) {
+	result, err := (&TaskAdaptor{}).ParseTaskResult([]byte(`{
+		"id":"task_upstream",
+		"status":"completed",
+		"seconds":10,
+		"object":"https://cdn.example/video.mp4"
+	}`))
+
+	require.NoError(t, err)
+	require.Equal(t, string(model.TaskStatusSuccess), result.Status)
+	require.Equal(t, "https://cdn.example/video.mp4", result.Url)
+}
+
+func TestParseTaskResultDoesNotTreatObjectNameAsVideoURL(t *testing.T) {
+	result, err := (&TaskAdaptor{}).ParseTaskResult([]byte(`{
+		"id":"task_upstream",
+		"status":"completed",
+		"object":"video"
+	}`))
+
+	require.NoError(t, err)
+	require.Equal(t, string(model.TaskStatusSuccess), result.Status)
+	require.Empty(t, result.Url)
+}
+
+func TestParseTaskResultAcceptsObjectURLAndFailedReason(t *testing.T) {
+	completed, err := (&TaskAdaptor{}).ParseTaskResult([]byte(`{
+		"id":"task_upstream",
+		"status":"completed",
+		"object":"https://cdn.example/video.mp4"
+	}`))
+	require.NoError(t, err)
+	require.Equal(t, "https://cdn.example/video.mp4", completed.Url)
+
+	failed, err := (&TaskAdaptor{}).ParseTaskResult([]byte(`{
+		"id":"task_upstream",
+		"status":"FAILED: quota exhausted"
+	}`))
+	require.NoError(t, err)
+	require.Equal(t, string(model.TaskStatusFailure), failed.Status)
+	require.Equal(t, "quota exhausted", failed.Reason)
+}
+
 func TestDoResponseAcceptsNestedDataTaskID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
@@ -305,6 +410,33 @@ func TestDoResponseAcceptsNestedDataTaskID(t *testing.T) {
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &body))
 	require.Equal(t, "task_public", body.ID)
 	require.Equal(t, "task_public", body.TaskID)
+}
+
+func TestDoResponseExposesFailedStatusReason(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	resp := &http.Response{
+		Body: io.NopCloser(bytes.NewBufferString(`{
+			"id":"task_upstream",
+			"status":"FAILED: quota exhausted"
+		}`)),
+	}
+	info := &relaycommon.RelayInfo{
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+			PublicTaskID: "task_public",
+		},
+	}
+
+	taskID, _, taskErr := (&TaskAdaptor{}).DoResponse(c, resp, info)
+
+	require.Nil(t, taskErr)
+	require.Equal(t, "task_upstream", taskID)
+	var body responseTask
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &body))
+	require.Equal(t, "FAILED: quota exhausted", body.Status)
+	require.NotNil(t, body.Error)
+	require.Equal(t, "quota exhausted", body.Error.Message)
 }
 
 func TestParseTaskResultAcceptsNestedDataVideoURL(t *testing.T) {
@@ -362,7 +494,7 @@ func TestConvertToOpenAIVideoNormalizesCompletedAsyncTask(t *testing.T) {
 			"status":"completed",
 			"metadata":{"url":"https://cdn.example/video.mp4"},
 			"model":"sora2",
-			"seconds":"4",
+			"seconds":4,
 			"size":"1920x1080"
 		}`),
 	}

@@ -47,7 +47,8 @@ export type PlaygroundVideoRequest = {
 } & WithoutEstimate<CreationVideoRequestOptions>
 
 export type PlaygroundMediaRequest =
-  PlaygroundImageRequest | PlaygroundVideoRequest
+  | PlaygroundImageRequest
+  | PlaygroundVideoRequest
 
 export type PlaygroundMediaResult = {
   mode: Exclude<PlaygroundMediaMode, 'chat'>
@@ -71,6 +72,7 @@ const VIDEO_MODEL_NAMES = new Set([
   'sd2-mini',
   'sd2-fast',
   'sd2满血',
+  'sd-2.0-933',
   'ko3',
   'kling-v3',
 ])
@@ -86,6 +88,7 @@ export function getPlaygroundModelMode(model: string): PlaygroundMediaMode {
     normalizedModel.startsWith('video-') ||
     normalizedModel.startsWith('videos-') ||
     normalizedModel.startsWith('sd2-') ||
+    normalizedModel.startsWith('sd-2.0-') ||
     normalizedModel.startsWith('sora') ||
     normalizedModel.startsWith('veo') ||
     normalizedModel.includes('kling') ||
@@ -259,7 +262,11 @@ function getLatestUserPrompt(messages: Message[]) {
 }
 
 function normalizeModelName(model: string) {
-  return model.trim().toLowerCase()
+  return model
+    .trim()
+    .toLowerCase()
+    .replace(/^\s*[(（][^()（）]*[)）]\s*/u, '')
+    .trim()
 }
 
 function extractErrorMessage(raw: unknown): string | undefined {

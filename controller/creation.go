@@ -672,6 +672,9 @@ func shouldAttachSanbaoCreationMetadata(modelName string, ownerChannelType int, 
 func isLikelySanbaoModelName(modelName string) bool {
 	key := normalizeCreationModelMetadataKey(modelName)
 	return strings.HasPrefix(key, "sd2") ||
+		strings.HasPrefix(key, "sd-2.0-") ||
+		strings.HasPrefix(key, "sd-2-c") ||
+		strings.HasPrefix(key, "seedance-2.") ||
 		strings.HasPrefix(key, "grok_video") ||
 		strings.HasPrefix(key, "gpt-image2-")
 }
@@ -957,7 +960,7 @@ func getCreationModelMode(modelName string, endpoints []constant.EndpointType) (
 }
 
 func getCreationModelMetadata(modelName string) creationModelMetadata {
-	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	modelName = normalizeCreationModelName(modelName)
 	if metadata, ok := creationModelMetadataByName[modelName]; ok {
 		return metadata
 	}
@@ -974,6 +977,9 @@ func getCreationModelMetadata(modelName string) creationModelMetadata {
 		strings.HasPrefix(modelName, "video-2.0") ||
 		strings.HasPrefix(modelName, "videos-") ||
 		strings.HasPrefix(modelName, "sd2") ||
+		strings.HasPrefix(modelName, "sd-2.0-") ||
+		strings.HasPrefix(modelName, "sd-2-c") ||
+		strings.HasPrefix(modelName, "seedance-2.") ||
 		strings.HasPrefix(modelName, "veo") ||
 		strings.Contains(modelName, "kling") ||
 		strings.Contains(modelName, "grok-imagine-video"):
@@ -985,6 +991,16 @@ func getCreationModelMetadata(modelName string) creationModelMetadata {
 	default:
 		return creationModelMetadata{}
 	}
+}
+
+func normalizeCreationModelName(modelName string) string {
+	normalized := strings.ToLower(strings.TrimSpace(modelName))
+	if index := strings.IndexAny(normalized, "(（"); index == 0 {
+		if closeIndex := strings.IndexAny(normalized, ")）"); closeIndex > 0 {
+			normalized = strings.TrimSpace(normalized[closeIndex+1:])
+		}
+	}
+	return normalized
 }
 
 func splitCreationModelTags(raw string) []string {

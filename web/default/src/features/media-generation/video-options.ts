@@ -21,7 +21,12 @@ export type CreationResolution = '480p' | '720p' | '1080p' | '2k' | '4k'
 export type CreationAspectRatio = string
 export type CreationDuration = string
 export type CreationVideoReferenceMode =
-  'text' | 'image' | 'video' | 'multimodal' | 'frames' | 'image-audio'
+  | 'text'
+  | 'image'
+  | 'video'
+  | 'multimodal'
+  | 'frames'
+  | 'image-audio'
 type Sora2AspectRatio = '9:16' | '16:9'
 
 export type CreationVideoOptions = {
@@ -177,6 +182,8 @@ type VideosApiCreationVideoRequestOptions = {
   referenceImages?: string[]
   referenceVideos?: string[]
   referenceAudios?: string[]
+  start_image_url?: string
+  end_image_url?: string
 }
 
 export type CreationVideoRequestOptions =
@@ -376,6 +383,18 @@ const SD2_720P_API_CAPABILITY: CreationVideoCapability = {
   resolutions: ['720p', '480p'],
 }
 
+// The mapped Seedance 2.0 channel uses the same internal task endpoint as the
+// Videos API, but only exposes 720p and the additional reference modes from
+// the provider integration document.
+const SEEDANCE_2_API_CAPABILITY: CreationVideoCapability = {
+  ...VIDEOS_API_CAPABILITY,
+  resolutions: ['720p'],
+  aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
+  referenceModes: ['text', 'image', 'frames', 'multimodal'],
+  showResolution: false,
+  includeResolutionInRequest: true,
+}
+
 const MINIMAX_H3_CAPABILITY: CreationVideoCapability = {
   kind: 'minimax-h3',
   durations: MINIMAX_H3_DURATIONS,
@@ -417,6 +436,9 @@ const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
   'sd2-1080p': SD2_1080P_API_CAPABILITY,
   'sd2-4k': SD2_4K_API_CAPABILITY,
   'sd2-720p': SD2_720P_API_CAPABILITY,
+  'sd-2.0-933': SEEDANCE_2_API_CAPABILITY,
+  'sd-2-c8': SEEDANCE_2_API_CAPABILITY,
+  'seedance-2.0': SEEDANCE_2_API_CAPABILITY,
   'minimax-h3': MINIMAX_H3_CAPABILITY,
 }
 
@@ -502,10 +524,23 @@ function getNormalizedModelIdVariants(value?: string) {
   const normalized = value?.trim().toLowerCase() ?? ''
   if (!normalized) return []
 
-  const withoutDisplaySuffix = normalized
-    .replace(/\s*[(（][^()（）]*[)）]\s*$/u, '')
-    .trim()
-  return [...new Set([normalized, withoutDisplaySuffix].filter(Boolean))]
+  const variants = new Set<string>([normalized])
+  // Catalog labels may prepend a channel marker (for example
+  // "(线路3)sd-2.0-933") and append capability text. Keep both the original
+  // display value and the progressively cleaned values for matching.
+  for (let pass = 0; pass < 2; pass += 1) {
+    for (const candidate of [...variants]) {
+      const withoutPrefix = candidate
+        .replace(/^\s*[(（][^()（）]*[)）]\s*/u, '')
+        .trim()
+      const withoutSuffix = candidate
+        .replace(/\s*[(（][^()（）]*[)）]\s*$/u, '')
+        .trim()
+      if (withoutPrefix) variants.add(withoutPrefix)
+      if (withoutSuffix) variants.add(withoutSuffix)
+    }
+  }
+  return [...variants].filter(Boolean)
 }
 
 function getCreationModelIdCandidates(model?: CreationModelInput) {
@@ -537,6 +572,12 @@ function isVideosApiModel(model?: CreationModelInput) {
 
 function isMiniMaxH3Model(model?: CreationModelInput) {
   return hasStaticVideoCapabilityKind(model, 'minimax-h3')
+}
+
+function isSeedance2Model(model?: CreationModelInput) {
+  return getCreationModelIdCandidates(model).some((candidate) =>
+    ['sd-2.0-933', 'sd-2-c8', 'seedance-2.0'].includes(candidate)
+  )
 }
 
 function isSanbaoMetadata(
@@ -1215,6 +1256,9 @@ export function getCreationVideoReferenceError(
   if (images.some((url) => !isReferenceImage(url))) {
     return 'Reference images must be images or HTTP URLs.'
   }
+  if (isSeedance2Model(model) && images.some((url) => !isHTTPURL(url))) {
+    return 'Reference URL must use HTTP or HTTPS.'
+  }
   if (
     (capability.kind === 'video2' || capability.kind === 'sanbao') &&
     images.some(
@@ -1374,9 +1418,28 @@ export function getCreationVideoRequestOptions(
       request.resolution =
         normalizedOptions.resolution === '480p' ? '480p' : '720p'
     }
-    if (imageUrls.length) request.referenceImages = imageUrls
-    if (videoUrls.length) request.referenceVideos = videoUrls
-    if (audioUrls.length) request.referenceAudios = audioUrls
+    if (isSeedance2Model(model)) {
+      if (normalizedReferences.referenceMode === 'image') {
+        const [firstImage, ...referenceImages] = imageUrls
+        if (firstImage) request.start_image_url = firstImage
+        if (referenceImages.length) request.referenceImages = referenceImages
+      } else if (normalizedReferences.referenceMode === 'frames') {
+        if (normalizedReferences.startImageUrl) {
+          request.start_image_url = normalizedReferences.startImageUrl
+        }
+        if (normalizedReferences.endImageUrl) {
+          request.end_image_url = normalizedReferences.endImageUrl
+        }
+      } else {
+        if (imageUrls.length) request.referenceImages = imageUrls
+        if (videoUrls.length) request.referenceVideos = videoUrls
+        if (audioUrls.length) request.referenceAudios = audioUrls
+      }
+    } else {
+      if (imageUrls.length) request.referenceImages = imageUrls
+      if (videoUrls.length) request.referenceVideos = videoUrls
+      if (audioUrls.length) request.referenceAudios = audioUrls
+    }
     return request
   }
 

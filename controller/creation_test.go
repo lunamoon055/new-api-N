@@ -307,6 +307,19 @@ func TestBuildCreationModelCatalogOverridesMediaModelsByName(t *testing.T) {
 	require.Contains(t, catalog.Modes[2].Models[1].Tags, "video")
 }
 
+func TestBuildCreationModelCatalogClassifiesPrefixedSeedanceModelAsVideo(t *testing.T) {
+	catalog := buildCreationModelCatalog([]model.Pricing{
+		{
+			ModelName:              "(线路3)sd-2.0-933",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
+	}, nil, "")
+
+	require.Empty(t, catalog.Modes[0].Models)
+	require.Empty(t, catalog.Modes[1].Models)
+	require.Equal(t, []string{"(线路3)sd-2.0-933"}, creationModelIDs(catalog.Modes[2].Models))
+}
+
 func TestBuildCreationModelCatalogUsesManualCategories(t *testing.T) {
 	catalog := buildCreationModelCatalogWithCategories([]model.Pricing{
 		{

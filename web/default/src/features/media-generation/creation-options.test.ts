@@ -177,6 +177,69 @@ describe('Sanbao creation model options', () => {
     })
   })
 
+  test('supports the prefixed Seedance 2.0 mapping and documented references', () => {
+    const model = '(线路3)sd-2.0-933'
+    assert.equal(getCreationVideoCapabilities(model)?.kind, 'videos')
+    assert.deepEqual(
+      getCreationResolutionOptions(model).map((item) => item.value),
+      ['720p']
+    )
+    assert.deepEqual(getCreationVideoCapabilities(model)?.aspectRatios, [
+      '16:9',
+      '9:16',
+      '1:1',
+      '4:3',
+      '3:4',
+    ])
+
+    const options = normalizeCreationVideoOptions(
+      { resolution: '480p', duration: '10', aspectRatio: '4:3' },
+      model
+    )
+    assert.deepEqual(
+      getCreationVideoRequestOptions(options, model, {
+        referenceMode: 'frames',
+        imageUrls: [],
+        startImageUrl: 'https://example.com/start.png',
+        endImageUrl: 'https://example.com/end.png',
+        videoUrls: [],
+        audioUrls: [],
+        audioUrl: '',
+      }),
+      {
+        duration: 10,
+        ratio: '4:3',
+        resolution: '720p',
+        estimateSeconds: 210,
+        start_image_url: 'https://example.com/start.png',
+        end_image_url: 'https://example.com/end.png',
+      }
+    )
+
+    assert.deepEqual(
+      getCreationVideoRequestOptions(options, model, {
+        referenceMode: 'image',
+        imageUrls: [
+          { url: 'https://example.com/first.png' },
+          { url: 'https://example.com/reference.png' },
+        ],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [],
+        audioUrls: [],
+        audioUrl: '',
+      }),
+      {
+        duration: 10,
+        ratio: '4:3',
+        resolution: '720p',
+        estimateSeconds: 210,
+        start_image_url: 'https://example.com/first.png',
+        referenceImages: ['https://example.com/reference.png'],
+      }
+    )
+  })
+
   test('uses videos-4 controls, limits, and videos api request fields', () => {
     for (const model of [
       'videos-4 (4图3视频1音频)',

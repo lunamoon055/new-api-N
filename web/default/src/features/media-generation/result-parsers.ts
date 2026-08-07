@@ -95,23 +95,33 @@ export function parseVideoGenerationResult(
     status: normalizeMediaTaskStatus(status),
     upstreamStatus: status,
     videoUrl:
-      getString(source, 'url') ||
-      getString(source, 'result_url') ||
-      getString(source, 'output_url') ||
-      getString(source, 'video_url') ||
-      getString(source, 'content_url') ||
-      getString(metadata, 'url') ||
-      getString(metadata, 'result_url') ||
-      getString(metadata, 'output_url') ||
-      getString(metadata, 'video_url') ||
-      getString(metadata, 'content_url'),
+      firstHTTPURL(
+        source,
+        'url',
+        'object',
+        'result_url',
+        'output_url',
+        'video_url',
+        'content_url'
+      ) ||
+      firstHTTPURL(
+        metadata,
+        'url',
+        'result_url',
+        'output_url',
+        'video_url',
+        'content_url'
+      ),
   }
 }
 
 export function normalizeMediaTaskStatus(
   status: string | undefined
 ): MediaTaskStatus {
-  switch (status?.toLowerCase()) {
+  const normalizedStatus = status?.trim().toLowerCase()
+  if (normalizedStatus?.startsWith('failed:')) return 'failed'
+
+  switch (normalizedStatus) {
     case 'queued':
     case 'pending':
     case 'submitted':
@@ -135,8 +145,17 @@ export function normalizeMediaTaskStatus(
 
 export function extractMediaErrorMessage(raw: unknown): string | undefined {
   const data = asRecord(raw)
+  const envelopeData = asRecord(data.data)
   const error = asRecord(data.error)
-  return getString(error, 'message') || getString(data, 'message')
+  const envelopeError = asRecord(envelopeData.error)
+  const status = getString(envelopeData, 'status') || getString(data, 'status')
+  const failedStatus = status?.match(/^failed:\s*(.+)$/i)?.[1]?.trim()
+  return (
+    getString(error, 'message') ||
+    getString(envelopeError, 'message') ||
+    getString(data, 'message') ||
+    failedStatus
+  )
 }
 
 export function getString(data: Record<string, unknown>, key: string) {
@@ -148,6 +167,14 @@ export function asRecord(value: unknown): Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {}
+}
+
+function firstHTTPURL(data: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = getString(data, key)
+    if (value && /^https?:\/\/[^\s]+$/i.test(value)) return value
+  }
+  return undefined
 }
 
 function getImageURL(data: Record<string, unknown>) {

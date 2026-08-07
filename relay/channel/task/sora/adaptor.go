@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -37,6 +38,26 @@ type ImageURL struct {
 	URL string `json:"url"`
 }
 
+type stringOrNumber string
+
+func (value *stringOrNumber) UnmarshalJSON(data []byte) error {
+	var raw any
+	if err := common.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	switch typed := raw.(type) {
+	case nil:
+		*value = ""
+	case string:
+		*value = stringOrNumber(strings.TrimSpace(typed))
+	case float64:
+		*value = stringOrNumber(strconv.FormatFloat(typed, 'f', -1, 64))
+	default:
+		return fmt.Errorf("expected string or number")
+	}
+	return nil
+}
+
 type responseTask struct {
 	ID                 string         `json:"id"`
 	TaskID             string         `json:"task_id,omitempty"` //兼容旧接口
@@ -48,7 +69,7 @@ type responseTask struct {
 	CreatedAt          int64          `json:"created_at"`
 	CompletedAt        int64          `json:"completed_at,omitempty"`
 	ExpiresAt          int64          `json:"expires_at,omitempty"`
-	Seconds            string         `json:"seconds,omitempty"`
+	Seconds            stringOrNumber `json:"seconds,omitempty"`
 	Size               string         `json:"size,omitempty"`
 	RemixedFromVideoID string         `json:"remixed_from_video_id,omitempty"`
 	URL                string         `json:"url,omitempty"`
@@ -120,6 +141,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+	}
+	if isSeedance2ModelName(req.Model) {
+		return validateSeedance2JSONRequest(c)
 	}
 	if isVideosModelName(req.Model) {
 		return validateVideosJSONRequest(c, req.Model)
@@ -216,6 +240,13 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	contentType := c.GetHeader("Content-Type")
 
 	if strings.HasPrefix(contentType, "application/json") {
+		if isSeedance2ModelName(info.OriginModelName) || isSeedance2ModelName(info.UpstreamModelName) {
+			newBody, err := buildSeedance2RequestBody(cachedBody, info.UpstreamModelName)
+			if err != nil {
+				return nil, errors.Wrap(err, "build_seedance_request_body_failed")
+			}
+			return bytes.NewReader(newBody), nil
+		}
 		var bodyMap map[string]interface{}
 		if err := common.Unmarshal(cachedBody, &bodyMap); err == nil {
 			bodyMap["model"] = info.UpstreamModelName
@@ -320,6 +351,14 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	if dResp.Status == "" {
 		dResp.Status = extractTaskStatus(dResp, rawPayload)
 	}
+	if normalizeTaskStatus(dResp.Status) == "failed" && dResp.Error == nil {
+		if reason := extractTaskErrorReason(dResp, rawPayload); reason != "" {
+			dResp.Error = &struct {
+				Message string `json:"message"`
+				Code    string `json:"code"`
+			}{Message: reason}
+		}
+	}
 	if dResp.Progress == 0 {
 		dResp.Progress = extractTaskProgress(dResp, rawPayload)
 	}
@@ -423,7 +462,7 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	openAIVideo.CreatedAt = firstNonZeroInt64(resTask.CreatedAt, resTask.Created, task.CreatedAt)
 	openAIVideo.CompletedAt = firstNonZeroInt64(resTask.CompletedAt, task.FinishTime, task.UpdatedAt)
 	openAIVideo.ExpiresAt = resTask.ExpiresAt
-	openAIVideo.Seconds = resTask.Seconds
+	openAIVideo.Seconds = string(resTask.Seconds)
 	openAIVideo.Size = resTask.Size
 	openAIVideo.RemixedFromVideoID = resTask.RemixedFromVideoID
 
@@ -507,7 +546,11 @@ func extractTaskProgress(resTask responseTask, raw map[string]any) int {
 }
 
 func normalizeTaskStatus(status string) string {
-	switch strings.ToLower(strings.TrimSpace(status)) {
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	if strings.HasPrefix(normalized, "failed:") {
+		return "failed"
+	}
+	switch normalized {
 	case "queued", "pending", "submitted", "created", "waiting":
 		return "queued"
 	case "processing", "in_progress", "running", "generating":
@@ -523,7 +566,15 @@ func normalizeTaskStatus(status string) string {
 
 func extractTaskErrorReason(resTask responseTask, raw map[string]any) string {
 	if resTask.Error != nil {
-		return strings.TrimSpace(resTask.Error.Message)
+		if message := strings.TrimSpace(resTask.Error.Message); message != "" {
+			return message
+		}
+		if code := strings.TrimSpace(resTask.Error.Code); code != "" {
+			return code
+		}
+	}
+	if reason := failedStatusReason(extractTaskStatus(resTask, raw)); reason != "" {
+		return reason
 	}
 	for _, values := range []map[string]any{taskResponsePayload(raw), raw} {
 		if values == nil {
@@ -537,6 +588,14 @@ func extractTaskErrorReason(resTask responseTask, raw map[string]any) string {
 		if reason := firstStringValue(values, "error", "message", "code"); reason != "" {
 			return reason
 		}
+	}
+	return ""
+}
+
+func failedStatusReason(status string) string {
+	status = strings.TrimSpace(status)
+	if index := strings.Index(status, ":"); index >= 0 && strings.EqualFold(strings.TrimSpace(status[:index]), "failed") {
+		return strings.TrimSpace(status[index+1:])
 	}
 	return ""
 }
@@ -584,6 +643,7 @@ func extractVideoURL(resTask responseTask) string {
 		resTask.VideoURL,
 		resTask.ContentURL,
 		resTask.URL,
+		resTask.Object,
 		resTask.OutputURL,
 		resTask.ResultURL,
 		stringValue(resTask.Metadata, "video_url"),
@@ -592,8 +652,8 @@ func extractVideoURL(resTask responseTask) string {
 		stringValue(resTask.Metadata, "output_url"),
 		stringValue(resTask.Metadata, "result_url"),
 	} {
-		if strings.TrimSpace(url) != "" {
-			return strings.TrimSpace(url)
+		if url := normalizeVideoURL(url); url != "" {
+			return url
 		}
 	}
 	return ""
@@ -607,11 +667,11 @@ func extractVideoURLFromPayload(resTask responseTask, raw map[string]any) string
 		if values == nil {
 			continue
 		}
-		if url := firstStringValue(values, "video_url", "content_url", "url", "result_url", "output_url", "download_url"); url != "" {
+		if url := firstVideoURLValue(values, "video_url", "content_url", "url", "object", "result_url", "output_url", "download_url"); url != "" {
 			return url
 		}
 		if metadata := mapValue(values, "metadata"); metadata != nil {
-			if url := firstStringValue(metadata, "video_url", "content_url", "url", "result_url", "output_url", "download_url"); url != "" {
+			if url := firstVideoURLValue(metadata, "video_url", "content_url", "url", "object", "result_url", "output_url", "download_url"); url != "" {
 				return url
 			}
 		}
@@ -619,7 +679,7 @@ func extractVideoURLFromPayload(resTask responseTask, raw map[string]any) string
 			return url
 		}
 		if result := mapValue(values, "result"); result != nil {
-			if url := firstStringValue(result, "video_url", "content_url", "url", "result_url", "output_url", "download_url"); url != "" {
+			if url := firstVideoURLValue(result, "video_url", "content_url", "url", "object", "result_url", "output_url", "download_url"); url != "" {
 				return url
 			}
 			if url := firstURLFromArrayFields(result, "data", "outputs", "output", "results", "videos", "urls", "video_urls"); url != "" {
@@ -640,6 +700,35 @@ func firstStringValue(values map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func firstVideoURLValue(values map[string]any, keys ...string) string {
+	if values == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if value := normalizeVideoURL(stringFromAny(values[key])); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func normalizeVideoURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https":
+		return value
+	default:
+		return ""
+	}
 }
 
 func stringFromAny(value any) string {
@@ -704,7 +793,7 @@ func firstURLFromArrayFields(values map[string]any, keys ...string) string {
 func firstURLFromAny(value any) string {
 	switch v := value.(type) {
 	case string:
-		return strings.TrimSpace(v)
+		return normalizeVideoURL(v)
 	case []any:
 		for _, item := range v {
 			if url := firstURLFromAny(item); url != "" {
@@ -712,11 +801,11 @@ func firstURLFromAny(value any) string {
 			}
 		}
 	case map[string]any:
-		if url := firstStringValue(v, "video_url", "content_url", "url", "result_url", "output_url", "download_url"); url != "" {
+		if url := firstVideoURLValue(v, "video_url", "content_url", "url", "object", "result_url", "output_url", "download_url"); url != "" {
 			return url
 		}
 		if metadata := mapValue(v, "metadata"); metadata != nil {
-			if url := firstStringValue(metadata, "video_url", "content_url", "url", "result_url", "output_url", "download_url"); url != "" {
+			if url := firstVideoURLValue(metadata, "video_url", "content_url", "url", "object", "result_url", "output_url", "download_url"); url != "" {
 				return url
 			}
 		}
