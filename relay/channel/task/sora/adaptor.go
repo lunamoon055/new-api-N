@@ -240,6 +240,13 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	contentType := c.GetHeader("Content-Type")
 
 	if strings.HasPrefix(contentType, "application/json") {
+		if isSeedance25ModelName(info.OriginModelName) || isSeedance25ModelName(info.UpstreamModelName) {
+			newBody, err := buildSeedance25RequestBody(cachedBody, info.UpstreamModelName)
+			if err != nil {
+				return nil, errors.Wrap(err, "build_seedance_25_request_body_failed")
+			}
+			return bytes.NewReader(newBody), nil
+		}
 		if isSeedance2ModelName(info.OriginModelName) || isSeedance2ModelName(info.UpstreamModelName) {
 			newBody, err := buildSeedance2RequestBody(cachedBody, info.UpstreamModelName)
 			if err != nil {

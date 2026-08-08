@@ -29,6 +29,7 @@ func TestModelListIncludesSupportedVideoModels(t *testing.T) {
 	require.Contains(t, ModelList, "veo31-fast")
 	require.Contains(t, ModelList, "veo31-ref")
 	require.Contains(t, ModelList, "grok-imagine-video")
+	require.Contains(t, ModelList, "seedance-2.5")
 }
 
 func TestMiniMaxH3RequestBodyPassesDocumentedFieldsThrough(t *testing.T) {
@@ -136,6 +137,182 @@ func TestBuildRequestURLUsesVideosAPIForSeedanceAlias(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "https://api.example.com/v1/videos", got)
+}
+
+func TestSeedance25UsesDocumentedFlatRequestBody(t *testing.T) {
+	adaptor := &TaskAdaptor{baseURL: "https://api.example.com"}
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "Seedance-2.5",
+		RequestURLPath:  "/v1/video/async-generations",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "seedance-2.5",
+		},
+	}
+
+	gotURL, err := adaptor.BuildRequestURL(info)
+	require.NoError(t, err)
+	require.Equal(t, "https://api.example.com/v1/videos", gotURL)
+
+	c := newVideo2JSONContext(t, `{
+		"model":"Seedance-2.5",
+		"prompt":"让角色从起始画面自然走向结束画面",
+		"duration":29,
+		"ratio":"16:9",
+		"resolution":"480p",
+		"start_image_url":"https://cdn.example/start.png",
+		"end_image_url":"https://cdn.example/end.png",
+		"referenceImages":["https://cdn.example/reference.png"],
+		"referenceVideos":["https://cdn.example/reference.mp4"],
+		"referenceAudios":["https://cdn.example/reference.mp3"]
+	}`)
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+
+	var got seedance25Request
+	require.NoError(t, common.Unmarshal(encoded, &got))
+	require.Equal(t, "seedance-2.5", got.Model)
+	require.Equal(t, "让角色从起始画面自然走向结束画面", got.Prompt)
+	require.Equal(t, "480p", got.Resolution)
+	require.Equal(t, "16:9", got.Ratio)
+	require.NotNil(t, got.Duration)
+	require.Equal(t, 29, *got.Duration)
+	require.Equal(t, []string{
+		"https://cdn.example/start.png",
+		"https://cdn.example/reference.png",
+		"https://cdn.example/end.png",
+	}, got.ReferenceImages)
+	require.Equal(t, []string{"https://cdn.example/reference.mp4"}, got.ReferenceVideos)
+	require.Equal(t, []string{"https://cdn.example/reference.mp3"}, got.ReferenceAudios)
+
+	var raw map[string]any
+	require.NoError(t, common.Unmarshal(encoded, &raw))
+	require.Contains(t, raw, "prompt")
+	require.NotContains(t, raw, "content")
+	require.NotContains(t, raw, "generate_audio")
+	require.NotContains(t, raw, "watermark")
+	require.NotContains(t, raw, "start_image_url")
+	require.NotContains(t, raw, "end_image_url")
+}
+
+func TestSeedance25UsesExpandedLimitsWithoutChangingSeedance20(t *testing.T) {
+	images := make([]string, 30)
+	for index := range images {
+		images[index] = "https://cdn.example/reference.png"
+	}
+	videos := make([]string, 10)
+	for index := range videos {
+		videos[index] = "https://cdn.example/reference.mp4"
+	}
+	audios := make([]string, 10)
+	for index := range audios {
+		audios[index] = "https://cdn.example/reference.mp3"
+	}
+	duration := 29
+
+	require.NoError(t, validateSeedance25Request(videosRequest{
+		Model:           "Seedance-2.5",
+		Prompt:          "测试扩展素材上限",
+		Duration:        &duration,
+		ReferenceImages: images,
+		ReferenceVideos: videos,
+		ReferenceAudios: audios,
+	}))
+
+	tooManyImages := append(append([]string{}, images...), "https://cdn.example/extra.png")
+	require.EqualError(t, validateSeedance25Request(videosRequest{
+		Prompt:          "测试图片上限",
+		ReferenceImages: tooManyImages,
+	}), "image references must not exceed 30")
+
+	duration = 30
+	require.EqualError(t, validateSeedance25Request(videosRequest{
+		Prompt:   "测试时长上限",
+		Duration: &duration,
+	}), "duration must be between 4 and 29")
+
+	require.EqualError(t, validateSeedance25Request(videosRequest{
+		Prompt:     "测试分辨率选项",
+		Resolution: "1080p",
+	}), "resolution must be 720p or 480p")
+
+	require.EqualError(t, validateSeedance25Request(videosRequest{
+		Prompt: "测试比例选项",
+		Ratio:  "4:3",
+	}), "ratio must be 16:9, 9:16, or 1:1")
+
+	require.Error(t, validateSeedance2Request(videosRequest{
+		Prompt:          "Seedance 2.0 仍使用原上限",
+		ReferenceImages: images,
+	}))
+}
+
+func TestFetchTaskUsesVideosEndpointForSeedance25(t *testing.T) {
+	var gotPath string
+	var gotAuthorization string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuthorization = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"task_id":"seedance_upstream","status":"queued"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	resp, err := (&TaskAdaptor{}).FetchTask(server.URL, "sk-test", map[string]any{
+		"task_id":      "seedance_upstream",
+		"model":        "seedance-2.5",
+		"origin_model": "Seedance-2.5",
+	}, "")
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	_ = resp.Body.Close()
+	require.Equal(t, "/v1/videos/seedance_upstream", gotPath)
+	require.Equal(t, "Bearer sk-test", gotAuthorization)
+}
+
+func TestDoResponseAcceptsDocumentedVideosShape(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	resp := &http.Response{
+		Body: io.NopCloser(bytes.NewBufferString(`{
+			"id":"seedance_upstream",
+			"task_id":"seedance_upstream",
+			"object":"video",
+			"model":"seedance-2.5",
+			"status":"queued",
+			"progress":0,
+			"created_at":1782690295,
+			"completed_at":null,
+			"seconds":"5",
+			"url":null,
+			"video_url":null,
+			"metadata":{},
+			"error":null
+		}`)),
+	}
+	info := &relaycommon.RelayInfo{
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+			PublicTaskID: "task_public",
+		},
+	}
+
+	taskID, taskData, taskErr := (&TaskAdaptor{}).DoResponse(c, resp, info)
+
+	require.Nil(t, taskErr)
+	require.Equal(t, "seedance_upstream", taskID)
+	require.Contains(t, string(taskData), `"task_id":"seedance_upstream"`)
+	var body responseTask
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &body))
+	require.Equal(t, "task_public", body.ID)
+	require.Equal(t, "task_public", body.TaskID)
+	require.Equal(t, "queued", body.Status)
+	require.Equal(t, "seedance-2.5", body.Model)
+	require.Equal(t, "5", string(body.Seconds))
 }
 
 func TestSeedanceRequestUsesDocumentedNestedBody(t *testing.T) {

@@ -129,7 +129,12 @@ export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
     <TooltipProvider>
       <FieldGroup className='mt-3 gap-2'>
         <p className='text-muted-foreground text-[11px] leading-4'>
-          {getReferenceUploadTip(referenceMode, limits, t)}
+          {getReferenceUploadTip(
+            referenceMode,
+            limits,
+            t,
+            props.capability?.uploadTipProfile
+          )}
         </p>
         <Field>
           <div className='flex flex-wrap items-center gap-2'>
@@ -322,8 +327,49 @@ function getReferenceAccept(
 function getReferenceUploadTip(
   mode: CreationVideoReferenceMode,
   limits: CreationVideoCapability['referenceLimits'],
-  t: (key: string, options?: Record<string, unknown>) => string
+  t: (key: string, options?: Record<string, unknown>) => string,
+  profile?: CreationVideoCapability['uploadTipProfile']
 ) {
+  if (profile === 'seedance-2.5') {
+    if (mode === 'frames') {
+      return t(
+        'Seedance 2.5 tip: Upload one start frame and one end frame. Each image must not exceed {{imageSize}} MB.',
+        { imageSize: limits.maxImageSizeMB }
+      )
+    }
+    if (mode === 'video') {
+      return t(
+        'Seedance 2.5 tip: Upload up to {{videoCount}} MP4 videos, no more than {{videoSize}} MB each and {{videoTotalSize}} MB in total. Total reference video duration must not exceed 29 seconds.',
+        {
+          videoCount: limits.maxVideos,
+          videoSize: limits.maxVideoSizeMB,
+          videoTotalSize: limits.maxVideoTotalSizeMB ?? 667,
+        }
+      )
+    }
+    if (mode === 'multimodal') {
+      return t(
+        'Seedance 2.5 tip: Upload up to {{imageCount}} images, {{videoCount}} videos, and {{audioCount}} audio files. Images must not exceed {{imageSize}} MB each. Videos must not exceed {{videoSize}} MB each or {{videoTotalSize}} MB in total. Audio must not exceed {{audioSize}} MB each or {{audioTotalSize}} MB in total. Total reference video and audio duration must not exceed 29 seconds respectively.',
+        {
+          imageCount: limits.maxImages,
+          videoCount: limits.maxVideos,
+          audioCount: limits.maxAudios,
+          imageSize: limits.maxImageSizeMB,
+          videoSize: limits.maxVideoSizeMB,
+          videoTotalSize: limits.maxVideoTotalSizeMB ?? 667,
+          audioSize: limits.maxAudioSizeMB,
+          audioTotalSize: limits.maxAudioTotalSizeMB ?? 50,
+        }
+      )
+    }
+    return t(
+      'Seedance 2.5 tip: Upload up to {{imageCount}} reference images. Each image must not exceed {{imageSize}} MB.',
+      {
+        imageCount: limits.maxImages,
+        imageSize: limits.maxImageSizeMB,
+      }
+    )
+  }
   if (mode === 'frames') {
     return t(
       'Tip: Upload one start frame and one end frame. Each image must not exceed {{size}} MB.',

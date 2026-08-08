@@ -54,15 +54,30 @@ type seedance2Request struct {
 	Parameters seedance2Parameters `json:"parameters"`
 }
 
-// isSeedance2ModelName identifies both the configured display alias and the
-// mapped model name used by the upstream channel.
+type seedance25Request struct {
+	Model           string   `json:"model"`
+	Prompt          string   `json:"prompt"`
+	Duration        *int     `json:"duration,omitempty"`
+	Ratio           string   `json:"ratio,omitempty"`
+	Resolution      string   `json:"resolution,omitempty"`
+	ReferenceImages []string `json:"referenceImages,omitempty"`
+	ReferenceVideos []string `json:"referenceVideos,omitempty"`
+	ReferenceAudios []string `json:"referenceAudios,omitempty"`
+}
+
+// isSeedance2ModelName identifies configured Seedance 2.x display aliases and
+// mapped model names used by OpenAI-compatible upstream channels.
 func isSeedance2ModelName(modelName string) bool {
 	switch normalizeVideosModelName(modelName) {
-	case "sd-2.0-933", "sd-2-c8", "seedance-2.0":
+	case "sd-2.0-933", "sd-2-c8", "seedance-2.0", "seedance-2.5":
 		return true
 	default:
 		return false
 	}
+}
+
+func isSeedance25ModelName(modelName string) bool {
+	return normalizeVideosModelName(modelName) == "seedance-2.5"
 }
 
 func validateSeedance2JSONRequest(c *gin.Context) *dto.TaskError {
@@ -70,8 +85,67 @@ func validateSeedance2JSONRequest(c *gin.Context) *dto.TaskError {
 	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
+	if isSeedance25ModelName(req.Model) {
+		if err := validateSeedance25Request(req); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		return nil
+	}
 	if err := validateSeedance2Request(req); err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validateSeedance25Request(req videosRequest) error {
+	if strings.TrimSpace(req.Prompt) == "" {
+		return fmt.Errorf("prompt is required")
+	}
+	if utf8.RuneCountInString(req.Prompt) > 5000 {
+		return fmt.Errorf("prompt must not exceed 5000 characters")
+	}
+	if req.Duration != nil && (*req.Duration < 4 || *req.Duration > 29) {
+		return fmt.Errorf("duration must be between 4 and 29")
+	}
+	if req.Ratio != "" && !isAllowedVideosRatio(req.Ratio) {
+		return fmt.Errorf("ratio must be 16:9, 9:16, or 1:1")
+	}
+	if req.Resolution != "" && !isAllowedVideosResolution(req.Resolution) {
+		return fmt.Errorf("resolution must be 720p or 480p")
+	}
+	if strings.TrimSpace(req.FirstImage) != "" || strings.TrimSpace(req.LastImage) != "" {
+		return fmt.Errorf("first_image and last_image are not supported")
+	}
+
+	imageCount := countNonBlank(req.ReferenceImages) +
+		countNonBlank([]string{req.StartImageURL, req.EndImageURL})
+	videoCount := countNonBlank(req.ReferenceVideos)
+	audioCount := countNonBlank(req.ReferenceAudios)
+	if imageCount > 30 {
+		return fmt.Errorf("image references must not exceed 30")
+	}
+	if videoCount > 10 {
+		return fmt.Errorf("video references must not exceed 10")
+	}
+	if audioCount > 10 {
+		return fmt.Errorf("audio references must not exceed 10")
+	}
+	if imageCount+videoCount+audioCount > 50 {
+		return fmt.Errorf("reference assets must not exceed 50")
+	}
+
+	for _, value := range append(
+		append([]string{req.StartImageURL, req.EndImageURL}, req.ReferenceImages...),
+		req.ReferenceVideos...,
+	) {
+		if err := validateVideo2URL(value); err != nil {
+			return fmt.Errorf("reference URL: %w", err)
+		}
+	}
+	for _, value := range req.ReferenceAudios {
+		if err := validateVideo2URL(value); err != nil {
+			return fmt.Errorf("reference URL: %w", err)
+		}
 	}
 	return nil
 }
@@ -180,6 +254,47 @@ func buildSeedance2RequestBody(body []byte, upstreamModel string) ([]byte, error
 	}
 	for _, value := range req.ReferenceAudios {
 		appendMedia("reference_voice", value)
+	}
+
+	return common.Marshal(request)
+}
+
+func buildSeedance25RequestBody(body []byte, upstreamModel string) ([]byte, error) {
+	var req videosRequest
+	if err := common.Unmarshal(body, &req); err != nil {
+		return nil, err
+	}
+
+	request := seedance25Request{
+		Model:      strings.TrimSpace(upstreamModel),
+		Prompt:     req.Prompt,
+		Duration:   req.Duration,
+		Ratio:      strings.TrimSpace(req.Ratio),
+		Resolution: strings.TrimSpace(req.Resolution),
+	}
+	if request.Model == "" {
+		request.Model = strings.TrimSpace(req.Model)
+	}
+
+	appendReference := func(target *[]string, value string) {
+		if value = strings.TrimSpace(value); value != "" {
+			*target = append(*target, value)
+		}
+	}
+	// Older Creation Center sessions may still carry the internal start/end
+	// image fields. The documented /v1/videos contract only accepts
+	// referenceImages, so fold them into that array instead of forwarding
+	// unsupported fields upstream.
+	appendReference(&request.ReferenceImages, req.StartImageURL)
+	for _, value := range req.ReferenceImages {
+		appendReference(&request.ReferenceImages, value)
+	}
+	appendReference(&request.ReferenceImages, req.EndImageURL)
+	for _, value := range req.ReferenceVideos {
+		appendReference(&request.ReferenceVideos, value)
+	}
+	for _, value := range req.ReferenceAudios {
+		appendReference(&request.ReferenceAudios, value)
 	}
 
 	return common.Marshal(request)

@@ -2,13 +2,13 @@
 
 > 原文档：[异步媒体 API 下游调用文档示例](https://docs.qq.com/aio/DTkNKaWZ6ZVZVc1FJ)
 >
-> 使用方式：原文档第 1～9 章保持不变，将本文件第 10 章起的内容直接追加到原文档末尾。本文不替换、不删改原文档已有的接口、参数、响应、轮询和错误码说明，只补充模型广场当前新增的 11 个模型。
+> 使用方式：原文档第 1～9 章保持不变，将本文件第 10 章起的内容直接追加到原文档末尾。本文不替换、不删改原文档已有的接口、参数、响应、轮询和错误码说明，只补充模型广场当前新增的 12 个模型。
 >
-> 模型核对时间：2026-08-05。模型名称必须按本文原样传递，包括大小写、连字符、数字和中文括号。
+> 模型核对时间：2026-08-08。模型名称必须按本文原样传递，包括大小写、连字符、数字和中文括号。
 
 ## 全部模型范围
 
-合并后文档共覆盖 21 个模型。
+合并后文档共覆盖 22 个模型。
 
 ### 原文档已有模型（10 个，内容不变）
 
@@ -25,7 +25,7 @@
 | 图片 | `nano-banana-pro` |
 | 图片 | `gpt-image2` |
 
-### 本次新增模型（11 个）
+### 本次新增模型（12 个）
 
 | 模型 | 类型 | 提交接口 | 查询接口 |
 | --- | --- | --- | --- |
@@ -33,6 +33,7 @@
 | `sd2-1080P(933按秒)` | 视频 | `POST /v1/video/async-generations` | `GET /v1/video/async-generations/{task_id}` |
 | `sd2-4k(933按秒)` | 视频 | `POST /v1/video/async-generations` | `GET /v1/video/async-generations/{task_id}` |
 | `sd2-720P(933)` | 视频 | `POST /v1/video/async-generations` | `GET /v1/video/async-generations/{task_id}` |
+| `(线路3)sd-2.0-933` | 视频 | `POST /v1/video/async-generations` | `GET /v1/video/async-generations/{task_id}` |
 | `video-2.0` | 视频 | `POST /v1/video/async-generations` | `GET /v1/video/async-generations/{task_id}` |
 | `video-2.0-480p` | 视频 | `POST /v1/video/async-generations` | `GET /v1/video/async-generations/{task_id}` |
 | `video-2.0-fast` | 视频 | `POST /v1/video/async-generations` | `GET /v1/video/async-generations/{task_id}` |
@@ -57,7 +58,7 @@ Content-Type: application/json
 
 1. 调用 `POST /v1/video/async-generations` 提交任务。
 2. 从响应中保存 `task_id`。
-3. 每 3～5 秒调用一次 `GET /v1/video/async-generations/{task_id}`。
+3. 默认每 3～5 秒调用一次 `GET /v1/video/async-generations/{task_id}`；`(线路3)sd-2.0-933` 请按第 12.6 节的 20 秒间隔要求轮询。
 4. `status` 为 `completed` 后读取结果 URL。
 
 原文档第 5～9 章中的提交响应、查询响应、JS 轮询、接入建议和通用错误码同样适用于本次新增模型。
@@ -70,7 +71,7 @@ Content-Type: application/json
 
 ```bash
 curl https://ghlink.top/v1/video/async-generations \
-  -H "Authorization: Bearer $LINKSKY_API_KEY" \
+  -H "Authorization: Bearer $GHLINK_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "minimax-h3",
@@ -176,7 +177,7 @@ curl https://ghlink.top/v1/video/async-generations \
 
 ```bash
 curl https://ghlink.top/v1/video/async-generations \
-  -H "Authorization: Bearer $LINKSKY_API_KEY" \
+  -H "Authorization: Bearer $GHLINK_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sd2-1080P(933按秒)",
@@ -190,7 +191,7 @@ curl https://ghlink.top/v1/video/async-generations \
 
 ```bash
 curl https://ghlink.top/v1/video/async-generations \
-  -H "Authorization: Bearer $LINKSKY_API_KEY" \
+  -H "Authorization: Bearer $GHLINK_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sd2-4k(933按秒)",
@@ -204,7 +205,7 @@ curl https://ghlink.top/v1/video/async-generations \
 
 ```bash
 curl https://ghlink.top/v1/video/async-generations \
-  -H "Authorization: Bearer $LINKSKY_API_KEY" \
+  -H "Authorization: Bearer $GHLINK_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sd2-720P(933)",
@@ -261,6 +262,94 @@ curl https://ghlink.top/v1/video/async-generations \
 | `referenceVideos` | array | 否 | 参考视频 URL，最多 3 个 |
 | `referenceAudios` | array | 否 | 参考音频 URL，最多 3 个 |
 
+### 12.6 `(线路3)sd-2.0-933`（Seedance 2.0）
+
+> 重要：这个模型与本章 12.2～12.5 的 `sd2-*` 模型不是同一套上游协议。`sd2-*` 使用平铺请求和 `POST /v1/video/async-generations`；`(线路3)sd-2.0-933` 兼容 Seedance 2.0 的嵌套请求，网关会在内部转换后调用上游 `POST /v1/videos`。
+
+下游请求中的 `model` 必须原样传递为 `(线路3)sd-2.0-933`。当前线路的后台模型映射为上游 `sd-2-c8`；`sd-2-c8` 是内部模型名，下游不要直接使用它替换展示别名。
+
+#### 12.6.1 文生视频
+
+```bash
+curl https://ghlink.top/v1/video/async-generations \
+  -H "Authorization: Bearer $GHLINK_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "(线路3)sd-2.0-933",
+    "prompt": "小猫在阳光下奔跑，镜头平稳跟拍，动作自然",
+    "duration": 10,
+    "ratio": "16:9",
+    "resolution": "720p"
+  }'
+```
+
+#### 12.6.2 首尾帧和多媒体参考
+
+```json
+{
+  "model": "(线路3)sd-2.0-933",
+  "prompt": "让人物从首帧自然过渡到尾帧，参考视频的运镜并匹配音频节奏",
+  "duration": 10,
+  "ratio": "16:9",
+  "resolution": "720p",
+  "start_image_url": "https://example.com/first-frame.png",
+  "end_image_url": "https://example.com/last-frame.png",
+  "referenceImages": [
+    "https://example.com/character.png"
+  ],
+  "referenceVideos": [
+    "https://example.com/camera-motion.mp4"
+  ],
+  "referenceAudios": [
+    "https://example.com/music.mp3"
+  ]
+}
+```
+
+网关会把上面的平铺字段转换为上游 Seedance 请求。对应的上游结构如下，便于排查渠道日志：
+
+```json
+{
+  "model": "sd-2-c8",
+  "input": {
+    "prompt": "让人物从首帧自然过渡到尾帧，参考视频的运镜并匹配音频节奏",
+    "media": [
+      { "type": "first_frame", "url": "https://example.com/first-frame.png" },
+      { "type": "last_frame", "url": "https://example.com/last-frame.png" },
+      { "type": "reference_image", "url": "https://example.com/character.png" },
+      { "type": "reference_video", "url": "https://example.com/camera-motion.mp4" },
+      { "type": "reference_voice", "url": "https://example.com/music.mp3" }
+    ]
+  },
+  "parameters": {
+    "resolution": "720p",
+    "ratio": "16:9",
+    "duration": 10
+  }
+}
+```
+
+提交参数和限制：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `model` | string | 是 | 固定传 `(线路3)sd-2.0-933`，必须保留线路前缀 |
+| `prompt` | string | 是 | 不能为空，最长 5000 个字符 |
+| `duration` | number | 否 | 4～15 秒；建议显式传入 |
+| `ratio` | string | 否 | 当前网关支持 `1:1`、`16:9`、`9:16`、`4:3`、`3:4` |
+| `resolution` | string | 否 | 仅支持 `720p`；不传时网关默认使用 `720p` |
+| `start_image_url` | string | 否 | 首帧图片 URL；计入图片总数 |
+| `end_image_url` | string | 否 | 尾帧图片 URL；计入图片总数 |
+| `referenceImages` | array | 否 | HTTP/HTTPS 图片 URL，最多 9 张 |
+| `referenceVideos` | array | 否 | HTTP/HTTPS 视频 URL，最多 3 个 |
+| `referenceAudios` | array | 否 | HTTP/HTTPS 音频 URL，最多 3 个 |
+
+图片（含首尾帧）最多 9 个，视频最多 3 个，音频最多 3 个，全部参考素材合计最多 15 个。`first_image` 和 `last_image` 不支持；首尾帧请使用 `start_image_url` 和 `end_image_url`。所有参考素材必须是上游可访问的公网 HTTP/HTTPS URL。
+
+上游返回 `RUNNING` 时继续等待，`SUCCEEDED` 时读取 `object` 中的视频 URL，`FAILED:错误信息` 时将冒号后的内容作为失败原因。网关会将这三类状态转换为统一的 `in_progress`、`completed`、`failed` 响应，并优先返回顶层 `url`。
+
+该线路的上游查询接口要求两次查询间隔至少 20 秒，因此下游轮询 `GET /v1/video/async-generations/{task_id}` 时也建议保持不低于 20 秒；最长等待时间仍建议控制在 5～10 分钟。
+
 ## 13. Video 2.0 系列
 
 ### 13.1 模型规格
@@ -280,7 +369,7 @@ curl https://ghlink.top/v1/video/async-generations \
 
 ```bash
 curl https://ghlink.top/v1/video/async-generations \
-  -H "Authorization: Bearer $LINKSKY_API_KEY" \
+  -H "Authorization: Bearer $GHLINK_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "video-2.0-fast",
@@ -382,7 +471,7 @@ curl https://ghlink.top/v1/video/async-generations \
 
 ```bash
 curl https://ghlink.top/v1/video/async-generations \
-  -H "Authorization: Bearer $LINKSKY_API_KEY" \
+  -H "Authorization: Bearer $GHLINK_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "videos-4（4图3视频1音频）",
@@ -443,14 +532,14 @@ curl https://ghlink.top/v1/video/async-generations \
 
 ## 15. 新增模型查询任务
 
-本次新增的 11 个模型全部使用原文档相同的查询接口：
+本次新增的 12 个模型对外全部使用原文档相同的查询接口：
 
 ```bash
 curl https://ghlink.top/v1/video/async-generations/task_xxx \
-  -H "Authorization: Bearer $LINKSKY_API_KEY"
+  -H "Authorization: Bearer $GHLINK_API_KEY"
 ```
 
-处理中、完成、失败响应格式以及结果 URL 读取顺序继续以原文档第 6 章为准，不新增第二套解析逻辑。
+处理中、完成、失败响应格式以及结果 URL 读取顺序继续以原文档第 6 章为准，不新增第二套对外解析逻辑。`(线路3)sd-2.0-933` 的上游查询地址是 `/v1/videos/{task_id}`，由网关内部处理，不需要下游改用该地址。
 
 ## 16. 新增模型常见参数错误
 
@@ -458,6 +547,7 @@ curl https://ghlink.top/v1/video/async-generations/task_xxx \
 | --- | --- | --- |
 | MiniMax H3 | 400 | `prompt` 为空或过长、时长或画幅不支持、参考图片/音频数量或格式不符合要求 |
 | SD2 / Videos 4 | 400 | `prompt is required`、`duration must be between 4 and 15`、`ratio must be 16:9, 9:16, or 1:1`、`resolution must be 720p or 480p`、参考素材数量超限 |
+| `(线路3)sd-2.0-933` | 400 | `prompt is required`、`duration must be between 4 and 15`、`resolution must be 720p`、参考素材数量超限或 URL 不是 HTTP/HTTPS |
 | Video 2.0 | 400 | `prompt is required`、`prompt must not exceed 5000 characters`、`duration must be between 4 and 15`、`aspect_ratio must be 9:16, 16:9, or 1:1`、`size conflicts with aspect_ratio`、参考素材数量或格式不符合要求 |
 | 全部新增模型 | 401 | Token 无效、过期或缺失 |
 | 全部新增模型 | 403 | Token 没有模型或分组访问权限 |
@@ -471,9 +561,11 @@ curl https://ghlink.top/v1/video/async-generations/task_xxx \
 - `Authorization` 必须是 `Bearer` 加一个空格再加 API Key。
 - 模型名必须从模型广场复制，不要自行修改大小写、括号或后缀。
 - 固定分辨率的 `sd2-1080P(933按秒)` 和 `sd2-4k(933按秒)` 不传 `resolution`。
+- `(线路3)sd-2.0-933` 与 `sd2-*` 不是同一协议；下游传展示别名，网关内部映射到 `sd-2-c8` 并转换为 Seedance 嵌套请求。
 - Video 2.0 模型的 `resolution` 必须与模型名中的 720p/480p 档位一致。
 - SD2 和 Videos 4 使用 `ratio`、`referenceImages`、`referenceVideos`、`referenceAudios`。
+- `(线路3)sd-2.0-933` 使用 `ratio`、`start_image_url`、`end_image_url`、`referenceImages`、`referenceVideos`、`referenceAudios`，轮询间隔不低于 20 秒。
 - MiniMax H3 和 Video 2.0 使用 `aspect_ratio` 以及各自的图片、视频、音频字段。
 - 提交成功后保存 `task_id`，不要使用本地自增 ID 代替。
-- 轮询间隔建议 3～5 秒，最长等待时间建议 5～10 分钟。
+- 除 `(线路3)sd-2.0-933` 外，其他模型轮询间隔建议 3～5 秒；最长等待时间建议 5～10 分钟。
 - 参考素材 URL 必须允许 GHLINK 和上游服务从公网访问。

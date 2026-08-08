@@ -17,6 +17,7 @@ var ModelList = []string{
 	"sd-2.0-933",
 	"sd-2-c8",
 	"seedance-2.0",
+	"seedance-2.5",
 	"ko3",
 	"kling-v3",
 	"veo31",

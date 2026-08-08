@@ -29,6 +29,7 @@ import {
   getCreationPromptMaxLength,
   getCreationResolutionOptions,
   getCreationVideoCapabilities,
+  getCreationVideoOptionsError,
   getCreationVideoReferenceError,
   getCreationVideoReferenceLimits,
   getCreationVideoRequestOptions,
@@ -237,6 +238,165 @@ describe('Sanbao creation model options', () => {
         start_image_url: 'https://example.com/first.png',
         referenceImages: ['https://example.com/reference.png'],
       }
+    )
+  })
+
+  test('pairs Seedance 2.5 with the Seedance upload controls and request fields', () => {
+    const model = 'Seedance-2.5'
+    const capability = getCreationVideoCapabilities(model)
+
+    assert.equal(capability?.kind, 'videos')
+    assert.deepEqual(capability?.referenceModes, [
+      'text',
+      'image',
+      'video',
+      'multimodal',
+    ])
+    assert.deepEqual(capability?.aspectRatios, ['16:9', '9:16', '1:1'])
+    assert.deepEqual(
+      getCreationResolutionOptions(model).map((item) => item.value),
+      ['720p', '480p']
+    )
+    assert.deepEqual(
+      {
+        maxImages: getCreationVideoReferenceLimits(model).maxImages,
+        maxVideos: getCreationVideoReferenceLimits(model).maxVideos,
+        maxAudios: getCreationVideoReferenceLimits(model).maxAudios,
+      },
+      { maxImages: 30, maxVideos: 10, maxAudios: 10 }
+    )
+    assert.deepEqual(
+      getCreationDurationOptions(model).map((item) => item.value),
+      Array.from({ length: 26 }, (_, index) => String(index + 4))
+    )
+    assert.equal(
+      getCreationVideoReferenceLimits(model).maxVideoTotalSizeMB,
+      667
+    )
+    assert.equal(
+      getCreationVideoReferenceLimits(model).maxAudioTotalSizeMB,
+      50
+    )
+    assert.equal(
+      getCreationVideoReferenceLimits(model)
+        .maxReferenceVideoTotalDurationSeconds,
+      29
+    )
+    assert.equal(
+      getCreationVideoReferenceLimits(model)
+        .maxReferenceAudioTotalDurationSeconds,
+      29
+    )
+    assert.equal(capability?.uploadTipProfile, 'seedance-2.5')
+
+    const options = normalizeCreationVideoOptions(
+      { resolution: '480p', duration: '29', aspectRatio: '9:16' },
+      model
+    )
+    assert.equal(
+      getCreationVideoOptionsError(
+        { resolution: '720p', duration: '30', aspectRatio: '9:16' },
+        model
+      ),
+      'Seedance 2.5 duration must be between 4 and 29 seconds.'
+    )
+    assert.deepEqual(
+      getCreationVideoRequestOptions(options, model, {
+        referenceMode: 'multimodal',
+        imageUrls: [{ url: 'https://example.com/ref.png' }],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [{ url: 'https://example.com/ref.mp4' }],
+        audioUrls: [{ url: 'https://example.com/ref.wav' }],
+        audioUrl: { url: 'https://example.com/ref.wav' },
+      }),
+      {
+        duration: 29,
+        ratio: '9:16',
+        resolution: '480p',
+        estimateSeconds: 495,
+        referenceImages: ['https://example.com/ref.png'],
+        referenceVideos: ['https://example.com/ref.mp4'],
+        referenceAudios: ['https://example.com/ref.wav'],
+      }
+    )
+
+    assert.equal(
+      getCreationVideoReferenceError(model, {
+        referenceMode: 'video',
+        imageUrls: [],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [
+          {
+            url: 'https://example.com/ref.mp4',
+            sizeBytes: 668 * 1024 * 1024,
+          },
+        ],
+        audioUrls: [],
+        audioUrl: '',
+      }),
+      'Seedance 2.5 reference videos must not exceed 667 MB in total.'
+    )
+
+    assert.equal(
+      getCreationVideoReferenceError(model, {
+        referenceMode: 'video',
+        imageUrls: [],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [
+          {
+            url: 'https://example.com/ref-1.mp4',
+            durationSeconds: 15,
+          },
+          {
+            url: 'https://example.com/ref-2.mp4',
+            durationSeconds: 15,
+          },
+        ],
+        audioUrls: [],
+        audioUrl: '',
+      }),
+      'Seedance 2.5 reference videos must not exceed 29 seconds in total.'
+    )
+
+    assert.equal(
+      getCreationVideoReferenceError(model, {
+        referenceMode: 'multimodal',
+        imageUrls: [],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [],
+        audioUrls: [
+          {
+            url: 'https://example.com/ref-1.wav',
+            durationSeconds: 15,
+          },
+          {
+            url: 'https://example.com/ref-2.wav',
+            durationSeconds: 15,
+          },
+        ],
+        audioUrl: '',
+      }),
+      'Seedance 2.5 reference audios must not exceed 29 seconds in total.'
+    )
+
+    assert.equal(
+      getCreationVideoReferenceError(model, {
+        referenceMode: 'multimodal',
+        imageUrls: [],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [],
+        audioUrls: Array.from({ length: 4 }, (_, index) => ({
+          url: `https://example.com/ref-${index + 1}.wav`,
+          sizeBytes: 13 * 1024 * 1024,
+        })),
+        audioUrl: '',
+      }),
+      'Seedance 2.5 reference audios must not exceed 50 MB in total.'
     )
   })
 

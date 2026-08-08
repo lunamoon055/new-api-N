@@ -48,6 +48,8 @@ export type CreationVideoReferences = {
 export type CreationVideoReferenceObject = {
   url: string
   previewUrl?: string
+  sizeBytes?: number
+  durationSeconds?: number
 }
 
 export type CreationVideoReferenceValue = string | CreationVideoReferenceObject
@@ -94,10 +96,16 @@ export type CreationVideoReferenceLimits = {
   maxImageSizeMB: number
   maxVideoSizeMB: number
   maxAudioSizeMB: number
+  maxVideoTotalSizeBytes?: number
+  maxVideoTotalSizeMB?: number
+  maxAudioTotalSizeBytes?: number
+  maxAudioTotalSizeMB?: number
   minReferenceVideoDurationSeconds?: number
   maxReferenceVideoDurationSeconds?: number
+  maxReferenceVideoTotalDurationSeconds?: number
   minReferenceAudioDurationSeconds?: number
   maxReferenceAudioDurationSeconds?: number
+  maxReferenceAudioTotalDurationSeconds?: number
 }
 
 export type CreationVideoCapability = {
@@ -110,6 +118,7 @@ export type CreationVideoCapability = {
   includeResolutionInRequest: boolean
   durationControl: 'menu' | 'select'
   referenceLimits: CreationVideoReferenceLimits
+  uploadTipProfile?: 'seedance-2.5'
   maxPromptLength?: number
   concurrencyOptions?: number[]
 }
@@ -225,6 +234,27 @@ const VIDEOS_API_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
   maxAudioSizeMB: 50,
 }
 
+const SEEDANCE_25_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
+  maxImages: 30,
+  maxVideos: 10,
+  maxAudios: 10,
+  maxMediaFiles: 50,
+  maxImageSizeBytes: CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES,
+  maxVideoSizeBytes: CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES,
+  maxAudioSizeBytes: CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES,
+  maxImageSizeMB: 20,
+  maxVideoSizeMB: 200,
+  maxAudioSizeMB: 15,
+  maxVideoTotalSizeBytes: 667 * 1024 * 1024,
+  maxVideoTotalSizeMB: 667,
+  maxAudioTotalSizeBytes: 50 * 1024 * 1024,
+  maxAudioTotalSizeMB: 50,
+  maxReferenceVideoDurationSeconds: 29,
+  maxReferenceVideoTotalDurationSeconds: 29,
+  maxReferenceAudioDurationSeconds: 29,
+  maxReferenceAudioTotalDurationSeconds: 29,
+}
+
 const MINIMAX_H3_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
   ...VIDEO2_REFERENCE_LIMITS,
   maxImages: 5,
@@ -302,6 +332,10 @@ const SORA2_CREATION_RESOLUTION_OPTIONS: ResolutionOption[] = [
 ]
 
 const VIDEO2_DURATIONS = Array.from({ length: 12 }, (_, index) =>
+  String(index + 4)
+)
+
+const SEEDANCE_25_DURATIONS = Array.from({ length: 26 }, (_, index) =>
   String(index + 4)
 )
 
@@ -383,9 +417,9 @@ const SD2_720P_API_CAPABILITY: CreationVideoCapability = {
   resolutions: ['720p', '480p'],
 }
 
-// The mapped Seedance 2.0 channel uses the same internal task endpoint as the
-// Videos API, but only exposes 720p and the additional reference modes from
-// the provider integration document.
+// OpenAI-compatible Seedance 2.x channels use the same internal task endpoint
+// as the Videos API. The gateway converts these fields to the upstream
+// /v1/videos request contract.
 const SEEDANCE_2_API_CAPABILITY: CreationVideoCapability = {
   ...VIDEOS_API_CAPABILITY,
   resolutions: ['720p'],
@@ -393,6 +427,17 @@ const SEEDANCE_2_API_CAPABILITY: CreationVideoCapability = {
   referenceModes: ['text', 'image', 'frames', 'multimodal'],
   showResolution: false,
   includeResolutionInRequest: true,
+}
+
+const SEEDANCE_25_API_CAPABILITY: CreationVideoCapability = {
+  ...SEEDANCE_2_API_CAPABILITY,
+  durations: SEEDANCE_25_DURATIONS,
+  resolutions: ['720p', '480p'],
+  aspectRatios: ['16:9', '9:16', '1:1'],
+  referenceModes: ['text', 'image', 'video', 'multimodal'],
+  referenceLimits: SEEDANCE_25_REFERENCE_LIMITS,
+  uploadTipProfile: 'seedance-2.5',
+  showResolution: true,
 }
 
 const MINIMAX_H3_CAPABILITY: CreationVideoCapability = {
@@ -439,6 +484,7 @@ const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
   'sd-2.0-933': SEEDANCE_2_API_CAPABILITY,
   'sd-2-c8': SEEDANCE_2_API_CAPABILITY,
   'seedance-2.0': SEEDANCE_2_API_CAPABILITY,
+  'seedance-2.5': SEEDANCE_25_API_CAPABILITY,
   'minimax-h3': MINIMAX_H3_CAPABILITY,
 }
 
@@ -576,8 +622,14 @@ function isMiniMaxH3Model(model?: CreationModelInput) {
 
 function isSeedance2Model(model?: CreationModelInput) {
   return getCreationModelIdCandidates(model).some((candidate) =>
-    ['sd-2.0-933', 'sd-2-c8', 'seedance-2.0'].includes(candidate)
+    ['sd-2.0-933', 'sd-2-c8', 'seedance-2.0', 'seedance-2.5'].includes(
+      candidate
+    )
   )
+}
+
+function isSeedance25Model(model?: CreationModelInput) {
+  return getCreationModelIdCandidates(model).includes('seedance-2.5')
 }
 
 function isSanbaoMetadata(
@@ -764,7 +816,7 @@ export function getCreationDurationOptions(model?: CreationModelInput) {
     return capability.durations.map(getDurationOption)
   }
   if (capability?.kind === 'videos') {
-    return VIDEO2_DURATION_OPTIONS
+    return capability.durations.map(getDurationOption)
   }
   if (capability?.kind === 'video2') {
     return VIDEO2_DURATION_OPTIONS
@@ -826,6 +878,9 @@ export function getCreationVideoOptionsError(
     if (capability?.kind === 'sanbao' || capability?.kind === 'minimax-h3') {
       return 'This model does not support the selected duration.'
     }
+    if (isSeedance25Model(model)) {
+      return 'Seedance 2.5 duration must be between 4 and 29 seconds.'
+    }
     return 'Duration must be between 4 and 15 seconds.'
   }
   return undefined
@@ -866,6 +921,25 @@ export function getCreationReferencePreviewURL(
   if (!value) return ''
   if (typeof value === 'string') return value.trim()
   return value.previewUrl?.trim() || value.url.trim()
+}
+
+export function getCreationReferenceSizeBytes(
+  value?: CreationVideoReferenceValue | null
+) {
+  if (!value || typeof value === 'string') return 0
+  return Number.isFinite(value.sizeBytes) && Number(value.sizeBytes) > 0
+    ? Number(value.sizeBytes)
+    : 0
+}
+
+export function getCreationReferenceDurationSeconds(
+  value?: CreationVideoReferenceValue | null
+) {
+  if (!value || typeof value === 'string') return 0
+  return Number.isFinite(value.durationSeconds) &&
+    Number(value.durationSeconds) > 0
+    ? Number(value.durationSeconds)
+    : 0
 }
 
 function cleanReferenceValues(
@@ -1212,6 +1286,12 @@ export function getCreationVideoReferenceError(
       return 'Sanbao accepts too many reference images.'
     }
     if (capability.kind === 'videos') {
+      if (isSeedance25Model(model)) {
+        return 'Seedance 2.5 accepts at most 30 image references.'
+      }
+      if (isSeedance2Model(model)) {
+        return 'Seedance accepts at most 9 image references.'
+      }
       return 'Videos API accepts at most 9 image references.'
     }
     if (capability.kind === 'minimax-h3') {
@@ -1224,12 +1304,24 @@ export function getCreationVideoReferenceError(
       return 'Sanbao accepts too many reference videos.'
     }
     if (capability.kind === 'videos') {
+      if (isSeedance25Model(model)) {
+        return 'Seedance 2.5 accepts at most 10 reference videos.'
+      }
+      if (isSeedance2Model(model)) {
+        return 'Seedance accepts at most 3 reference videos.'
+      }
       return 'Videos API accepts at most 3 reference videos.'
     }
     return 'Video2 accepts at most 3 video references.'
   }
   if (audioCount > referenceLimits.maxAudios) {
     if (capability.kind === 'videos') {
+      if (isSeedance25Model(model)) {
+        return 'Seedance 2.5 accepts at most 10 reference audios.'
+      }
+      if (isSeedance2Model(model)) {
+        return 'Seedance accepts at most 3 reference audios.'
+      }
       return 'Videos API accepts at most 3 reference audios.'
     }
     if (capability.kind === 'sanbao') {
@@ -1243,9 +1335,57 @@ export function getCreationVideoReferenceError(
     mediaCount > referenceLimits.maxMediaFiles
   ) {
     if (capability.kind === 'videos') {
+      if (isSeedance25Model(model)) {
+        return 'Seedance 2.5 accepts too many reference assets.'
+      }
+      if (isSeedance2Model(model)) {
+        return 'Seedance accepts too many reference assets.'
+      }
       return 'Videos API accepts too many reference assets.'
     }
     return 'Sanbao accepts too many reference assets.'
+  }
+  const videoTotalSizeBytes = normalized.videoUrls.reduce(
+    (total, value) => total + getCreationReferenceSizeBytes(value),
+    0
+  )
+  if (
+    referenceLimits.maxVideoTotalSizeBytes &&
+    videoTotalSizeBytes > referenceLimits.maxVideoTotalSizeBytes
+  ) {
+    return 'Seedance 2.5 reference videos must not exceed 667 MB in total.'
+  }
+  const videoTotalDurationSeconds = normalized.videoUrls.reduce(
+    (total, value) => total + getCreationReferenceDurationSeconds(value),
+    0
+  )
+  if (
+    referenceLimits.maxReferenceVideoTotalDurationSeconds &&
+    videoTotalDurationSeconds >
+      referenceLimits.maxReferenceVideoTotalDurationSeconds
+  ) {
+    return 'Seedance 2.5 reference videos must not exceed 29 seconds in total.'
+  }
+  const audioTotalDurationSeconds = normalized.audioUrls.reduce(
+    (total, value) => total + getCreationReferenceDurationSeconds(value),
+    0
+  )
+  const audioTotalSizeBytes = normalized.audioUrls.reduce(
+    (total, value) => total + getCreationReferenceSizeBytes(value),
+    0
+  )
+  if (
+    referenceLimits.maxAudioTotalSizeBytes &&
+    audioTotalSizeBytes > referenceLimits.maxAudioTotalSizeBytes
+  ) {
+    return 'Seedance 2.5 reference audios must not exceed 50 MB in total.'
+  }
+  if (
+    referenceLimits.maxReferenceAudioTotalDurationSeconds &&
+    audioTotalDurationSeconds >
+      referenceLimits.maxReferenceAudioTotalDurationSeconds
+  ) {
+    return 'Seedance 2.5 reference audios must not exceed 29 seconds in total.'
   }
 
   const images = [
@@ -1418,7 +1558,11 @@ export function getCreationVideoRequestOptions(
       request.resolution =
         normalizedOptions.resolution === '480p' ? '480p' : '720p'
     }
-    if (isSeedance2Model(model)) {
+    if (isSeedance25Model(model)) {
+      if (imageUrls.length) request.referenceImages = imageUrls
+      if (videoUrls.length) request.referenceVideos = videoUrls
+      if (audioUrls.length) request.referenceAudios = audioUrls
+    } else if (isSeedance2Model(model)) {
       if (normalizedReferences.referenceMode === 'image') {
         const [firstImage, ...referenceImages] = imageUrls
         if (firstImage) request.start_image_url = firstImage

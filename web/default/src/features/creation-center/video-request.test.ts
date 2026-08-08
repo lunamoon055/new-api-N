@@ -151,6 +151,47 @@ describe('Creation Center video request payload', () => {
     )
   })
 
+  test('routes Seedance 2.5 through the documented flat videos interface', () => {
+    assert.deepEqual(
+      buildCreationVideoSubmitRequest({
+        model: createVideoModel('Seedance-2.5'),
+        prompt: '让角色参考图片自然运动',
+        videoOptions: {
+          resolution: '480p',
+          duration: '29',
+          aspectRatio: '16:9',
+        },
+        videoReferences: {
+          referenceMode: 'image',
+          imageUrls: [
+            { url: 'https://example.com/reference-01.png' },
+            { url: 'https://example.com/reference-02.png' },
+          ],
+          startImageUrl: '',
+          endImageUrl: '',
+          videoUrls: [],
+          audioUrls: [],
+          audioUrl: '',
+        },
+      }),
+      {
+        endpoint: '/api/creation/video/async-generations',
+        payload: {
+          model: 'Seedance-2.5',
+          prompt: '让角色参考图片自然运动',
+          duration: 29,
+          ratio: '16:9',
+          resolution: '480p',
+          referenceImages: [
+            'https://example.com/reference-01.png',
+            'https://example.com/reference-02.png',
+          ],
+        },
+        transport: 'async-video',
+      }
+    )
+  })
+
   test('submits the 993 fixed-resolution models without an unsupported resolution field', () => {
     for (const model of ['sd2-1080P(993按秒)', 'sd2-4k(993按秒)']) {
       assert.deepEqual(

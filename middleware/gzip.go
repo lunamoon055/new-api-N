@@ -28,10 +28,7 @@ func DecompressRequestMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		maxMB := constant.MaxRequestBodyMB
-		if maxMB <= 0 {
-			maxMB = 32
-		}
+		maxMB := requestBodyLimitMB(c.Request)
 		maxBytes := int64(maxMB) << 20
 
 		origBody := c.Request.Body
@@ -73,4 +70,18 @@ func DecompressRequestMiddleware() gin.HandlerFunc {
 		// Continue processing the request
 		c.Next()
 	}
+}
+
+func requestBodyLimitMB(req *http.Request) int {
+	maxMB := constant.MaxRequestBodyMB
+	if maxMB <= 0 {
+		maxMB = 32
+	}
+	// Reference video uploads allow a 200 MB file. Reserve a small amount
+	// of multipart overhead while the controller still enforces the exact
+	// per-file limit for each media kind.
+	if req != nil && req.Method == http.MethodPost && req.URL != nil && req.URL.Path == "/api/creation/reference-files" && maxMB < 202 {
+		return 202
+	}
+	return maxMB
 }

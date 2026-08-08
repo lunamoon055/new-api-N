@@ -113,7 +113,10 @@ export function isReferenceAudioFile(
   return !!getReferenceAudioMime(file, profile)
 }
 
-export async function getReferenceAudioDurationSeconds(file: File) {
+async function getReferenceMediaDurationSeconds(
+  file: File,
+  kind: 'audio' | 'video'
+) {
   if (
     typeof document === 'undefined' ||
     typeof URL === 'undefined' ||
@@ -124,21 +127,29 @@ export async function getReferenceAudioDurationSeconds(file: File) {
 
   const objectURL = URL.createObjectURL(file)
   return new Promise<number | undefined>((resolve) => {
-    const audio = document.createElement('audio')
+    const media = document.createElement(kind)
     let settled = false
     const finish = (duration?: number) => {
       if (settled) return
       settled = true
       clearTimeout(timeout)
-      audio.removeAttribute('src')
+      media.removeAttribute('src')
       URL.revokeObjectURL(objectURL)
       resolve(duration)
     }
     const timeout = setTimeout(() => finish(), 10_000)
-    audio.preload = 'metadata'
-    audio.onloadedmetadata = () =>
-      finish(Number.isFinite(audio.duration) ? audio.duration : undefined)
-    audio.onerror = () => finish()
-    audio.src = objectURL
+    media.preload = 'metadata'
+    media.onloadedmetadata = () =>
+      finish(Number.isFinite(media.duration) ? media.duration : undefined)
+    media.onerror = () => finish()
+    media.src = objectURL
   })
+}
+
+export function getReferenceAudioDurationSeconds(file: File) {
+  return getReferenceMediaDurationSeconds(file, 'audio')
+}
+
+export function getReferenceVideoDurationSeconds(file: File) {
+  return getReferenceMediaDurationSeconds(file, 'video')
 }

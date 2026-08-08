@@ -68,6 +68,8 @@ import {
   getCreationVideoOptionsError,
   getCreationVideoReferenceError,
   getCreationVideoReferenceLimits,
+  getCreationReferenceSizeBytes,
+  getCreationReferenceDurationSeconds,
   getCreationVideoRequestOptions,
   loadCreationHistory,
   normalizeCreationImageOptions,
@@ -94,6 +96,7 @@ import {
   getReferenceAudioMime,
   getReferenceImageMime,
   getReferenceVideoMime,
+  getReferenceVideoDurationSeconds,
   isReferenceAudioFile,
   isReferenceImageFile,
   isReferenceVideoFile,
@@ -485,6 +488,22 @@ export function CreationCenter() {
         : videoReferences.imageUrls.filter(Boolean).length
     const currentVideoCount = videoReferences.videoUrls.filter(Boolean).length
     const currentAudioCount = videoReferences.audioUrls.filter(Boolean).length
+    const currentVideoTotalSizeBytes = videoReferences.videoUrls.reduce(
+      (total, value) => total + getCreationReferenceSizeBytes(value),
+      0
+    )
+    const currentAudioTotalSizeBytes = videoReferences.audioUrls.reduce(
+      (total, value) => total + getCreationReferenceSizeBytes(value),
+      0
+    )
+    const currentVideoTotalDurationSeconds = videoReferences.videoUrls.reduce(
+      (total, value) => total + getCreationReferenceDurationSeconds(value),
+      0
+    )
+    const currentAudioTotalDurationSeconds = videoReferences.audioUrls.reduce(
+      (total, value) => total + getCreationReferenceDurationSeconds(value),
+      0
+    )
     const maxMediaFiles = videoReferenceLimits.maxMediaFiles
     let remainingTotalSlots =
       typeof maxMediaFiles === 'number'
@@ -497,7 +516,7 @@ export function CreationCenter() {
           )
         : Number.POSITIVE_INFINITY
     const referenceImageFiles: File[] = []
-    const referenceVideoFiles: File[] = []
+    let referenceVideoFiles: File[] = []
     let referenceAudioFiles: File[] = []
     const maxImageCount =
       referenceMode === 'frames' ? 2 : videoReferenceLimits.maxImages
@@ -508,6 +527,12 @@ export function CreationCenter() {
     let videoLimitHit = false
     let audioLimitHit = false
     let totalLimitHit = false
+    let videoTotalSizeLimitHit = false
+    let audioTotalSizeLimitHit = false
+    let selectedVideoTotalSizeBytes = 0
+    let selectedAudioTotalSizeBytes = 0
+    const videoDurationByFile = new Map<File, number>()
+    const audioDurationByFile = new Map<File, number>()
 
     for (const file of acceptedFiles) {
       if (acceptsImages && isReferenceImageFile(file)) {
@@ -546,7 +571,16 @@ export function CreationCenter() {
           totalLimitHit = true
           continue
         }
+        if (
+          videoReferenceLimits.maxVideoTotalSizeBytes &&
+          currentVideoTotalSizeBytes + selectedVideoTotalSizeBytes + file.size >
+            videoReferenceLimits.maxVideoTotalSizeBytes
+        ) {
+          videoTotalSizeLimitHit = true
+          continue
+        }
         referenceVideoFiles.push(file)
+        selectedVideoTotalSizeBytes += file.size
         if (Number.isFinite(remainingTotalSlots)) {
           remainingTotalSlots -= 1
         }
@@ -569,11 +603,47 @@ export function CreationCenter() {
           totalLimitHit = true
           continue
         }
+        if (
+          videoReferenceLimits.maxAudioTotalSizeBytes &&
+          currentAudioTotalSizeBytes + selectedAudioTotalSizeBytes + file.size >
+            videoReferenceLimits.maxAudioTotalSizeBytes
+        ) {
+          audioTotalSizeLimitHit = true
+          continue
+        }
         referenceAudioFiles.push(file)
+        selectedAudioTotalSizeBytes += file.size
         if (Number.isFinite(remainingTotalSlots)) {
           remainingTotalSlots -= 1
         }
       }
+    }
+
+    let videoDurationInvalidCount = 0
+    const minVideoDuration =
+      videoReferenceLimits.minReferenceVideoDurationSeconds
+    const maxVideoDuration =
+      videoReferenceLimits.maxReferenceVideoDurationSeconds
+    if (
+      referenceVideoFiles.length &&
+      (minVideoDuration !== undefined || maxVideoDuration !== undefined)
+    ) {
+      const durations = await Promise.all(
+        referenceVideoFiles.map(getReferenceVideoDurationSeconds)
+      )
+      referenceVideoFiles = referenceVideoFiles.filter((file, index) => {
+        const duration = durations[index]
+        if (duration === undefined) return true
+        const allowed =
+          (minVideoDuration === undefined || duration >= minVideoDuration) &&
+          (maxVideoDuration === undefined || duration <= maxVideoDuration)
+        if (!allowed) {
+          videoDurationInvalidCount += 1
+          return false
+        }
+        videoDurationByFile.set(file, duration)
+        return true
+      })
     }
 
     let audioDurationInvalidCount = 0
@@ -588,26 +658,106 @@ export function CreationCenter() {
       const durations = await Promise.all(
         referenceAudioFiles.map(getReferenceAudioDurationSeconds)
       )
-      referenceAudioFiles = referenceAudioFiles.filter((_, index) => {
+      referenceAudioFiles = referenceAudioFiles.filter((file, index) => {
         const duration = durations[index]
         if (duration === undefined) return true
         const allowed =
           (minAudioDuration === undefined || duration >= minAudioDuration) &&
           (maxAudioDuration === undefined || duration <= maxAudioDuration)
-        if (!allowed) audioDurationInvalidCount += 1
-        return allowed
+        if (!allowed) {
+          audioDurationInvalidCount += 1
+          return false
+        }
+        audioDurationByFile.set(file, duration)
+        return true
       })
+    }
+
+    let videoTotalDurationLimitHit = false
+    const maxVideoTotalDuration =
+      videoReferenceLimits.maxReferenceVideoTotalDurationSeconds
+    if (maxVideoTotalDuration !== undefined) {
+      let selectedDuration = 0
+      referenceVideoFiles = referenceVideoFiles.filter((file) => {
+        const duration = videoDurationByFile.get(file)
+        if (duration === undefined) return true
+        if (
+          currentVideoTotalDurationSeconds + selectedDuration + duration >
+          maxVideoTotalDuration
+        ) {
+          videoTotalDurationLimitHit = true
+          return false
+        }
+        selectedDuration += duration
+        return true
+      })
+    }
+
+    let audioTotalDurationLimitHit = false
+    const maxAudioTotalDuration =
+      videoReferenceLimits.maxReferenceAudioTotalDurationSeconds
+    if (maxAudioTotalDuration !== undefined) {
+      let selectedDuration = 0
+      referenceAudioFiles = referenceAudioFiles.filter((file) => {
+        const duration = audioDurationByFile.get(file)
+        if (duration === undefined) return true
+        if (
+          currentAudioTotalDurationSeconds + selectedDuration + duration >
+          maxAudioTotalDuration
+        ) {
+          audioTotalDurationLimitHit = true
+          return false
+        }
+        selectedDuration += duration
+        return true
+      })
+    }
+
+    if (videoDurationInvalidCount > 0) {
+      toast.error(
+        minVideoDuration === undefined
+          ? t('Reference video duration must not exceed {{max}} seconds.', {
+              max: maxVideoDuration ?? 0,
+            })
+          : t(
+              'Reference video duration must be between {{min}} and {{max}} seconds.',
+              {
+                min: minVideoDuration,
+                max: maxVideoDuration ?? 0,
+              }
+            )
+      )
     }
 
     if (audioDurationInvalidCount > 0) {
       toast.error(
-        t(
-          'Reference audio duration must be between {{min}} and {{max}} seconds.',
-          {
-            min: minAudioDuration ?? 0,
-            max: maxAudioDuration ?? 0,
-          }
-        )
+        minAudioDuration === undefined
+          ? t('Reference audio duration must not exceed {{max}} seconds.', {
+              max: maxAudioDuration ?? 0,
+            })
+          : t(
+              'Reference audio duration must be between {{min}} and {{max}} seconds.',
+              {
+                min: minAudioDuration,
+                max: maxAudioDuration ?? 0,
+              }
+            )
+      )
+    }
+
+    if (videoTotalDurationLimitHit && maxVideoTotalDuration !== undefined) {
+      toast.error(
+        t('Reference videos must not exceed {{max}} seconds in total.', {
+          max: maxVideoTotalDuration,
+        })
+      )
+    }
+
+    if (audioTotalDurationLimitHit && maxAudioTotalDuration !== undefined) {
+      toast.error(
+        t('Reference audios must not exceed {{max}} seconds in total.', {
+          max: maxAudioTotalDuration,
+        })
       )
     }
 
@@ -668,6 +818,20 @@ export function CreationCenter() {
         })
       )
     }
+    if (videoTotalSizeLimitHit && videoReferenceLimits.maxVideoTotalSizeMB) {
+      toast.error(
+        t('Reference videos must not exceed {{size}} MB total.', {
+          size: videoReferenceLimits.maxVideoTotalSizeMB,
+        })
+      )
+    }
+    if (audioTotalSizeLimitHit && videoReferenceLimits.maxAudioTotalSizeMB) {
+      toast.error(
+        t('Reference audios must not exceed {{size}} MB total.', {
+          size: videoReferenceLimits.maxAudioTotalSizeMB,
+        })
+      )
+    }
 
     let imageUrls: CreationVideoReferences['imageUrls'] = []
     let videoUrls: CreationVideoReferences['videoUrls'] = []
@@ -687,7 +851,8 @@ export function CreationCenter() {
           createUploadedReferenceValue(
             file,
             'video',
-            getReferenceVideoMime(file)
+            getReferenceVideoMime(file),
+            videoDurationByFile.get(file)
           )
         )
       )
@@ -696,7 +861,8 @@ export function CreationCenter() {
           createUploadedReferenceValue(
             file,
             'audio',
-            getReferenceAudioMime(file, audioProfile)
+            getReferenceAudioMime(file, audioProfile),
+            audioDurationByFile.get(file)
           )
         )
       )
@@ -1275,11 +1441,14 @@ function getCreationHistoryItemId(result: CreationResult, mode: CreationMode) {
 async function createUploadedReferenceValue(
   file: File,
   kind: 'image' | 'video' | 'audio',
-  mimeType: string | undefined
+  mimeType: string | undefined,
+  durationSeconds?: number
 ) {
   const url = await uploadCreationReferenceFile(file, kind, mimeType)
   return {
     url,
+    sizeBytes: file.size,
+    durationSeconds,
     previewUrl:
       typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
         ? URL.createObjectURL(file)
