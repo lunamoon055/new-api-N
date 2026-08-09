@@ -19,12 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 import { z } from 'zod'
 
 export const REGISTRATION_USERNAME_ERROR_MESSAGE =
-  'Please enter English letters or Arabic numerals'
+  'Please enter English letters, Arabic numerals, or common email characters (@ . _ + -)'
 
-const REGISTRATION_USERNAME_PATTERN = /^[A-Za-z0-9]+$/
+const REGISTRATION_USERNAME_PATTERN = /^[A-Za-z0-9@._+-]+$/
 
 export function sanitizeRegistrationUsername(value: string) {
-  return value.replace(/[^A-Za-z0-9]/g, '')
+  return value.replace(/[^A-Za-z0-9@._+-]/g, '')
 }
 
 // ============================================================================

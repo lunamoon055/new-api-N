@@ -34,7 +34,10 @@ import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getFailedTaskCount } from '@/features/dashboard/api'
 import { getDefaultDays } from '@/features/dashboard/lib/filters'
-import { calculateDashboardStats } from '@/features/dashboard/lib/stats'
+import {
+  calculateDashboardStats,
+  calculateSuccessfulCount,
+} from '@/features/dashboard/lib/stats'
 import type {
   DashboardFilters,
   QuotaDataItem,
@@ -150,9 +153,13 @@ export function RequestResultOverview(props: RequestResultOverviewProps) {
     retry: false,
   })
 
-  const successStats = useMemo(
+  const dashboardStats = useMemo(
     () => calculateDashboardStats(props.data),
     [props.data]
+  )
+  const successfulCount = calculateSuccessfulCount(
+    dashboardStats.totalCount,
+    failureCountQuery.data ?? 0
   )
 
   return (
@@ -178,10 +185,10 @@ export function RequestResultOverview(props: RequestResultOverviewProps) {
         <ResultMetric
           icon={CheckCircle2}
           label={t('Successful Count')}
-          value={formatNumber(successStats.totalCount)}
+          value={formatNumber(successfulCount)}
           tone='success'
-          loading={props.loading}
-          error={props.error}
+          loading={props.loading || failureCountQuery.isPending}
+          error={props.error || failureCountQuery.isError}
           className='border-l'
         />
         <ResultMetric
@@ -196,7 +203,7 @@ export function RequestResultOverview(props: RequestResultOverviewProps) {
         <ResultMetric
           icon={Coins}
           label={t('Successful Consumption')}
-          value={formatQuota(successStats.totalQuota)}
+          value={formatQuota(dashboardStats.totalQuota)}
           tone='warning'
           loading={props.loading}
           error={props.error}

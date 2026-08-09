@@ -16,26 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export {
-  cleanFilters,
-  buildQueryParams,
-  getSavedGranularity,
-  saveGranularity,
-  getDefaultDays,
-  getSavedChartPreferences,
-  saveChartPreferences,
-  buildDefaultDashboardFilters,
-} from './filters'
-export {
-  getLatencyColorClass,
-  testUrlLatency,
-  openExternalSpeedTest,
-  getDefaultPingStatus,
-} from './api-info'
-export { processChartData, processUserChartData } from './charts'
-export {
-  safeDivide,
-  calculateDashboardStats,
-  calculateSuccessfulCount,
-} from './stats'
-export { getPreviewText } from './text'
+import assert from 'node:assert/strict'
+import { describe, test } from 'node:test'
+import { calculateSuccessfulCount } from './stats'
+
+describe('dashboard successful request count', () => {
+  test('subtracts failed requests from the total count', () => {
+    assert.equal(calculateSuccessfulCount(87, 38), 49)
+  })
+
+  test('never returns a negative count', () => {
+    assert.equal(calculateSuccessfulCount(10, 12), 0)
+  })
+
+  test('handles invalid count values safely', () => {
+    assert.equal(calculateSuccessfulCount(Number.NaN, 5), 0)
+    assert.equal(calculateSuccessfulCount(10, Number.POSITIVE_INFINITY), 10)
+  })
+})

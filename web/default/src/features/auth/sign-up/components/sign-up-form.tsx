@@ -71,7 +71,7 @@ export function SignUpForm({
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
   const legalConsentErrorMessage = t('Please agree to the legal terms first')
   const usernameCharacterErrorMessage = t(
-    'Please enter English letters or Arabic numerals'
+    'Please enter English letters, Arabic numerals, or common email characters (@ . _ + -)'
   )
 
   const { status } = useStatus()
@@ -240,7 +240,6 @@ export function SignUpForm({
                   autoComplete='username'
                   autoCapitalize='none'
                   inputMode='text'
-                  pattern='[A-Za-z0-9]*'
                   spellCheck={false}
                   {...field}
                   onChange={(event) => {

@@ -3083,7 +3083,7 @@
     "Please enter API key first": "请先输入 API 密钥",
     "Please enter chat client name": "请输入聊天客户端名称",
     "Please enter email and verification code": "请输入邮箱和验证码",
-    "Please enter English letters or Arabic numerals": "请输入英文字母或阿拉伯数字",
+    "Please enter English letters, Arabic numerals, or common email characters (@ . _ + -)": "请输入英文字母、阿拉伯数字或常用邮箱字符（@ . _ + -）",
     "Please enter keys first": "请先输入密钥",
     "Please enter model name": "请输入模型名称",
     "Please enter plan title": "请输入套餐标题",

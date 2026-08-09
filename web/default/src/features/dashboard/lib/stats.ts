@@ -45,3 +45,20 @@ export function calculateDashboardStats(data: QuotaDataItem[]) {
     { totalQuota: 0, totalCount: 0, totalTokens: 0 }
   )
 }
+
+/**
+ * Calculate successful requests from total and failed request counts.
+ */
+export function calculateSuccessfulCount(
+  totalCount: number,
+  failedCount: number
+): number {
+  const safeTotalCount = Number.isFinite(totalCount)
+    ? Math.max(0, totalCount)
+    : 0
+  const safeFailedCount = Number.isFinite(failedCount)
+    ? Math.max(0, failedCount)
+    : 0
+
+  return Math.max(0, safeTotalCount - safeFailedCount)
+}

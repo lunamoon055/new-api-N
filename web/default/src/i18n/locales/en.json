@@ -3083,7 +3083,7 @@
     "Please enter API key first": "Please enter API key first",
     "Please enter chat client name": "Please enter chat client name",
     "Please enter email and verification code": "Please enter email and verification code",
-    "Please enter English letters or Arabic numerals": "Please enter English letters or Arabic numerals",
+    "Please enter English letters, Arabic numerals, or common email characters (@ . _ + -)": "Please enter English letters, Arabic numerals, or common email characters (@ . _ + -)",
     "Please enter keys first": "Please enter keys first",
     "Please enter model name": "Please enter model name",
     "Please enter plan title": "Please enter plan title",

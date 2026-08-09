@@ -31,8 +31,17 @@ const validRegistration = {
 }
 
 describe('registration username validation', () => {
-  test('accepts only English letters and Arabic numerals', () => {
-    for (const username of ['Alice', 'alice123', '123456']) {
+  test('accepts English letters, Arabic numerals, and common email characters', () => {
+    for (const username of [
+      'Alice',
+      'alice123',
+      '123456',
+      'name@example.com',
+      'first.last@example.com',
+      'name+tag@example.com',
+      'first_last',
+      'first-last',
+    ]) {
       const result = registerFormSchema.safeParse({
         ...validRegistration,
         username,
@@ -42,8 +51,8 @@ describe('registration username validation', () => {
     }
   })
 
-  test('rejects Chinese characters, spaces, and special characters', () => {
-    for (const username of ['用户名', 'alice user', 'alice_123', 'alice@123']) {
+  test('rejects Chinese characters, spaces, and unsupported characters', () => {
+    for (const username of ['用户名', 'alice user', 'alice😀']) {
       const result = registerFormSchema.safeParse({
         ...validRegistration,
         username,
@@ -60,7 +69,10 @@ describe('registration username validation', () => {
     }
   })
 
-  test('removes unsupported characters before updating the input', () => {
-    assert.equal(sanitizeRegistrationUsername('A中_1-2'), 'A12')
+  test('preserves common email characters while removing unsupported input', () => {
+    assert.equal(
+      sanitizeRegistrationUsername('A中_1-2@example.com +😀'),
+      'A_1-2@example.com+'
+    )
   })
 })
