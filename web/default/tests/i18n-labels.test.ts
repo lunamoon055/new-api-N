@@ -58,21 +58,21 @@ describe('Chinese navigation labels', () => {
     )
     assert.equal(
       zhLocale.translation[
-        'Seedance 2.5 tip: Upload up to {{imageCount}} reference images. Each image must not exceed {{imageSize}} MB.'
+        'Seedance 2.5 tip: Upload up to {{imageCount}} JPG, PNG, or WebP reference images. Each image must not exceed {{imageSize}} MB. Recommended resolution: 1080p to 4K.'
       ],
-      '提示：最多上传 {{imageCount}} 张参考图片，每张不能超过 {{imageSize}} MB。'
+      '提示：最多上传 {{imageCount}} 张 JPG、PNG 或 WebP 参考图片，每张不能超过 {{imageSize}} MB，建议分辨率为 1080p～4K。'
     )
     assert.equal(
       zhLocale.translation[
-        'Seedance 2.5 tip: Upload up to {{videoCount}} MP4 videos, no more than {{videoSize}} MB each and {{videoTotalSize}} MB in total. Total reference video duration must not exceed 29 seconds.'
+        'Seedance 2.5 tip: Upload up to {{videoCount}} MP4 (H.264) videos at 24, 25, or 30 fps. Each video must be 2-30 seconds and no more than {{videoSize}} MB; all reference videos together must not exceed 30 seconds.'
       ],
-      '提示：最多上传 {{videoCount}} 个 MP4 参考视频，每个不能超过 {{videoSize}} MB，总大小不能超过 {{videoTotalSize}} MB，总时长不能超过 29 秒。'
+      '提示：最多上传 {{videoCount}} 个 MP4（H.264）参考视频，帧率支持 24/25/30fps；单个 2～30 秒且不超过 {{videoSize}} MB；所有参考视频总时长不能超过 30 秒。'
     )
     assert.equal(
       zhLocale.translation[
-        'Seedance 2.5 reference audios must not exceed 29 seconds in total.'
+        'Seedance 2.5 reference audios must not exceed 30 seconds in total.'
       ],
-      'Seedance 2.5 参考音频总时长不能超过 29 秒。'
+      'Seedance 2.5 参考音频总时长不能超过 30 秒。'
     )
     assert.equal(
       zhLocale.translation[
@@ -82,9 +82,15 @@ describe('Chinese navigation labels', () => {
     )
     assert.equal(
       zhLocale.translation[
-        'Seedance 2.5 tip: Upload up to {{imageCount}} images, {{videoCount}} videos, and {{audioCount}} audio files. Images must not exceed {{imageSize}} MB each. Videos must not exceed {{videoSize}} MB each or {{videoTotalSize}} MB in total. Audio must not exceed {{audioSize}} MB each or {{audioTotalSize}} MB in total. Total reference video and audio duration must not exceed 29 seconds respectively.'
+        'Seedance 2.5 tip: Images support JPG, PNG, or WebP, up to {{imageCount}}, {{imageSize}} MB each, recommended 1080p to 4K. Videos support MP4 (H.264) at 24, 25, or 30 fps, up to {{videoCount}}, 2-30 seconds and {{videoSize}} MB each, 30 seconds total. Audio supports MP3 or WAV, up to {{audioCount}}, 2-30 seconds and {{audioSize}} MB each, 30 seconds total.'
       ],
-      '提示：最多上传 {{imageCount}} 张图片、{{videoCount}} 个视频和 {{audioCount}} 个音频。图片每张不能超过 {{imageSize}} MB；视频每个不能超过 {{videoSize}} MB、总大小不能超过 {{videoTotalSize}} MB；音频每个不能超过 {{audioSize}} MB、总大小不能超过 {{audioTotalSize}} MB。参考视频和参考音频的总时长分别不能超过 29 秒。'
+      '提示：图片支持 JPG、PNG 或 WebP，最多 {{imageCount}} 张，每张不超过 {{imageSize}} MB，建议 1080p～4K；视频支持 MP4（H.264）、24/25/30fps，最多 {{videoCount}} 个，单个 2～30 秒且不超过 {{videoSize}} MB，总时长不超过 30 秒；音频支持 MP3 或 WAV，最多 {{audioCount}} 个，单个 2～30 秒且不超过 {{audioSize}} MB，总时长不超过 30 秒。'
+    )
+    assert.equal(
+      zhLocale.translation[
+        'Seedance 2.5 reference videos must be MP4 (H.264) at 24, 25, or 30 fps.'
+      ],
+      'Seedance 2.5 参考视频必须为 MP4（H.264），帧率仅支持 24、25 或 30fps。'
     )
     assert.equal(
       zhLocale.translation[

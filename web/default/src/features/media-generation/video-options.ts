@@ -96,10 +96,6 @@ export type CreationVideoReferenceLimits = {
   maxImageSizeMB: number
   maxVideoSizeMB: number
   maxAudioSizeMB: number
-  maxVideoTotalSizeBytes?: number
-  maxVideoTotalSizeMB?: number
-  maxAudioTotalSizeBytes?: number
-  maxAudioTotalSizeMB?: number
   minReferenceVideoDurationSeconds?: number
   maxReferenceVideoDurationSeconds?: number
   maxReferenceVideoTotalDurationSeconds?: number
@@ -239,20 +235,18 @@ const SEEDANCE_25_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
   maxVideos: 10,
   maxAudios: 10,
   maxMediaFiles: 50,
-  maxImageSizeBytes: CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES,
+  maxImageSizeBytes: 5 * 1024 * 1024,
   maxVideoSizeBytes: CREATION_VIDEO_VIDEO_REFERENCE_MAX_BYTES,
   maxAudioSizeBytes: CREATION_VIDEO_AUDIO_REFERENCE_MAX_BYTES,
-  maxImageSizeMB: 20,
+  maxImageSizeMB: 5,
   maxVideoSizeMB: 200,
   maxAudioSizeMB: 15,
-  maxVideoTotalSizeBytes: 667 * 1024 * 1024,
-  maxVideoTotalSizeMB: 667,
-  maxAudioTotalSizeBytes: 50 * 1024 * 1024,
-  maxAudioTotalSizeMB: 50,
-  maxReferenceVideoDurationSeconds: 29,
-  maxReferenceVideoTotalDurationSeconds: 29,
-  maxReferenceAudioDurationSeconds: 29,
-  maxReferenceAudioTotalDurationSeconds: 29,
+  minReferenceVideoDurationSeconds: 2,
+  maxReferenceVideoDurationSeconds: 30,
+  maxReferenceVideoTotalDurationSeconds: 30,
+  minReferenceAudioDurationSeconds: 2,
+  maxReferenceAudioDurationSeconds: 30,
+  maxReferenceAudioTotalDurationSeconds: 30,
 }
 
 const MINIMAX_H3_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
@@ -530,6 +524,12 @@ const MINIMAX_H3_REFERENCE_AUDIO_EXTENSIONS = [
 const VIDEO_REFERENCE_IMAGE_MIME_TYPES = [
   'image/avif',
   'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]
+const SEEDANCE_25_REFERENCE_IMAGE_EXTENSIONS = ['jpeg', 'jpg', 'png', 'webp']
+const SEEDANCE_25_REFERENCE_IMAGE_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/webp',
@@ -1345,16 +1345,25 @@ export function getCreationVideoReferenceError(
     }
     return 'Sanbao accepts too many reference assets.'
   }
-  const videoTotalSizeBytes = normalized.videoUrls.reduce(
-    (total, value) => total + getCreationReferenceSizeBytes(value),
-    0
-  )
-  if (
-    referenceLimits.maxVideoTotalSizeBytes &&
-    videoTotalSizeBytes > referenceLimits.maxVideoTotalSizeBytes
-  ) {
-    return 'Seedance 2.5 reference videos must not exceed 667 MB in total.'
+
+  if (isSeedance25Model(model)) {
+    const invalidVideoDuration = normalized.videoUrls.some((value) => {
+      const duration = getCreationReferenceDurationSeconds(value)
+      return duration > 0 && (duration < 2 || duration > 30)
+    })
+    if (invalidVideoDuration) {
+      return 'Seedance 2.5 reference videos must be between 2 and 30 seconds each.'
+    }
+
+    const invalidAudioDuration = normalized.audioUrls.some((value) => {
+      const duration = getCreationReferenceDurationSeconds(value)
+      return duration > 0 && (duration < 2 || duration > 30)
+    })
+    if (invalidAudioDuration) {
+      return 'Seedance 2.5 reference audios must be between 2 and 30 seconds each.'
+    }
   }
+
   const videoTotalDurationSeconds = normalized.videoUrls.reduce(
     (total, value) => total + getCreationReferenceDurationSeconds(value),
     0
@@ -1364,28 +1373,18 @@ export function getCreationVideoReferenceError(
     videoTotalDurationSeconds >
       referenceLimits.maxReferenceVideoTotalDurationSeconds
   ) {
-    return 'Seedance 2.5 reference videos must not exceed 29 seconds in total.'
+    return 'Seedance 2.5 reference videos must not exceed 30 seconds in total.'
   }
   const audioTotalDurationSeconds = normalized.audioUrls.reduce(
     (total, value) => total + getCreationReferenceDurationSeconds(value),
     0
   )
-  const audioTotalSizeBytes = normalized.audioUrls.reduce(
-    (total, value) => total + getCreationReferenceSizeBytes(value),
-    0
-  )
-  if (
-    referenceLimits.maxAudioTotalSizeBytes &&
-    audioTotalSizeBytes > referenceLimits.maxAudioTotalSizeBytes
-  ) {
-    return 'Seedance 2.5 reference audios must not exceed 50 MB in total.'
-  }
   if (
     referenceLimits.maxReferenceAudioTotalDurationSeconds &&
     audioTotalDurationSeconds >
       referenceLimits.maxReferenceAudioTotalDurationSeconds
   ) {
-    return 'Seedance 2.5 reference audios must not exceed 29 seconds in total.'
+    return 'Seedance 2.5 reference audios must not exceed 30 seconds in total.'
   }
 
   const images = [
@@ -1398,6 +1397,19 @@ export function getCreationVideoReferenceError(
   }
   if (isSeedance2Model(model) && images.some((url) => !isHTTPURL(url))) {
     return 'Reference URL must use HTTP or HTTPS.'
+  }
+  if (
+    isSeedance25Model(model) &&
+    images.some(
+      (url) =>
+        !hasAllowedReferenceFormat(
+          url,
+          SEEDANCE_25_REFERENCE_IMAGE_EXTENSIONS,
+          SEEDANCE_25_REFERENCE_IMAGE_MIME_TYPES
+        )
+    )
+  ) {
+    return 'Seedance 2.5 reference image format must be JPG, PNG, or WebP.'
   }
   if (
     (capability.kind === 'video2' || capability.kind === 'sanbao') &&

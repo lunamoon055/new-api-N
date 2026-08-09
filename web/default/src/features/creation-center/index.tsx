@@ -68,7 +68,6 @@ import {
   getCreationVideoOptionsError,
   getCreationVideoReferenceError,
   getCreationVideoReferenceLimits,
-  getCreationReferenceSizeBytes,
   getCreationReferenceDurationSeconds,
   getCreationVideoRequestOptions,
   loadCreationHistory,
@@ -95,8 +94,10 @@ import {
   getReferenceAudioDurationSeconds,
   getReferenceAudioMime,
   getReferenceImageMime,
+  getReferenceMp4VideoMetadata,
   getReferenceVideoMime,
   getReferenceVideoDurationSeconds,
+  isSeedance25ReferenceVideoMetadata,
   isReferenceAudioFile,
   isReferenceImageFile,
   isReferenceVideoFile,
@@ -376,7 +377,7 @@ export function CreationCenter() {
   const addImageReferenceFiles = async (files: File[]) => {
     if (!files.length) return
 
-    const imageFiles = files.filter(isReferenceImageFile)
+    const imageFiles = files.filter((file) => isReferenceImageFile(file))
     if (!imageFiles.length) {
       toast.error(t('Choose supported reference files.'))
       return
@@ -454,6 +455,10 @@ export function CreationCenter() {
       videoCapabilities?.kind === 'minimax-h3'
         ? ('minimax-h3' as const)
         : ('default' as const)
+    const imageProfile =
+      videoCapabilities?.uploadTipProfile === 'seedance-2.5'
+        ? ('seedance-2.5' as const)
+        : ('default' as const)
     const acceptsImages =
       (referenceMode === 'image' ||
         referenceMode === 'multimodal' ||
@@ -467,7 +472,7 @@ export function CreationCenter() {
       (referenceMode === 'multimodal' || referenceMode === 'image-audio') &&
       videoReferenceLimits.maxAudios > 0
     const acceptedFiles = files.filter((file) => {
-      if (acceptsImages && isReferenceImageFile(file)) return true
+      if (acceptsImages && isReferenceImageFile(file, imageProfile)) return true
       if (acceptsVideos && isReferenceVideoFile(file)) return true
       if (acceptsAudio && isReferenceAudioFile(file, audioProfile)) return true
       return false
@@ -488,14 +493,6 @@ export function CreationCenter() {
         : videoReferences.imageUrls.filter(Boolean).length
     const currentVideoCount = videoReferences.videoUrls.filter(Boolean).length
     const currentAudioCount = videoReferences.audioUrls.filter(Boolean).length
-    const currentVideoTotalSizeBytes = videoReferences.videoUrls.reduce(
-      (total, value) => total + getCreationReferenceSizeBytes(value),
-      0
-    )
-    const currentAudioTotalSizeBytes = videoReferences.audioUrls.reduce(
-      (total, value) => total + getCreationReferenceSizeBytes(value),
-      0
-    )
     const currentVideoTotalDurationSeconds = videoReferences.videoUrls.reduce(
       (total, value) => total + getCreationReferenceDurationSeconds(value),
       0
@@ -527,15 +524,11 @@ export function CreationCenter() {
     let videoLimitHit = false
     let audioLimitHit = false
     let totalLimitHit = false
-    let videoTotalSizeLimitHit = false
-    let audioTotalSizeLimitHit = false
-    let selectedVideoTotalSizeBytes = 0
-    let selectedAudioTotalSizeBytes = 0
     const videoDurationByFile = new Map<File, number>()
     const audioDurationByFile = new Map<File, number>()
 
     for (const file of acceptedFiles) {
-      if (acceptsImages && isReferenceImageFile(file)) {
+      if (acceptsImages && isReferenceImageFile(file, imageProfile)) {
         if (file.size > videoReferenceLimits.maxImageSizeBytes) {
           imageOversizedCount += 1
           continue
@@ -571,16 +564,7 @@ export function CreationCenter() {
           totalLimitHit = true
           continue
         }
-        if (
-          videoReferenceLimits.maxVideoTotalSizeBytes &&
-          currentVideoTotalSizeBytes + selectedVideoTotalSizeBytes + file.size >
-            videoReferenceLimits.maxVideoTotalSizeBytes
-        ) {
-          videoTotalSizeLimitHit = true
-          continue
-        }
         referenceVideoFiles.push(file)
-        selectedVideoTotalSizeBytes += file.size
         if (Number.isFinite(remainingTotalSlots)) {
           remainingTotalSlots -= 1
         }
@@ -603,20 +587,29 @@ export function CreationCenter() {
           totalLimitHit = true
           continue
         }
-        if (
-          videoReferenceLimits.maxAudioTotalSizeBytes &&
-          currentAudioTotalSizeBytes + selectedAudioTotalSizeBytes + file.size >
-            videoReferenceLimits.maxAudioTotalSizeBytes
-        ) {
-          audioTotalSizeLimitHit = true
-          continue
-        }
         referenceAudioFiles.push(file)
-        selectedAudioTotalSizeBytes += file.size
         if (Number.isFinite(remainingTotalSlots)) {
           remainingTotalSlots -= 1
         }
       }
+    }
+
+    let videoTechnicalInvalidCount = 0
+    if (imageProfile === 'seedance-2.5' && referenceVideoFiles.length) {
+      const metadata = await Promise.all(
+        referenceVideoFiles.map(async (file) => {
+          try {
+            return await getReferenceMp4VideoMetadata(file)
+          } catch {
+            return undefined
+          }
+        })
+      )
+      referenceVideoFiles = referenceVideoFiles.filter((_, index) => {
+        if (isSeedance25ReferenceVideoMetadata(metadata[index])) return true
+        videoTechnicalInvalidCount += 1
+        return false
+      })
     }
 
     let videoDurationInvalidCount = 0
@@ -729,6 +722,14 @@ export function CreationCenter() {
       )
     }
 
+    if (videoTechnicalInvalidCount > 0) {
+      toast.error(
+        t(
+          'Seedance 2.5 reference videos must be MP4 (H.264) at 24, 25, or 30 fps.'
+        )
+      )
+    }
+
     if (audioDurationInvalidCount > 0) {
       toast.error(
         minAudioDuration === undefined
@@ -818,21 +819,6 @@ export function CreationCenter() {
         })
       )
     }
-    if (videoTotalSizeLimitHit && videoReferenceLimits.maxVideoTotalSizeMB) {
-      toast.error(
-        t('Reference videos must not exceed {{size}} MB total.', {
-          size: videoReferenceLimits.maxVideoTotalSizeMB,
-        })
-      )
-    }
-    if (audioTotalSizeLimitHit && videoReferenceLimits.maxAudioTotalSizeMB) {
-      toast.error(
-        t('Reference audios must not exceed {{size}} MB total.', {
-          size: videoReferenceLimits.maxAudioTotalSizeMB,
-        })
-      )
-    }
-
     let imageUrls: CreationVideoReferences['imageUrls'] = []
     let videoUrls: CreationVideoReferences['videoUrls'] = []
     let audioUrls: CreationVideoReferences['audioUrls'] = []
@@ -842,7 +828,7 @@ export function CreationCenter() {
           createUploadedReferenceValue(
             file,
             'image',
-            getReferenceImageMime(file)
+            getReferenceImageMime(file, imageProfile)
           )
         )
       )

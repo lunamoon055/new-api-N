@@ -20,10 +20,28 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import {
   getReferenceAudioMime,
+  isReferenceImageFile,
   isReferenceAudioFile,
 } from './video-reference-files'
 
 describe('Creation Center reference audio formats', () => {
+  test('keeps Seedance 2.5 images limited to JPG, PNG, and WebP', () => {
+    assert.equal(
+      isReferenceImageFile(
+        { name: 'reference.webp', type: '' },
+        'seedance-2.5'
+      ),
+      true
+    )
+    assert.equal(
+      isReferenceImageFile(
+        { name: 'reference.gif', type: 'image/gif' },
+        'seedance-2.5'
+      ),
+      false
+    )
+  })
+
   test('keeps legacy models limited to MP3 and WAV', () => {
     assert.equal(
       getReferenceAudioMime({ name: 'reference.mp3', type: '' }),

@@ -44,6 +44,8 @@ import {
 
 const IMAGE_REFERENCE_ACCEPT =
   'image/avif,image/gif,image/jpeg,image/png,image/webp,.avif,.gif,.jpeg,.jpg,.png,.webp'
+const SEEDANCE_25_IMAGE_REFERENCE_ACCEPT =
+  'image/jpeg,image/png,image/webp,.jpeg,.jpg,.png,.webp'
 const VIDEO_REFERENCE_ACCEPT = 'video/mp4,.mp4'
 const AUDIO_REFERENCE_ACCEPT =
   'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,.mp3,.wav'
@@ -147,7 +149,11 @@ export function VideoReferenceFields(props: VideoReferenceFieldsProps) {
               <input
                 id='creation-reference-upload'
                 type='file'
-                accept={getReferenceAccept(referenceMode, limits)}
+                accept={getReferenceAccept(
+                  referenceMode,
+                  limits,
+                  props.capability?.uploadTipProfile
+                )}
                 multiple
                 disabled={uploadDisabled}
                 className='sr-only'
@@ -308,15 +314,20 @@ function ReferencePreviewMedia(props: { preview: ReferencePreview }) {
 
 function getReferenceAccept(
   mode: CreationVideoReferenceMode,
-  limits: CreationVideoCapability['referenceLimits']
+  limits: CreationVideoCapability['referenceLimits'],
+  profile?: CreationVideoCapability['uploadTipProfile']
 ) {
-  if (mode === 'image' || mode === 'frames') return IMAGE_REFERENCE_ACCEPT
+  const imageAccept =
+    profile === 'seedance-2.5'
+      ? SEEDANCE_25_IMAGE_REFERENCE_ACCEPT
+      : IMAGE_REFERENCE_ACCEPT
+  if (mode === 'image' || mode === 'frames') return imageAccept
   if (mode === 'video') return VIDEO_REFERENCE_ACCEPT
   if (mode === 'image-audio') {
-    return [IMAGE_REFERENCE_ACCEPT, MINIMAX_H3_AUDIO_REFERENCE_ACCEPT].join(',')
+    return [imageAccept, MINIMAX_H3_AUDIO_REFERENCE_ACCEPT].join(',')
   }
   return [
-    limits.maxImages > 0 ? IMAGE_REFERENCE_ACCEPT : '',
+    limits.maxImages > 0 ? imageAccept : '',
     limits.maxVideos > 0 ? VIDEO_REFERENCE_ACCEPT : '',
     limits.maxAudios > 0 ? AUDIO_REFERENCE_ACCEPT : '',
   ]
@@ -333,37 +344,34 @@ function getReferenceUploadTip(
   if (profile === 'seedance-2.5') {
     if (mode === 'frames') {
       return t(
-        'Seedance 2.5 tip: Upload one start frame and one end frame. Each image must not exceed {{imageSize}} MB.',
+        'Seedance 2.5 tip: Upload one JPG, PNG, or WebP start frame and one end frame. Each image must not exceed {{imageSize}} MB. Recommended resolution: 1080p to 4K.',
         { imageSize: limits.maxImageSizeMB }
       )
     }
     if (mode === 'video') {
       return t(
-        'Seedance 2.5 tip: Upload up to {{videoCount}} MP4 videos, no more than {{videoSize}} MB each and {{videoTotalSize}} MB in total. Total reference video duration must not exceed 29 seconds.',
+        'Seedance 2.5 tip: Upload up to {{videoCount}} MP4 (H.264) videos at 24, 25, or 30 fps. Each video must be 2-30 seconds and no more than {{videoSize}} MB; all reference videos together must not exceed 30 seconds.',
         {
           videoCount: limits.maxVideos,
           videoSize: limits.maxVideoSizeMB,
-          videoTotalSize: limits.maxVideoTotalSizeMB ?? 667,
         }
       )
     }
     if (mode === 'multimodal') {
       return t(
-        'Seedance 2.5 tip: Upload up to {{imageCount}} images, {{videoCount}} videos, and {{audioCount}} audio files. Images must not exceed {{imageSize}} MB each. Videos must not exceed {{videoSize}} MB each or {{videoTotalSize}} MB in total. Audio must not exceed {{audioSize}} MB each or {{audioTotalSize}} MB in total. Total reference video and audio duration must not exceed 29 seconds respectively.',
+        'Seedance 2.5 tip: Images support JPG, PNG, or WebP, up to {{imageCount}}, {{imageSize}} MB each, recommended 1080p to 4K. Videos support MP4 (H.264) at 24, 25, or 30 fps, up to {{videoCount}}, 2-30 seconds and {{videoSize}} MB each, 30 seconds total. Audio supports MP3 or WAV, up to {{audioCount}}, 2-30 seconds and {{audioSize}} MB each, 30 seconds total.',
         {
           imageCount: limits.maxImages,
           videoCount: limits.maxVideos,
           audioCount: limits.maxAudios,
           imageSize: limits.maxImageSizeMB,
           videoSize: limits.maxVideoSizeMB,
-          videoTotalSize: limits.maxVideoTotalSizeMB ?? 667,
           audioSize: limits.maxAudioSizeMB,
-          audioTotalSize: limits.maxAudioTotalSizeMB ?? 50,
         }
       )
     }
     return t(
-      'Seedance 2.5 tip: Upload up to {{imageCount}} reference images. Each image must not exceed {{imageSize}} MB.',
+      'Seedance 2.5 tip: Upload up to {{imageCount}} JPG, PNG, or WebP reference images. Each image must not exceed {{imageSize}} MB. Recommended resolution: 1080p to 4K.',
       {
         imageCount: limits.maxImages,
         imageSize: limits.maxImageSizeMB,
