@@ -348,26 +348,29 @@ function HistoryPanel(props: {
           <Trash2 />
         </Button>
       </div>
-      <div className='mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1'>
+      <div className='mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1'>
         {props.items.map((item) => (
           <button
             key={item.id}
             type='button'
             onClick={() => props.onSelectHistory(item)}
-            className='flex w-full min-w-0 gap-2.5 rounded-md border border-slate-200 bg-slate-50 p-2 text-left transition-colors hover:border-cyan-500/35 hover:bg-cyan-500/[0.04] dark:border-white/10 dark:bg-white/[0.035]'
+            className='flex h-[5.75rem] w-full min-w-0 shrink-0 gap-2.5 overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-2 text-left transition-colors hover:border-cyan-500/35 hover:bg-cyan-500/[0.04] dark:border-white/10 dark:bg-white/[0.035]'
           >
             <HistoryThumbnail item={item} />
-            <span className='min-w-0 flex-1'>
-              <span className='flex min-w-0 items-center justify-between gap-2'>
+            <span className='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>
+              <span className='flex min-w-0 shrink-0 items-center justify-between gap-2'>
                 <span className='min-w-0 truncate text-xs font-semibold'>
                   {item.model}
                 </span>
                 <StatusBadge status={item.result.status} />
               </span>
-              <span className='text-muted-foreground mt-1 line-clamp-2 block text-[11px] leading-4'>
+              <span
+                title={item.prompt}
+                className='text-muted-foreground mt-1 line-clamp-2 max-h-8 overflow-hidden text-[11px] leading-4 break-words'
+              >
                 {item.prompt}
               </span>
-              <span className='text-muted-foreground mt-1.5 block text-[10px] tabular-nums'>
+              <span className='text-muted-foreground mt-auto block shrink-0 pt-1 text-[10px] tabular-nums'>
                 {formatCreationTime(item.createdAt)}
               </span>
             </span>

@@ -3738,6 +3738,7 @@
     "Select a configured model from the sidebar to begin.": "请先从左侧选择一个已配置模型。",
     "Select a group": "选择一个分组",
     "Select a group type": "选择分组类型",
+    "Select a generation model": "请选择生成模型",
     "Select a model": "请选择模型",
     "Select a model before submitting a real creation task.": "请先选择模型再提交真实创作任务。",
     "Select a model before submitting.": "请先选择模型再提交。",

@@ -1,0 +1,89 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+.creation-model-prompt {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.creation-model-prompt::after {
+  position: absolute;
+  inset: -60% auto -60% -45%;
+  width: 36%;
+  content: '';
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--foreground) 14%, transparent),
+    transparent
+  );
+  opacity: 0;
+  transform: translate3d(-220%, 0, 0) rotate(16deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .creation-model-prompt {
+    will-change: transform;
+    animation: creation-model-prompt-float 3.2s ease-in-out infinite;
+  }
+
+  .creation-model-prompt::after {
+    will-change: transform, opacity;
+    animation: creation-model-prompt-shine 4.2s ease-in-out infinite;
+  }
+}
+
+@keyframes creation-model-prompt-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: translate3d(0, -3px, 0);
+  }
+}
+
+@keyframes creation-model-prompt-shine {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translate3d(-220%, 0, 0) rotate(16deg);
+  }
+
+  34%,
+  66% {
+    opacity: 0.8;
+  }
+
+  82%,
+  100% {
+    opacity: 0;
+    transform: translate3d(520%, 0, 0) rotate(16deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .creation-model-prompt,
+  .creation-model-prompt::after {
+    animation: none;
+    will-change: auto;
+  }
+}

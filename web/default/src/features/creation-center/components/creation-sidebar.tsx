@@ -38,6 +38,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { CREATION_MODES } from '../constants'
 import { formatCreationModelCost } from '../cost'
 import type { CreationMode, CreationModel } from '../types'
+import './creation-sidebar.css'
 
 type CreationSidebarProps = {
   mode: CreationMode
@@ -181,16 +182,17 @@ export function CreationSidebar(props: CreationSidebarProps) {
       </div>
 
       <div className='mt-auto hidden border-t border-slate-200 p-4 lg:block dark:border-white/10'>
-        <div className='rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.035]'>
-          <div className='flex items-center gap-2 text-xs font-medium'>
-            <span className='size-1.5 rounded-full bg-cyan-500' />
-            {t('Browsing mode')}
+        <div
+          className='creation-model-prompt rounded-md border border-cyan-500/25 bg-cyan-500/[0.055] p-3 dark:border-cyan-400/20 dark:bg-cyan-400/[0.055]'
+          role='status'
+          aria-live='polite'
+        >
+          <div className='relative z-10 flex min-h-10 items-center justify-center gap-2 text-cyan-800 dark:text-cyan-200'>
+            <Sparkles className='size-4 shrink-0' aria-hidden='true' />
+            <p className='text-sm font-semibold tracking-wide'>
+              {t('Select a generation model')}
+            </p>
           </div>
-          <p className='text-muted-foreground mt-1 text-xs leading-5'>
-            {t(
-              'The model catalog is synced with live configuration. Sign in before submitting a real task.'
-            )}
-          </p>
         </div>
       </div>
     </aside>

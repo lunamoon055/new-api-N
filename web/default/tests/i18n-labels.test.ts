@@ -32,6 +32,13 @@ describe('Chinese navigation labels', () => {
     assert.equal(zhLocale.translation.Playground, '模型测试')
   })
 
+  it('shows the requested Creation Center model prompt', () => {
+    assert.equal(
+      zhLocale.translation['Select a generation model'],
+      '请选择生成模型'
+    )
+  })
+
   it('keeps Seedance upload prompts and validation messages in Chinese', () => {
     assert.equal(
       zhLocale.translation[
