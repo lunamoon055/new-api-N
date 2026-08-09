@@ -81,6 +81,52 @@ func insertTask(t *testing.T, task *Task) {
 	require.NoError(t, DB.Create(task).Error)
 }
 
+func TestTaskQueryFiltersByRequestedModelName(t *testing.T) {
+	truncateTables(t)
+
+	insertTask(t, &Task{
+		TaskID:   "task_origin_model",
+		UserId:   1,
+		Status:   TaskStatusSuccess,
+		Progress: "100%",
+		Properties: Properties{
+			OriginModelName:   "Seedance-2.5",
+			UpstreamModelName: "seedance-2.5",
+		},
+	})
+	insertTask(t, &Task{
+		TaskID:   "task_other_model",
+		UserId:   1,
+		Status:   TaskStatusFailure,
+		Progress: "100%",
+		Properties: Properties{
+			OriginModelName: "videos-4",
+		},
+	})
+	insertTask(t, &Task{
+		TaskID:   "task_upstream_fallback",
+		UserId:   2,
+		Status:   TaskStatusSuccess,
+		Progress: "100%",
+		Properties: Properties{
+			UpstreamModelName: "seedance-2.5",
+		},
+	})
+
+	requestedModel := SyncTaskQueryParams{ModelName: "Seedance-2.5"}
+	requestedTasks := TaskGetAllTasks(0, 10, requestedModel)
+	require.Len(t, requestedTasks, 1)
+	require.Equal(t, "task_origin_model", requestedTasks[0].TaskID)
+	require.EqualValues(t, 1, TaskCountAllTasks(requestedModel))
+	require.EqualValues(t, 1, TaskCountAllUserTask(1, requestedModel))
+
+	upstreamFallback := SyncTaskQueryParams{ModelName: "seedance-2.5"}
+	fallbackTasks := TaskGetAllUserTask(2, 0, 10, upstreamFallback)
+	require.Len(t, fallbackTasks, 1)
+	require.Equal(t, "task_upstream_fallback", fallbackTasks[0].TaskID)
+	require.EqualValues(t, 1, TaskCountAllUserTask(2, upstreamFallback))
+}
+
 // ---------------------------------------------------------------------------
 // Snapshot / Equal — pure logic tests (no DB)
 // ---------------------------------------------------------------------------

@@ -167,6 +167,18 @@ export function buildBaseParams(config: {
   }
 }
 
+export function buildTaskLogParams(
+  baseParams: ReturnType<typeof buildBaseParams>,
+  searchParams: Record<string, unknown>
+): GetTaskLogsParams {
+  return {
+    ...baseParams,
+    task_id: searchParams.filter as string | undefined,
+    model_name: searchParams.model as string | undefined,
+    status: searchParams.status as string | undefined,
+  }
+}
+
 /**
  * Build API params from search params and column filters (for common logs)
  */
@@ -273,15 +285,13 @@ export async function fetchLogsByCategory(
     useMilliseconds: logCategory === 'drawing',
   })
 
-  const paramsWithFilter = {
-    ...baseParams,
-    ...(logCategory === 'drawing'
-      ? { mj_id: searchParams.filter as string | undefined }
-      : {}),
-    ...(logCategory === 'task'
-      ? { task_id: searchParams.filter as string | undefined }
-      : {}),
-  }
+  const paramsWithFilter =
+    logCategory === 'task'
+      ? buildTaskLogParams(baseParams, searchParams)
+      : {
+          ...baseParams,
+          mj_id: searchParams.filter as string | undefined,
+        }
 
   if (logCategory === 'drawing') {
     return isAdmin

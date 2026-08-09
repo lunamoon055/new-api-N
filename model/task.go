@@ -103,6 +103,13 @@ type Properties struct {
 	OriginModelName   string   `json:"origin_model_name,omitempty"`
 }
 
+func (m Properties) ModelName() string {
+	if m.OriginModelName != "" {
+		return m.OriginModelName
+	}
+	return m.UpstreamModelName
+}
+
 func (m *Properties) Scan(val interface{}) error {
 	bytesValue, _ := val.([]byte)
 	if len(bytesValue) == 0 {
@@ -196,12 +203,37 @@ type SyncTaskQueryParams struct {
 	Platform       constant.TaskPlatform
 	ChannelID      string
 	TaskID         string
+	ModelName      string
 	UserID         string
 	Action         string
 	Status         string
 	StartTimestamp int64
 	EndTimestamp   int64
 	UserIDs        []int
+}
+
+func applyTaskModelNameFilter(query *gorm.DB, modelName string) *gorm.DB {
+	if modelName == "" {
+		return query
+	}
+
+	switch {
+	case common.UsingPostgreSQL:
+		return query.Where(
+			"COALESCE(NULLIF(properties ->> 'origin_model_name', ''), properties ->> 'upstream_model_name') = ?",
+			modelName,
+		)
+	case common.UsingMySQL:
+		return query.Where(
+			"COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(properties, '$.origin_model_name')), ''), JSON_UNQUOTE(JSON_EXTRACT(properties, '$.upstream_model_name'))) = ?",
+			modelName,
+		)
+	default:
+		return query.Where(
+			"COALESCE(NULLIF(json_extract(properties, '$.origin_model_name'), ''), json_extract(properties, '$.upstream_model_name')) = ?",
+			modelName,
+		)
+	}
 }
 
 func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) *Task {
@@ -251,7 +283,10 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 	var err error
 
 	// 初始化查询构建器
-	query := DB.Where("user_id = ?", userId)
+	query := applyTaskModelNameFilter(
+		DB.Where("user_id = ?", userId),
+		queryParams.ModelName,
+	)
 
 	if queryParams.TaskID != "" {
 		query = query.Where("task_id = ?", queryParams.TaskID)
@@ -287,7 +322,7 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	var err error
 
 	// 初始化查询构建器
-	query := DB
+	query := applyTaskModelNameFilter(DB, queryParams.ModelName)
 
 	// 添加过滤条件
 	if queryParams.ChannelID != "" {
@@ -647,7 +682,7 @@ func CountUserFailedTasks(userId int, startTimestamp int64, endTimestamp int64) 
 // TaskCountAllTasks returns total tasks that match the given query params (admin usage)
 func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 	var total int64
-	query := DB.Model(&Task{})
+	query := applyTaskModelNameFilter(DB.Model(&Task{}), queryParams.ModelName)
 	if queryParams.ChannelID != "" {
 		query = query.Where("channel_id = ?", queryParams.ChannelID)
 	}
@@ -682,7 +717,10 @@ func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 // TaskCountAllUserTask returns total tasks for given user
 func TaskCountAllUserTask(userId int, queryParams SyncTaskQueryParams) int64 {
 	var total int64
-	query := DB.Model(&Task{}).Where("user_id = ?", userId)
+	query := applyTaskModelNameFilter(
+		DB.Model(&Task{}).Where("user_id = ?", userId),
+		queryParams.ModelName,
+	)
 	if queryParams.TaskID != "" {
 		query = query.Where("task_id = ?", queryParams.TaskID)
 	}

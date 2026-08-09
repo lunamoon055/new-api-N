@@ -32,6 +32,7 @@ const usageLogsSearchSchema = z.object({
   type: z.array(z.enum(logTypeValues)).optional().catch([]),
   filter: z.string().optional().catch(''),
   model: z.string().optional().catch(''),
+  status: z.string().optional().catch(''),
   token: z.string().optional().catch(''),
   channel: z.string().optional().catch(''),
   group: z.string().optional().catch(''),

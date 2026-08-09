@@ -23,7 +23,16 @@ import { type Table } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { DataTableToolbar } from '@/components/data-table'
+import { TASK_STATUS } from '../constants'
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
 import type { DrawingLogFilters, LogCategory, TaskLogFilters } from '../types'
@@ -33,7 +42,10 @@ const route = getRouteApi('/_authenticated/usage-logs/$section')
 
 type TaskLikeLogCategory = Extract<LogCategory, 'drawing' | 'task'>
 type TaskLogsFilters = DrawingLogFilters | TaskLogFilters
+type TaskLogsFilterField = keyof DrawingLogFilters | keyof TaskLogFilters
 type UsageLogsSearch = ReturnType<typeof route.useSearch>
+
+const ALL_TASK_STATUSES = '__all_task_statuses__'
 
 interface TaskLogsFilterBarProps<TData> {
   table: Table<TData>
@@ -84,6 +96,8 @@ function getTaskLogFilters(
   return {
     ...baseFilters,
     ...(searchParams.filter ? { taskId: searchParams.filter } : {}),
+    ...(searchParams.model ? { model: searchParams.model } : {}),
+    ...(searchParams.status ? { status: searchParams.status } : {}),
   }
 }
 
@@ -100,7 +114,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
   )
 
   const handleChange = useCallback(
-    (field: keyof TaskLogsFilters, value: Date | string | undefined) => {
+    (field: TaskLogsFilterField, value: Date | string | undefined) => {
       setFilters((prev) => ({ ...prev, [field]: value }))
     },
     []
@@ -151,12 +165,28 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
   )
 
   const filterValue = getFilterValue(filters, props.logCategory)
+  const taskFilters =
+    props.logCategory === 'task' ? (filters as TaskLogFilters) : null
   const placeholder =
     props.logCategory === 'drawing'
       ? t('Filter by Midjourney task ID')
       : t('Filter by task ID')
   const inputClass = 'w-full sm:w-[180px] lg:w-[200px]'
-  const hasAdditionalFilters = !!filterValue || !!filters.channel
+  const hasAdditionalFilters =
+    !!filterValue ||
+    !!filters.channel ||
+    !!taskFilters?.model ||
+    !!taskFilters?.status
+  const taskStatusOptions = [
+    { value: ALL_TASK_STATUSES, label: t('All Status') },
+    { value: TASK_STATUS.NOT_START, label: t('Not Started') },
+    { value: TASK_STATUS.SUBMITTED, label: t('Submitted') },
+    { value: TASK_STATUS.QUEUED, label: t('Queued') },
+    { value: TASK_STATUS.IN_PROGRESS, label: t('In Progress') },
+    { value: TASK_STATUS.SUCCESS, label: t('Success') },
+    { value: TASK_STATUS.FAILURE, label: t('Failed') },
+    { value: TASK_STATUS.UNKNOWN, label: t('Unknown') },
+  ]
 
   return (
     <DataTableToolbar
@@ -182,6 +212,16 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
             onKeyDown={handleKeyDown}
             className={inputClass}
           />
+          {taskFilters && (
+            <Input
+              aria-label={t('Called Model')}
+              placeholder={t('Filter by model name...')}
+              value={taskFilters.model || ''}
+              onChange={(e) => handleChange('model', e.target.value)}
+              onKeyDown={handleKeyDown}
+              className={inputClass}
+            />
+          )}
           {isAdmin && (
             <Input
               placeholder={t('Channel ID')}
@@ -192,6 +232,37 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
             />
           )}
         </>
+      }
+      preActions={
+        taskFilters ? (
+          <Select
+            items={taskStatusOptions}
+            value={taskFilters.status || ALL_TASK_STATUSES}
+            onValueChange={(value) =>
+              handleChange(
+                'status',
+                value === ALL_TASK_STATUSES ? undefined : value || undefined
+              )
+            }
+          >
+            <SelectTrigger
+              size='default'
+              aria-label={t('Status')}
+              className='w-[132px]'
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align='end' alignItemWithTrigger={false}>
+              <SelectGroup>
+                {taskStatusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        ) : null
       }
       hasAdditionalFilters={hasAdditionalFilters}
       onSearch={handleApply}

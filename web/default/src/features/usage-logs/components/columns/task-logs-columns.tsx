@@ -27,11 +27,13 @@ import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatTimestampToDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
 import { TASK_STATUS } from '../../constants'
 import { taskActionMapper, taskStatusMapper } from '../../lib/mappers'
 import {
+  getTaskLogModelName,
   getTaskLogPrompt,
   getTaskLogVideoPreviewUrl,
   getVisibleTaskLogInputMaterials,
@@ -312,6 +314,51 @@ export function useTaskLogsColumns(
         )
       },
       meta: { label: t('Task ID'), mobileTitle: true },
+    },
+    {
+      accessorKey: 'model_name',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Called Model')} />
+      ),
+      cell: ({ row, table }) => {
+        const modelName = getTaskLogModelName(row.original)
+        if (!modelName) {
+          return <span className='text-muted-foreground/60 text-xs'>-</span>
+        }
+
+        const modelColumn = table.getColumn('model_name')
+        const selected = modelColumn?.getFilterValue() === modelName
+
+        return (
+          <Button
+            type='button'
+            variant='ghost'
+            size='xs'
+            aria-label={`${t('Called Model')}: ${modelName}`}
+            aria-pressed={selected}
+            title={`${t('Search')}: ${modelName}`}
+            className='h-auto max-w-[190px] p-0 hover:bg-transparent'
+            onClick={(event) => {
+              event.stopPropagation()
+              modelColumn?.setFilterValue(selected ? undefined : modelName)
+            }}
+          >
+            <StatusBadge
+              label={modelName}
+              autoColor={modelName}
+              size='sm'
+              showDot
+              copyable={false}
+              className={cn(
+                'border-border/60 bg-muted/30 max-w-full truncate rounded-md border px-1.5 py-0.5 font-mono transition-opacity hover:opacity-75',
+                selected && 'ring-ring ring-2 ring-offset-1'
+              )}
+            />
+          </Button>
+        )
+      },
+      meta: { label: t('Called Model'), mobileHidden: true },
+      size: 170,
     },
     {
       id: 'prompt',

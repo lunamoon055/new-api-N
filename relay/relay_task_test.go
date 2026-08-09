@@ -64,6 +64,31 @@ func TestTaskModel2DtoIncludesPromptFromTaskProperties(t *testing.T) {
 	require.Equal(t, "a cinematic product video", dto.Prompt)
 }
 
+func TestTaskModel2DtoIncludesRequestedModelName(t *testing.T) {
+	task := &model.Task{
+		Properties: model.Properties{
+			OriginModelName:   "Seedance-2.5",
+			UpstreamModelName: "seedance-2.5",
+		},
+	}
+
+	taskDto := TaskModel2Dto(task)
+
+	require.Equal(t, "Seedance-2.5", taskDto.ModelName)
+}
+
+func TestTaskModel2DtoFallsBackToUpstreamModelName(t *testing.T) {
+	task := &model.Task{
+		Properties: model.Properties{
+			UpstreamModelName: "seedance-2.5",
+		},
+	}
+
+	taskDto := TaskModel2Dto(task)
+
+	require.Equal(t, "seedance-2.5", taskDto.ModelName)
+}
+
 func TestTaskModel2DtoRedactsInputMaterialsByDefault(t *testing.T) {
 	task := &model.Task{
 		TaskID: "task_public",

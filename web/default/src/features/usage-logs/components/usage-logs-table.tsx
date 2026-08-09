@@ -176,6 +176,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     searchParams.endTime ?? '',
     searchParams.channel ?? '',
     searchParams.model ?? '',
+    searchParams.status ?? '',
     searchParams.token ?? '',
     searchParams.group ?? '',
     searchParams.username ?? '',

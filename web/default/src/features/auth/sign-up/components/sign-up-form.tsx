@@ -49,7 +49,10 @@ import { Turnstile } from '@/components/turnstile'
 import { register, wechatLoginByCode } from '@/features/auth/api'
 import { LegalConsent } from '@/features/auth/components/legal-consent'
 import { OAuthProviders } from '@/features/auth/components/oauth-providers'
-import { registerFormSchema } from '@/features/auth/constants'
+import {
+  registerFormSchema,
+  sanitizeRegistrationUsername,
+} from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useEmailVerification } from '@/features/auth/hooks/use-email-verification'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
@@ -67,6 +70,9 @@ export function SignUpForm({
   const [isWeChatDialogOpen, setIsWeChatDialogOpen] = useState(false)
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
   const legalConsentErrorMessage = t('Please agree to the legal terms first')
+  const usernameCharacterErrorMessage = t(
+    'Please enter English letters or Arabic numerals'
+  )
 
   const { status } = useStatus()
   const {
@@ -229,7 +235,31 @@ export function SignUpForm({
             <FormItem>
               <FormLabel>{t('Username')}</FormLabel>
               <FormControl>
-                <Input placeholder={t('Enter your username')} {...field} />
+                <Input
+                  placeholder={t('Enter your username')}
+                  autoComplete='username'
+                  autoCapitalize='none'
+                  inputMode='text'
+                  pattern='[A-Za-z0-9]*'
+                  spellCheck={false}
+                  {...field}
+                  onChange={(event) => {
+                    const nextValue = event.currentTarget.value
+                    const sanitizedValue =
+                      sanitizeRegistrationUsername(nextValue)
+
+                    if (sanitizedValue !== nextValue) {
+                      form.setError('username', {
+                        type: 'validate',
+                        message: usernameCharacterErrorMessage,
+                      })
+                    } else {
+                      form.clearErrors('username')
+                    }
+
+                    field.onChange(sanitizedValue)
+                  }}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

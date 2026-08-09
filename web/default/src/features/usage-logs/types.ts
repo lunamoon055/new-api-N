@@ -67,6 +67,8 @@ export interface DrawingLogFilters extends CommonFilters {
  */
 export interface TaskLogFilters extends CommonFilters {
   taskId?: string
+  model?: string
+  status?: string
 }
 
 /**
@@ -238,6 +240,7 @@ export interface TaskLog {
   username?: string
   platform: string // suno, kling, runway, etc.
   task_id: string
+  model_name?: string
   action: string // MUSIC, LYRICS, GENERATE, TEXT_GENERATE, etc.
   channel_id: number
   submit_time: number // seconds
@@ -326,6 +329,8 @@ export interface GetTaskLogsParams {
   page_size?: number
   channel_id?: string
   task_id?: string
+  model_name?: string
+  status?: string
   start_timestamp?: number
   end_timestamp?: number
 }

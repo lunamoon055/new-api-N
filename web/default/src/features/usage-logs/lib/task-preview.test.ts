@@ -20,8 +20,39 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import {
   getTaskLogInputMaterials,
+  getTaskLogModelName,
   getVisibleTaskLogInputMaterials,
 } from './task-preview'
+
+describe('task log model name', () => {
+  test('prefers the model name returned by the task DTO', () => {
+    assert.equal(
+      getTaskLogModelName({
+        model_name: 'Seedance-2.5',
+        properties: { origin_model_name: 'seedance-2.5' },
+      }),
+      'Seedance-2.5'
+    )
+  })
+
+  test('falls back to persisted origin and upstream model names', () => {
+    assert.equal(
+      getTaskLogModelName({
+        properties: JSON.stringify({
+          origin_model_name: 'videos-4',
+          upstream_model_name: 'videos-standard',
+        }),
+      }),
+      'videos-4'
+    )
+    assert.equal(
+      getTaskLogModelName({
+        properties: { upstream_model_name: 'seedance-2.5' },
+      }),
+      'seedance-2.5'
+    )
+  })
+})
 
 describe('task log input materials', () => {
   test('extracts persisted image, video, and audio links in submission order', () => {

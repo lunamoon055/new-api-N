@@ -96,6 +96,21 @@ export function getTaskLogPrompt(
   return findFirstPrompt(log.data)
 }
 
+export function getTaskLogModelName(
+  log: Pick<TaskLog, 'model_name' | 'properties'>
+) {
+  const explicitModelName = normalizePrompt(log.model_name)
+  if (explicitModelName) return explicitModelName
+
+  const properties = parseJsonRecord(log.properties)
+  if (!properties) return null
+
+  return (
+    normalizePrompt(properties.origin_model_name) ??
+    normalizePrompt(properties.upstream_model_name)
+  )
+}
+
 export function getTaskLogInputMaterials(
   log: Pick<TaskLog, 'properties'>
 ): TaskInputMaterial[] {

@@ -684,6 +684,7 @@ func taskModel2Dto(task *model.Task, includeInputMaterials bool) *dto.TaskDto {
 		CreatedAt:  task.CreatedAt,
 		UpdatedAt:  task.UpdatedAt,
 		TaskID:     task.TaskID,
+		ModelName:  task.Properties.ModelName(),
 		Platform:   string(task.Platform),
 		UserId:     task.UserId,
 		Group:      task.Group,

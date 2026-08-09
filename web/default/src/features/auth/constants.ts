@@ -18,6 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
 
+export const REGISTRATION_USERNAME_ERROR_MESSAGE =
+  'Please enter English letters or Arabic numerals'
+
+const REGISTRATION_USERNAME_PATTERN = /^[A-Za-z0-9]+$/
+
+export function sanitizeRegistrationUsername(value: string) {
+  return value.replace(/[^A-Za-z0-9]/g, '')
+}
+
 // ============================================================================
 // Form Schemas
 // ============================================================================
@@ -32,7 +41,13 @@ export const loginFormSchema = z.object({
 
 export const registerFormSchema = z
   .object({
-    username: z.string().min(1, 'Please enter your username'),
+    username: z
+      .string()
+      .min(1, 'Please enter your username')
+      .regex(
+        REGISTRATION_USERNAME_PATTERN,
+        REGISTRATION_USERNAME_ERROR_MESSAGE
+      ),
     email: z.string().optional(),
     password: z
       .string()
