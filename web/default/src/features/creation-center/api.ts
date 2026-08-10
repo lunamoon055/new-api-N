@@ -37,6 +37,7 @@ import type {
   CreationCatalogResponse,
   CreationModelCategories,
   CreationModelDescriptions,
+  CreationModelOrder,
   CreationMode,
   CreationModel,
   CreationResult,
@@ -48,6 +49,7 @@ import {
 
 const CREATION_MODEL_CATEGORIES_OPTION_KEY = 'CreationModelCategories'
 const CREATION_MODEL_DESCRIPTIONS_OPTION_KEY = 'CreationModelDescriptions'
+const CREATION_MODEL_ORDER_OPTION_KEY = 'CreationModelOrder'
 
 type UpdateOptionResponse = {
   success: boolean
@@ -87,6 +89,16 @@ export async function saveCreationModelDescriptions(
   const response = await api.put<UpdateOptionResponse>('/api/option/', {
     key: CREATION_MODEL_DESCRIPTIONS_OPTION_KEY,
     value: JSON.stringify(descriptions),
+  })
+  return response.data
+}
+
+export async function saveCreationModelOrder(
+  order: CreationModelOrder
+): Promise<UpdateOptionResponse> {
+  const response = await api.put<UpdateOptionResponse>('/api/option/', {
+    key: CREATION_MODEL_ORDER_OPTION_KEY,
+    value: JSON.stringify(order),
   })
   return response.data
 }

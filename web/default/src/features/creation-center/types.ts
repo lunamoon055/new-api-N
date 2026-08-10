@@ -99,6 +99,8 @@ export type CreationModelCategories = Partial<Record<string, CreationMode>>
 
 export type CreationModelDescriptions = Partial<Record<string, string>>
 
+export type CreationModelOrder = Partial<Record<CreationMode, string[]>>
+
 export type CreationAsset = {
   id: string
   name: string
@@ -115,7 +117,11 @@ export type CreationCatalogResponse = {
 }
 
 export type CreationResultStatus =
-  'queued' | 'processing' | 'completed' | 'failed' | 'unknown'
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'unknown'
 
 export type CreationResult = {
   mode: CreationMode

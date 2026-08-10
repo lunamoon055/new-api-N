@@ -363,6 +363,29 @@ func TestBuildCreationModelCatalogUsesManualCategories(t *testing.T) {
 	require.Contains(t, catalog.Modes[2].Models[0].Tags, creationModeVideo)
 }
 
+func TestBuildCreationModelCatalogUsesManualOrderAndAppendsNewModels(t *testing.T) {
+	manualCategories := map[string]string{
+		"chat-alpha":   creationModeChat,
+		"chat-bravo":   creationModeChat,
+		"chat-charlie": creationModeChat,
+		"image-alpha":  creationModeImage,
+		"image-bravo":  creationModeImage,
+	}
+	catalog := buildCreationModelCatalogWithCategoriesAndMetadata([]model.Pricing{
+		{ModelName: "chat-alpha"},
+		{ModelName: "chat-bravo"},
+		{ModelName: "chat-charlie"},
+		{ModelName: "image-alpha"},
+		{ModelName: "image-bravo"},
+	}, nil, "", manualCategories, nil, map[string][]string{
+		creationModeChat:  {"chat-charlie", "chat-alpha"},
+		creationModeImage: {"image-bravo", "image-alpha"},
+	}, 1, nil)
+
+	require.Equal(t, []string{"chat-charlie", "chat-alpha", "chat-bravo"}, creationModelIDs(catalog.Modes[0].Models))
+	require.Equal(t, []string{"image-bravo", "image-alpha"}, creationModelIDs(catalog.Modes[1].Models))
+}
+
 func TestBuildCreationModelCatalogUsesProviderMetadataForMode(t *testing.T) {
 	catalog := buildCreationModelCatalogWithProviderMetadata(
 		[]model.Pricing{
@@ -662,6 +685,27 @@ func TestParseCreationModelDescriptionsNormalizesAndValidates(t *testing.T) {
 
 	_, err = parseCreationModelDescriptions(`[]`)
 	require.Error(t, err)
+}
+
+func TestParseCreationModelOrderNormalizesAndValidates(t *testing.T) {
+	order, err := parseCreationModelOrder(`{" CHAT ":[" Model-B ","model-a","MODEL-B"],"video":[]}`)
+
+	require.NoError(t, err)
+	require.Equal(t, map[string][]string{
+		creationModeChat:  {"model-b", "model-a"},
+		creationModeVideo: {},
+	}, order)
+
+	for _, raw := range []string{
+		`[]`,
+		`{"audio":["model-a"]}`,
+		`{"chat":"model-a"}`,
+		`{"chat":[" "]}`,
+		`{"chat":[]," CHAT ":[]}`,
+	} {
+		_, err = parseCreationModelOrder(raw)
+		require.Error(t, err, raw)
+	}
 }
 
 func TestSplitCreationModelTagsOmitsBlankTags(t *testing.T) {

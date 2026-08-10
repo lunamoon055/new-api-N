@@ -16,8 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useState } from 'react'
+import {
+  ArrowDown01Icon,
+  ArrowUp01Icon,
+  DragDropVerticalIcon,
+  FloppyDiskIcon,
+  ReloadIcon,
+  Sorting01Icon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { FileText, RefreshCw, RotateCcw, Settings2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,17 +39,34 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Spinner } from '@/components/ui/spinner'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import {
   getCreationModeLabel,
   type CreationCategoryRow,
 } from '../category-rows'
 import { CREATION_MODES } from '../constants'
+import {
+  getCreationModelsByMode,
+  moveCreationModel,
+  serializeCreationModelOrder,
+} from '../model-order'
 import type {
   CreationMode,
   CreationModelCategories,
   CreationModelDescriptions,
+  CreationModelGroup,
+  CreationModelOrder,
 } from '../types'
 
 type ModelCategoryDialogProps = {
@@ -273,5 +301,253 @@ export function ModelDescriptionDialog(props: ModelDescriptionDialogProps) {
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+type ModelOrderDialogProps = {
+  open: boolean
+  groups: CreationModelGroup[]
+  saving: boolean
+  onOpenChange: (open: boolean) => void
+  onSave: (order: CreationModelOrder) => void
+  onReset: () => void
+}
+
+export function ModelOrderDialog(props: ModelOrderDialogProps) {
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      {props.open && <ModelOrderEditor {...props} />}
+    </Dialog>
+  )
+}
+
+function ModelOrderEditor(props: ModelOrderDialogProps) {
+  const { t } = useTranslation()
+  const initialModelsByMode = getCreationModelsByMode(props.groups)
+  const [modelsByMode, setModelsByMode] = useState(initialModelsByMode)
+  const [activeMode, setActiveMode] = useState<CreationMode>(
+    () =>
+      CREATION_MODES.find((mode) => initialModelsByMode[mode].length > 0) ??
+      'chat'
+  )
+  const [draggedModelId, setDraggedModelId] = useState<string>()
+
+  const moveModel = (
+    mode: CreationMode,
+    modelId: string,
+    targetIndex: number
+  ) => {
+    setModelsByMode((current) => ({
+      ...current,
+      [mode]: moveCreationModel(current[mode], modelId, targetIndex),
+    }))
+  }
+
+  const save = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    props.onSave(serializeCreationModelOrder(modelsByMode))
+  }
+
+  return (
+    <DialogContent className='max-w-3xl'>
+      <form onSubmit={save}>
+        <DialogHeader>
+          <DialogTitle>{t('Creation model order management')}</DialogTitle>
+          <DialogDescription>
+            {t(
+              'Adjust the display order of models in each Creation Center category.'
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        <Tabs
+          className='mt-4 gap-3'
+          value={activeMode}
+          onValueChange={(value) => {
+            if (CREATION_MODES.includes(value as CreationMode)) {
+              setActiveMode(value as CreationMode)
+              setDraggedModelId(undefined)
+            }
+          }}
+        >
+          <TabsList className='grid w-full grid-cols-3'>
+            {CREATION_MODES.map((mode) => (
+              <TabsTrigger key={mode} value={mode}>
+                {getCreationModeLabel(mode, t)}
+                <Badge variant='secondary' className='ml-1 tabular-nums'>
+                  {modelsByMode[mode].length}
+                </Badge>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {CREATION_MODES.map((mode) => {
+            const modeModels = modelsByMode[mode]
+            return (
+              <TabsContent key={mode} value={mode}>
+                <div className='text-muted-foreground mb-2 text-xs'>
+                  {t(
+                    'Drag model rows or use the arrow buttons to adjust their order.'
+                  )}
+                </div>
+                <ScrollArea className='h-[min(30rem,55svh)] rounded-lg border'>
+                  {modeModels.length === 0 ? (
+                    <Empty className='min-h-52 border-0'>
+                      <EmptyHeader>
+                        <EmptyMedia variant='icon'>
+                          <HugeiconsIcon icon={Sorting01Icon} strokeWidth={2} />
+                        </EmptyMedia>
+                        <EmptyTitle>
+                          {t('No creation models available.')}
+                        </EmptyTitle>
+                        <EmptyDescription>
+                          {t(
+                            'Configure models for this category before sorting.'
+                          )}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  ) : (
+                    <div className='divide-y p-1'>
+                      {modeModels.map((model, index) => (
+                        <div
+                          key={model.id}
+                          draggable={!props.saving}
+                          onDragStart={(event) => {
+                            setDraggedModelId(model.id)
+                            event.dataTransfer.effectAllowed = 'move'
+                            event.dataTransfer.setData('text/plain', model.id)
+                          }}
+                          onDragOver={(event) => {
+                            if (draggedModelId && draggedModelId !== model.id) {
+                              event.preventDefault()
+                              event.dataTransfer.dropEffect = 'move'
+                            }
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault()
+                            const modelId =
+                              event.dataTransfer.getData('text/plain') ||
+                              draggedModelId
+                            if (modelId) moveModel(mode, modelId, index)
+                            setDraggedModelId(undefined)
+                          }}
+                          onDragEnd={() => setDraggedModelId(undefined)}
+                          className={cn(
+                            'grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-2.5 transition-colors',
+                            draggedModelId === model.id
+                              ? 'bg-muted opacity-60'
+                              : 'hover:bg-muted/50'
+                          )}
+                        >
+                          <span
+                            className='text-muted-foreground cursor-grab active:cursor-grabbing'
+                            aria-hidden='true'
+                          >
+                            <HugeiconsIcon
+                              icon={DragDropVerticalIcon}
+                              strokeWidth={2}
+                            />
+                          </span>
+                          <Badge
+                            variant='outline'
+                            className='min-w-8 justify-center tabular-nums'
+                          >
+                            {index + 1}
+                          </Badge>
+                          <div className='min-w-0'>
+                            <div className='truncate text-sm font-medium'>
+                              {model.id}
+                            </div>
+                            <div className='text-muted-foreground mt-0.5 line-clamp-1 text-xs'>
+                              {model.description ||
+                                t('Ready for creation tasks.')}
+                            </div>
+                          </div>
+                          <div className='flex gap-1'>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon-sm'
+                              aria-label={t('Move {{model}} up', {
+                                model: model.id,
+                              })}
+                              disabled={props.saving || index === 0}
+                              onClick={() =>
+                                moveModel(mode, model.id, index - 1)
+                              }
+                            >
+                              <HugeiconsIcon
+                                data-icon='inline-start'
+                                icon={ArrowUp01Icon}
+                                strokeWidth={2}
+                              />
+                            </Button>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon-sm'
+                              aria-label={t('Move {{model}} down', {
+                                model: model.id,
+                              })}
+                              disabled={
+                                props.saving || index === modeModels.length - 1
+                              }
+                              onClick={() =>
+                                moveModel(mode, model.id, index + 1)
+                              }
+                            >
+                              <HugeiconsIcon
+                                data-icon='inline-start'
+                                icon={ArrowDown01Icon}
+                                strokeWidth={2}
+                              />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+            )
+          })}
+        </Tabs>
+
+        <DialogFooter className='mt-4 sm:justify-between'>
+          <Button
+            type='button'
+            variant='outline'
+            onClick={props.onReset}
+            disabled={props.saving}
+          >
+            <HugeiconsIcon
+              data-icon='inline-start'
+              icon={ReloadIcon}
+              strokeWidth={2}
+            />
+            {t('Reset to alphabetical order')}
+          </Button>
+          <Button
+            type='submit'
+            disabled={
+              props.saving ||
+              CREATION_MODES.every((mode) => modelsByMode[mode].length === 0)
+            }
+          >
+            {props.saving ? (
+              <Spinner data-icon='inline-start' />
+            ) : (
+              <HugeiconsIcon
+                data-icon='inline-start'
+                icon={FloppyDiskIcon}
+                strokeWidth={2}
+              />
+            )}
+            {t('Save order')}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
   )
 }

@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState } from 'react'
+import { Sorting01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Bot,
   FileText,
@@ -50,12 +52,14 @@ type CreationSidebarProps = {
   error: boolean
   canManageCategories: boolean
   canManageDescriptions: boolean
+  canManageOrder: boolean
   onModeChange: (mode: CreationMode) => void
   onModelChange: (model: CreationModel) => void
   onHistory: () => void
   onNewSession: () => void
   onManageCategories: () => void
   onManageDescriptions: () => void
+  onManageOrder: () => void
 }
 
 export function CreationSidebar(props: CreationSidebarProps) {
@@ -118,7 +122,9 @@ export function CreationSidebar(props: CreationSidebarProps) {
           <div className='text-muted-foreground text-xs font-medium'>
             {t('Available models')}
           </div>
-          {(props.canManageCategories || props.canManageDescriptions) && (
+          {(props.canManageCategories ||
+            props.canManageDescriptions ||
+            props.canManageOrder) && (
             <div className='flex justify-end gap-1'>
               {props.canManageCategories && (
                 <Button
@@ -138,6 +144,20 @@ export function CreationSidebar(props: CreationSidebarProps) {
                   onClick={props.onManageDescriptions}
                 >
                   <FileText />
+                </Button>
+              )}
+              {props.canManageOrder && (
+                <Button
+                  variant='ghost'
+                  size='icon-xs'
+                  aria-label={t('Manage model order')}
+                  onClick={props.onManageOrder}
+                >
+                  <HugeiconsIcon
+                    data-icon='inline-start'
+                    icon={Sorting01Icon}
+                    strokeWidth={2}
+                  />
                 </Button>
               )}
             </div>

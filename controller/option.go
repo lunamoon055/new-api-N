@@ -414,6 +414,15 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case creationModelOrderOptionKey:
+		err = validateCreationModelOrder(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
 	}
 	err = model.UpdateOption(option.Key, option.Value.(string))
 	if err != nil {

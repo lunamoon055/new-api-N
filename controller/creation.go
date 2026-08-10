@@ -30,6 +30,7 @@ const (
 
 	creationModelCategoriesOptionKey   = "CreationModelCategories"
 	creationModelDescriptionsOptionKey = "CreationModelDescriptions"
+	creationModelOrderOptionKey        = "CreationModelOrder"
 
 	creationCostModeDynamic    = "dynamic"
 	creationCostModePerRequest = "per_request"
@@ -257,6 +258,7 @@ func buildCreationModelCatalogWithProviderMetadata(
 		requestedMode,
 		getCreationModelCategories(),
 		getCreationModelDescriptions(),
+		getCreationModelOrder(),
 		costGroupRatio,
 		providerMetadata,
 	)
@@ -276,6 +278,7 @@ func buildCreationModelCatalogWithCategories(
 		requestedMode,
 		manualCategories,
 		manualDescriptions,
+		nil,
 		groupRatio,
 		nil,
 	)
@@ -287,6 +290,7 @@ func buildCreationModelCatalogWithCategoriesAndMetadata(
 	requestedMode string,
 	manualCategories map[string]string,
 	manualDescriptions map[string]string,
+	manualOrder map[string][]string,
 	groupRatio float64,
 	providerMetadata map[string]dto.CreationModelMetadata,
 ) dto.CreationModelCatalog {
@@ -355,7 +359,16 @@ func buildCreationModelCatalogWithCategoriesAndMetadata(
 		if models == nil {
 			models = make([]dto.CreationModel, 0)
 		}
+		orderRanks := getCreationModelOrderRanks(manualOrder[mode])
 		sort.Slice(models, func(i, j int) bool {
+			iRank, iRanked := orderRanks[normalizeCreationModelMetadataKey(models[i].ID)]
+			jRank, jRanked := orderRanks[normalizeCreationModelMetadataKey(models[j].ID)]
+			if iRanked != jRanked {
+				return iRanked
+			}
+			if iRanked && iRank != jRank {
+				return iRank < jRank
+			}
 			return models[i].ID < models[j].ID
 		})
 		groups = append(groups, dto.CreationModelGroup{
@@ -839,6 +852,29 @@ func getCreationModelDescriptions() map[string]string {
 	return descriptions
 }
 
+func getCreationModelOrder() map[string][]string {
+	common.OptionMapRWMutex.RLock()
+	raw := common.OptionMap[creationModelOrderOptionKey]
+	common.OptionMapRWMutex.RUnlock()
+	order, _ := parseCreationModelOrder(raw)
+	return order
+}
+
+func getCreationModelOrderRanks(modelNames []string) map[string]int {
+	ranks := make(map[string]int, len(modelNames))
+	for _, modelName := range modelNames {
+		key := normalizeCreationModelMetadataKey(modelName)
+		if key == "" {
+			continue
+		}
+		if _, exists := ranks[key]; exists {
+			continue
+		}
+		ranks[key] = len(ranks)
+	}
+	return ranks
+}
+
 func getManualCreationModelMode(modelName string, categories map[string]string) (string, bool) {
 	if len(categories) == 0 {
 		return "", false
@@ -921,6 +957,50 @@ func parseCreationModelDescriptions(raw string) (map[string]string, error) {
 		descriptions[modelName] = description
 	}
 	return descriptions, nil
+}
+
+func validateCreationModelOrder(raw string) error {
+	_, err := parseCreationModelOrder(raw)
+	return err
+}
+
+func parseCreationModelOrder(raw string) (map[string][]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	var parsed map[string][]string
+	if err := common.UnmarshalJsonStr(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("创作中心模型排序必须是 JSON 对象，且每个分类的值必须是模型名数组")
+	}
+
+	order := make(map[string][]string, len(parsed))
+	seenModes := make(map[string]struct{}, len(parsed))
+	for rawMode, modelNames := range parsed {
+		mode, ok := normalizeCreationMode(rawMode)
+		if !ok || mode == "" {
+			return nil, fmt.Errorf("创作中心模型排序的分类必须是 chat、image 或 video")
+		}
+		if _, exists := seenModes[mode]; exists {
+			return nil, fmt.Errorf("创作中心模型排序包含重复分类 %s", mode)
+		}
+		seenModes[mode] = struct{}{}
+		seenModelNames := make(map[string]struct{}, len(modelNames))
+		order[mode] = make([]string, 0, len(modelNames))
+		for _, modelName := range modelNames {
+			modelName = normalizeCreationModelMetadataKey(modelName)
+			if modelName == "" {
+				return nil, fmt.Errorf("创作中心模型排序包含空模型名")
+			}
+			if _, exists := seenModelNames[modelName]; exists {
+				continue
+			}
+			seenModelNames[modelName] = struct{}{}
+			order[mode] = append(order[mode], modelName)
+		}
+	}
+	return order, nil
 }
 
 func getCreationModelMode(modelName string, endpoints []constant.EndpointType) (string, bool) {

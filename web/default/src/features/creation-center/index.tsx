@@ -31,6 +31,7 @@ import {
   getCreationVideoTask,
   saveCreationModelCategories,
   saveCreationModelDescriptions,
+  saveCreationModelOrder,
   submitCreationTask,
   uploadCreationReferenceFile,
 } from './api'
@@ -46,6 +47,7 @@ import { ModelHero } from './components/model-hero'
 import {
   ModelCategoryDialog,
   ModelDescriptionDialog,
+  ModelOrderDialog,
 } from './components/model-management-dialogs'
 import { CREATION_MODES } from './constants'
 import {
@@ -88,6 +90,7 @@ import type {
   CreationMode,
   CreationModelCategories,
   CreationModelDescriptions,
+  CreationModelOrder,
   CreationResult,
 } from './types'
 import {
@@ -119,6 +122,7 @@ export function CreationCenter() {
   const [assets, setAssets] = useState<CreationAsset[]>([])
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [descriptionOpen, setDescriptionOpen] = useState(false)
+  const [orderOpen, setOrderOpen] = useState(false)
   const [sessionNumber, setSessionNumber] = useState(1)
   const [result, setResult] = useState<CreationResult>()
   const [historyItems, setHistoryItems] = useState<CreationHistoryItem[]>([])
@@ -249,6 +253,26 @@ export function CreationCenter() {
     },
     onError: () => {
       toast.error(t('Unable to save descriptions.'))
+    },
+  })
+  const saveOrderMutation = useMutation({
+    mutationFn: (variables: { order: CreationModelOrder; reset?: boolean }) =>
+      saveCreationModelOrder(variables.order),
+    onSuccess: async (response, variables) => {
+      if (!response.success) {
+        toast.error(response.message || t('Unable to save model order.'))
+        return
+      }
+      toast.success(
+        variables.reset
+          ? t('Alphabetical model order restored.')
+          : t('Model order saved.')
+      )
+      setOrderOpen(false)
+      await queryClient.invalidateQueries({ queryKey: ['creation-models'] })
+    },
+    onError: () => {
+      toast.error(t('Unable to save model order.'))
     },
   })
 
@@ -1252,6 +1276,7 @@ export function CreationCenter() {
             error={catalogQuery.isError}
             canManageCategories={isSuperAdmin}
             canManageDescriptions={isSuperAdmin}
+            canManageOrder={isSuperAdmin}
             onModeChange={selectMode}
             onModelChange={(model) => {
               setSelectedByMode((current) => ({
@@ -1264,6 +1289,7 @@ export function CreationCenter() {
             onNewSession={startNewSession}
             onManageCategories={() => setCategoryOpen(true)}
             onManageDescriptions={() => setDescriptionOpen(true)}
+            onManageOrder={() => setOrderOpen(true)}
           />
 
           <section className='flex min-w-0 flex-col p-3 md:p-4 xl:p-5'>
@@ -1373,6 +1399,14 @@ export function CreationCenter() {
         onReset={() =>
           saveDescriptionMutation.mutate({ descriptions: {}, reset: true })
         }
+      />
+      <ModelOrderDialog
+        open={orderOpen}
+        groups={catalogQuery.data?.data?.modes ?? []}
+        saving={saveOrderMutation.isPending}
+        onOpenChange={setOrderOpen}
+        onSave={(order) => saveOrderMutation.mutate({ order })}
+        onReset={() => saveOrderMutation.mutate({ order: {}, reset: true })}
       />
     </PublicLayout>
   )
