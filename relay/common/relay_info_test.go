@@ -49,6 +49,7 @@ func TestTaskSubmitReqInputMaterialURLsGroupsAndDeduplicatesLinks(t *testing.T) 
 		Videos:         []string{"https://cdn.example.com/video.mp4"},
 		VideoReference: []TaskReference{{URL: "https://cdn.example.com/reference.mp4"}},
 		AudioURL:       "https://cdn.example.com/audio.wav",
+		AudioReference: []TaskReference{{URL: "https://cdn.example.com/reference-audio.mp3"}},
 		ReferenceAudios: []string{
 			"javascript:alert(1)",
 			"https://cdn.example.com/audio.wav",
@@ -66,7 +67,10 @@ func TestTaskSubmitReqInputMaterialURLsGroupsAndDeduplicatesLinks(t *testing.T) 
 		"https://cdn.example.com/video.mp4",
 		"https://cdn.example.com/reference.mp4",
 	}, videos)
-	require.Equal(t, []string{"https://cdn.example.com/audio.wav"}, audios)
+	require.Equal(t, []string{
+		"https://cdn.example.com/audio.wav",
+		"https://cdn.example.com/reference-audio.mp3",
+	}, audios)
 }
 
 func TestTaskReferenceAcceptsStringAndObjectLinks(t *testing.T) {

@@ -224,6 +224,8 @@ func TestIsAsyncGenerationsVideoTaskIncludesLinkskyModels(t *testing.T) {
 		"video-2.0-480p",
 		"video-2.0-fast-480p",
 		"video-2.0-mini-480p",
+		"video-2.5",
+		"video-2.5-480p",
 		"ko3",
 		"veo31",
 		"veo31-fast",

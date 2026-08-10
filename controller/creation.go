@@ -975,6 +975,7 @@ func getCreationModelMetadata(modelName string) creationModelMetadata {
 		}
 	case strings.HasPrefix(modelName, "sora") ||
 		strings.HasPrefix(modelName, "video-2.0") ||
+		strings.HasPrefix(modelName, "video-2.5") ||
 		strings.HasPrefix(modelName, "videos-") ||
 		strings.HasPrefix(modelName, "sd2") ||
 		strings.HasPrefix(modelName, "sd-2.0-") ||

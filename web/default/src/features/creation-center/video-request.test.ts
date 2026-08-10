@@ -269,6 +269,56 @@ describe('Creation Center video request payload', () => {
     )
   })
 
+  test('routes JR Video 2.5 models with documented multi-reference fields', () => {
+    assert.deepEqual(
+      buildCreationVideoSubmitRequest({
+        model: createVideoModel('video-2.5'),
+        prompt: '结合参考素材生成广告视频',
+        videoOptions: {
+          resolution: '720p',
+          duration: '30',
+          aspectRatio: '16:9',
+        },
+        videoReferences: {
+          referenceMode: 'multimodal',
+          imageUrls: [{ url: 'https://example.com/image.png' }],
+          startImageUrl: '',
+          endImageUrl: '',
+          videoUrls: [
+            { url: 'https://example.com/video-1.mp4' },
+            { url: 'https://example.com/video-2.mp4' },
+          ],
+          audioUrls: [
+            { url: 'https://example.com/audio-1.mp3' },
+            { url: 'https://example.com/audio-2.wav' },
+          ],
+          audioUrl: '',
+        },
+      }),
+      {
+        endpoint: '/api/creation/video/async-generations',
+        payload: {
+          model: 'video-2.5',
+          prompt: '结合参考素材生成广告视频',
+          duration: 30,
+          aspect_ratio: '16:9',
+          resolution: '720p',
+          async: true,
+          image_url: 'https://example.com/image.png',
+          video_reference: [
+            { url: 'https://example.com/video-1.mp4' },
+            { url: 'https://example.com/video-2.mp4' },
+          ],
+          audio_reference: [
+            { url: 'https://example.com/audio-1.mp3' },
+            { url: 'https://example.com/audio-2.wav' },
+          ],
+        },
+        transport: 'async-video',
+      }
+    )
+  })
+
   test('submits MiniMax H3 with documented image and audio fields', () => {
     assert.deepEqual(
       buildCreationVideoSubmitRequest({

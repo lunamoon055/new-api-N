@@ -341,6 +341,30 @@ function getReferenceUploadTip(
   t: (key: string, options?: Record<string, unknown>) => string,
   profile?: CreationVideoCapability['uploadTipProfile']
 ) {
+  if (profile === 'video-2.5') {
+    if (mode === 'video') {
+      return t(
+        'Video 2.5 tip: Upload up to {{videoCount}} MP4 videos. Each video must be 3-10 seconds and no more than {{videoSize}} MB; all reference videos together must not exceed 30 seconds.',
+        {
+          videoCount: limits.maxVideos,
+          videoSize: limits.maxVideoSizeMB,
+        }
+      )
+    }
+    if (mode === 'multimodal') {
+      return t(
+        'Video 2.5 tip: Images support PNG, JPEG, WebP, GIF, or AVIF, up to {{imageCount}}, {{imageSize}} MB each. Videos support MP4, up to {{videoCount}}, 3-10 seconds and {{videoSize}} MB each, 30 seconds total. Audio supports MP3 or WAV, up to {{audioCount}}, 3-30 seconds and {{audioSize}} MB each, 30 seconds total.',
+        {
+          imageCount: limits.maxImages,
+          videoCount: limits.maxVideos,
+          audioCount: limits.maxAudios,
+          imageSize: limits.maxImageSizeMB,
+          videoSize: limits.maxVideoSizeMB,
+          audioSize: limits.maxAudioSizeMB,
+        }
+      )
+    }
+  }
   if (profile === 'seedance-2.5') {
     if (mode === 'frames') {
       return t(

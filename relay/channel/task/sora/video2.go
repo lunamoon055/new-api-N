@@ -52,23 +52,30 @@ type video2Request struct {
 	Resolution     string            `json:"resolution,omitempty"`
 	ImageURL       string            `json:"image_url,omitempty"`
 	ImageURLs      []string          `json:"image_urls,omitempty"`
+	Images         []string          `json:"images,omitempty"`
 	VideoURL       string            `json:"video_url,omitempty"`
 	VideoReference []video2Reference `json:"video_reference,omitempty"`
 	StartImageURL  string            `json:"start_image_url,omitempty"`
 	EndImageURL    string            `json:"end_image_url,omitempty"`
 	AudioURL       string            `json:"audio_url,omitempty"`
+	AudioReference []video2Reference `json:"audio_reference,omitempty"`
 	Async          *bool             `json:"async,omitempty"`
 }
 
 type video2ModelSpec struct {
-	resolution string
-	sizes      map[string]string
+	resolution  string
+	sizes       map[string]string
+	maxDuration int
+	maxImages   int
+	maxVideos   int
+	maxAudios   int
 }
 
 func isVideo2Model(modelName string) bool {
 	switch strings.ToLower(strings.TrimSpace(modelName)) {
 	case "video-2.0", "video-2.0-fast", "video-2.0-mini",
-		"video-2.0-480p", "video-2.0-fast-480p", "video-2.0-mini-480p":
+		"video-2.0-480p", "video-2.0-fast-480p", "video-2.0-mini-480p",
+		"video-2.5", "video-2.5-480p":
 		return true
 	default:
 		return false
@@ -76,9 +83,24 @@ func isVideo2Model(modelName string) bool {
 }
 
 func getVideo2ModelSpec(modelName string) video2ModelSpec {
+	maxDuration := 15
+	maxImages := 4
+	maxVideos := 3
+	maxAudios := 1
+	if isVideo25Model(modelName) {
+		maxDuration = 30
+		maxImages = 30
+		maxVideos = 10
+		maxAudios = 10
+	}
+
 	if strings.HasSuffix(strings.ToLower(strings.TrimSpace(modelName)), "-480p") {
 		return video2ModelSpec{
-			resolution: "480p",
+			resolution:  "480p",
+			maxDuration: maxDuration,
+			maxImages:   maxImages,
+			maxVideos:   maxVideos,
+			maxAudios:   maxAudios,
 			sizes: map[string]string{
 				"9:16": "496x864",
 				"16:9": "864x496",
@@ -87,12 +109,25 @@ func getVideo2ModelSpec(modelName string) video2ModelSpec {
 		}
 	}
 	return video2ModelSpec{
-		resolution: "720p",
+		resolution:  "720p",
+		maxDuration: maxDuration,
+		maxImages:   maxImages,
+		maxVideos:   maxVideos,
+		maxAudios:   maxAudios,
 		sizes: map[string]string{
 			"9:16": "720x1280",
 			"16:9": "1280x720",
 			"1:1":  "960x960",
 		},
+	}
+}
+
+func isVideo25Model(modelName string) bool {
+	switch strings.ToLower(strings.TrimSpace(modelName)) {
+	case "video-2.5", "video-2.5-480p":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -103,11 +138,10 @@ func validateVideo2Request(req video2Request, modelName string) error {
 	if utf8.RuneCountInString(req.Prompt) > 5000 {
 		return fmt.Errorf("prompt must not exceed 5000 characters")
 	}
-	if req.Duration != nil && (*req.Duration < 4 || *req.Duration > 15) {
-		return fmt.Errorf("duration must be between 4 and 15")
-	}
-
 	spec := getVideo2ModelSpec(modelName)
+	if req.Duration != nil && (*req.Duration < 4 || *req.Duration > spec.maxDuration) {
+		return fmt.Errorf("duration must be between 4 and %d", spec.maxDuration)
+	}
 	if req.AspectRatio != "" {
 		expectedSize, ok := spec.sizes[req.AspectRatio]
 		if !ok {
@@ -124,9 +158,12 @@ func validateVideo2Request(req video2Request, modelName string) error {
 		return fmt.Errorf("size is invalid for Video2")
 	}
 
-	imageURLs := make([]string, 0, len(req.ImageURLs)+3)
+	imageURLs := make([]string, 0, len(req.ImageURLs)+len(req.Images)+3)
 	imageURLs = append(imageURLs, req.ImageURL)
 	imageURLs = append(imageURLs, req.ImageURLs...)
+	if isVideo25Model(modelName) {
+		imageURLs = append(imageURLs, req.Images...)
+	}
 	imageURLs = append(imageURLs, req.StartImageURL, req.EndImageURL)
 
 	videoURLs := make([]string, 0, len(req.VideoReference)+1)
@@ -134,12 +171,22 @@ func validateVideo2Request(req video2Request, modelName string) error {
 	for _, reference := range req.VideoReference {
 		videoURLs = append(videoURLs, reference.URL)
 	}
-
-	if countNonBlank(imageURLs) > 4 {
-		return fmt.Errorf("image references must not exceed 4")
+	audioURLs := make([]string, 0, len(req.AudioReference)+1)
+	audioURLs = append(audioURLs, req.AudioURL)
+	if isVideo25Model(modelName) {
+		for _, reference := range req.AudioReference {
+			audioURLs = append(audioURLs, reference.URL)
+		}
 	}
-	if countNonBlank(videoURLs) > 3 {
-		return fmt.Errorf("video references must not exceed 3")
+
+	if countNonBlank(imageURLs) > spec.maxImages {
+		return fmt.Errorf("image references must not exceed %d", spec.maxImages)
+	}
+	if countNonBlank(videoURLs) > spec.maxVideos {
+		return fmt.Errorf("video references must not exceed %d", spec.maxVideos)
+	}
+	if countNonBlank(audioURLs) > spec.maxAudios {
+		return fmt.Errorf("audio references must not exceed %d", spec.maxAudios)
 	}
 	for _, value := range imageURLs {
 		if err := validateVideo2ImageReference(value); err != nil {
@@ -153,6 +200,14 @@ func validateVideo2Request(req video2Request, modelName string) error {
 	}
 	if err := validateVideo2URLWithExtension(req.AudioURL, video2AudioExtensions, "MP3 or WAV"); err != nil {
 		return fmt.Errorf("audio_url: %w", err)
+	}
+	if isVideo25Model(modelName) {
+		for _, reference := range req.AudioReference {
+			value := reference.URL
+			if err := validateVideo2URLWithExtension(value, video2AudioExtensions, "MP3 or WAV"); err != nil {
+				return fmt.Errorf("audio reference: %w", err)
+			}
+		}
 	}
 
 	return nil

@@ -320,6 +320,23 @@ func TestBuildCreationModelCatalogClassifiesPrefixedSeedanceModelAsVideo(t *test
 	require.Equal(t, []string{"(线路3)sd-2.0-933"}, creationModelIDs(catalog.Modes[2].Models))
 }
 
+func TestBuildCreationModelCatalogClassifiesJRVideo25ModelsAsVideo(t *testing.T) {
+	catalog := buildCreationModelCatalog([]model.Pricing{
+		{
+			ModelName:              "video-2.5",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
+		{
+			ModelName:              "video-2.5-480p",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+		},
+	}, nil, "")
+
+	require.Empty(t, catalog.Modes[0].Models)
+	require.Empty(t, catalog.Modes[1].Models)
+	require.Equal(t, []string{"video-2.5", "video-2.5-480p"}, creationModelIDs(catalog.Modes[2].Models))
+}
+
 func TestBuildCreationModelCatalogUsesManualCategories(t *testing.T) {
 	catalog := buildCreationModelCatalogWithCategories([]model.Pricing{
 		{

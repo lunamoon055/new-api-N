@@ -186,7 +186,47 @@ func TestIsVideo2Model(t *testing.T) {
 	require.True(t, isVideo2Model("video-2.0-480p"))
 	require.True(t, isVideo2Model("video-2.0-fast-480p"))
 	require.True(t, isVideo2Model("video-2.0-mini-480p"))
+	require.True(t, isVideo2Model("video-2.5"))
+	require.True(t, isVideo2Model("video-2.5-480p"))
 	require.False(t, isVideo2Model("sora2"))
+}
+
+func TestValidateVideo25RequestUsesDocumentedLimits(t *testing.T) {
+	duration := 30
+	req := video2Request{
+		Prompt:      "combine all reference materials",
+		Duration:    &duration,
+		AspectRatio: "16:9",
+		Resolution:  "720p",
+		Size:        "1280x720",
+	}
+	for index := 0; index < 30; index++ {
+		req.ImageURLs = append(req.ImageURLs, fmt.Sprintf("https://cdn.example/image-%d.png", index))
+	}
+	for index := 0; index < 10; index++ {
+		req.VideoReference = append(req.VideoReference, video2Reference{
+			URL: fmt.Sprintf("https://cdn.example/video-%d.mp4", index),
+		})
+		req.AudioReference = append(req.AudioReference, video2Reference{
+			URL: fmt.Sprintf("https://cdn.example/audio-%d.mp3", index),
+		})
+	}
+
+	require.NoError(t, validateVideo2Request(req, "video-2.5"))
+
+	tooManyImages := req
+	tooManyImages.ImageURLs = append(append([]string{}, req.ImageURLs...), "https://cdn.example/extra.png")
+	require.ErrorContains(t, validateVideo2Request(tooManyImages, "video-2.5"), "30")
+
+	tooLong := req
+	duration31 := 31
+	tooLong.Duration = &duration31
+	require.ErrorContains(t, validateVideo2Request(tooLong, "video-2.5"), "4 and 30")
+
+	fixed480p := req
+	fixed480p.Resolution = "480p"
+	fixed480p.Size = "864x496"
+	require.NoError(t, validateVideo2Request(fixed480p, "video-2.5-480p"))
 }
 
 func newVideo2JSONContext(t *testing.T, body string) *gin.Context {
@@ -240,6 +280,42 @@ func TestVideo2ValidationAndBodyPassThrough(t *testing.T) {
 	require.Equal(t, "https://cdn.example/one.mp3", got["audio_url"])
 }
 
+func TestVideo25ValidationAndMultiAudioBodyPassThrough(t *testing.T) {
+	c := newVideo2JSONContext(t, `{
+		"model":"video-2.5",
+		"prompt":"demo",
+		"duration":30,
+		"aspect_ratio":"16:9",
+		"resolution":"720p",
+		"images":["https://cdn.example/one.png"],
+		"audio_reference":[
+			{"url":"https://cdn.example/one.mp3"},
+			{"url":"https://cdn.example/two.wav"}
+		]
+	}`)
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "video-2.5",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "video-2.5",
+		},
+	}
+	adaptor := &TaskAdaptor{}
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, common.Unmarshal(encoded, &got))
+	require.Equal(t, "video-2.5", got["model"])
+	require.Equal(t, float64(30), got["duration"])
+	require.Equal(t, []any{"https://cdn.example/one.png"}, got["images"])
+	require.Len(t, got["audio_reference"], 2)
+}
+
 func TestVideo2ValidationRejectsInvalidDuration(t *testing.T) {
 	c := newVideo2JSONContext(t, `{
 		"model":"video-2.0",
@@ -265,6 +341,8 @@ func TestVideo2ValidationAcceptsMiniAnd480pModels(t *testing.T) {
 		"video-2.0-480p",
 		"video-2.0-fast-480p",
 		"video-2.0-mini-480p",
+		"video-2.5",
+		"video-2.5-480p",
 	} {
 		t.Run(modelName, func(t *testing.T) {
 			resolution := "720p"

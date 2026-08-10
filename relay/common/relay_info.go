@@ -711,6 +711,7 @@ type TaskSubmitReq struct {
 	Videos          []string               `json:"videos,omitempty"`
 	VideoReference  []TaskReference        `json:"video_reference,omitempty"`
 	AudioURL        string                 `json:"audio_url,omitempty"`
+	AudioReference  []TaskReference        `json:"audio_reference,omitempty"`
 	Audios          []string               `json:"audios,omitempty"`
 	Size            string                 `json:"size,omitempty"`
 	Ratio           string                 `json:"ratio,omitempty"`
@@ -739,6 +740,7 @@ func (t *TaskSubmitReq) HasImage() bool {
 		len(t.Videos) > 0 ||
 		len(t.VideoReference) > 0 ||
 		t.AudioURL != "" ||
+		len(t.AudioReference) > 0 ||
 		len(t.Audios) > 0 ||
 		t.InputReference != "" ||
 		len(t.ReferenceImages) > 0 ||
@@ -767,9 +769,14 @@ func (t TaskSubmitReq) InputMaterialURLs() (images, videos, audios []string) {
 		videoReferences,
 		t.ReferenceVideos,
 	)
+	audioReferences := make([]string, 0, len(t.AudioReference))
+	for _, reference := range t.AudioReference {
+		audioReferences = append(audioReferences, reference.URL, reference.PreviewURL)
+	}
 	audios = normalizeTaskMaterialURLs(
 		[]string{t.AudioURL},
 		t.Audios,
+		audioReferences,
 		t.ReferenceAudios,
 	)
 	return

@@ -24,6 +24,8 @@ func TestModelListIncludesSupportedVideoModels(t *testing.T) {
 	require.Contains(t, ModelList, "video-2.0-480p")
 	require.Contains(t, ModelList, "video-2.0-fast-480p")
 	require.Contains(t, ModelList, "video-2.0-mini-480p")
+	require.Contains(t, ModelList, "video-2.5")
+	require.Contains(t, ModelList, "video-2.5-480p")
 	require.Contains(t, ModelList, "ko3")
 	require.Contains(t, ModelList, "veo31")
 	require.Contains(t, ModelList, "veo31-fast")
@@ -431,6 +433,8 @@ func TestFetchTaskUsesAsyncGenerationsForLinkskyVideoModels(t *testing.T) {
 		"video-2.0-480p",
 		"video-2.0-fast-480p",
 		"video-2.0-mini-480p",
+		"video-2.5",
+		"video-2.5-480p",
 		"minimax-h3",
 		"ko3",
 		"veo31",

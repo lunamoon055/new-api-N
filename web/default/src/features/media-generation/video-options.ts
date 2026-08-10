@@ -114,7 +114,7 @@ export type CreationVideoCapability = {
   includeResolutionInRequest: boolean
   durationControl: 'menu' | 'select'
   referenceLimits: CreationVideoReferenceLimits
-  uploadTipProfile?: 'seedance-2.5'
+  uploadTipProfile?: 'seedance-2.5' | 'video-2.5'
   maxPromptLength?: number
   concurrencyOptions?: number[]
 }
@@ -154,6 +154,7 @@ type Video2CreationVideoRequestOptions = {
   start_image_url?: string
   end_image_url?: string
   audio_url?: string
+  audio_reference?: Array<{ url: string }>
 }
 
 type MiniMaxH3CreationVideoRequestOptions = {
@@ -215,6 +216,20 @@ const VIDEO2_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
   maxImageSizeMB: 20,
   maxVideoSizeMB: 200,
   maxAudioSizeMB: 15,
+}
+
+const VIDEO25_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
+  ...VIDEO2_REFERENCE_LIMITS,
+  maxImages: 30,
+  maxVideos: 10,
+  maxAudios: 10,
+  maxMediaFiles: 50,
+  minReferenceVideoDurationSeconds: 3,
+  maxReferenceVideoDurationSeconds: 10,
+  maxReferenceVideoTotalDurationSeconds: 30,
+  minReferenceAudioDurationSeconds: 3,
+  maxReferenceAudioDurationSeconds: 30,
+  maxReferenceAudioTotalDurationSeconds: 30,
 }
 
 const VIDEOS_API_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
@@ -329,21 +344,16 @@ const VIDEO2_DURATIONS = Array.from({ length: 12 }, (_, index) =>
   String(index + 4)
 )
 
+const VIDEO25_DURATIONS = Array.from({ length: 27 }, (_, index) =>
+  String(index + 4)
+)
+
 const SEEDANCE_25_DURATIONS = Array.from({ length: 26 }, (_, index) =>
   String(index + 4)
 )
 
 const MINIMAX_H3_DURATIONS = Array.from({ length: 11 }, (_, index) =>
   String(index + 5)
-)
-
-const VIDEO2_DURATION_OPTIONS: DurationOption[] = VIDEO2_DURATIONS.map(
-  (duration) => ({
-    value: duration,
-    label: `${duration}s`,
-    seconds: duration,
-    estimateSeconds: 60 + Number(duration) * 15,
-  })
 )
 
 const SORA2_VIDEO_CAPABILITY: CreationVideoCapability = {
@@ -373,6 +383,21 @@ const VIDEO2_720P_CAPABILITY: CreationVideoCapability = {
 const VIDEO2_480P_CAPABILITY: CreationVideoCapability = {
   ...VIDEO2_720P_CAPABILITY,
   resolutions: ['480p'],
+}
+
+const VIDEO25_720P_CAPABILITY: CreationVideoCapability = {
+  ...VIDEO2_720P_CAPABILITY,
+  durations: VIDEO25_DURATIONS,
+  referenceModes: ['text', 'image', 'frames', 'video', 'multimodal'],
+  referenceLimits: VIDEO25_REFERENCE_LIMITS,
+  uploadTipProfile: 'video-2.5',
+  maxPromptLength: 5000,
+}
+
+const VIDEO25_480P_CAPABILITY: CreationVideoCapability = {
+  ...VIDEO25_720P_CAPABILITY,
+  resolutions: ['480p'],
+  showResolution: false,
 }
 
 const VIDEOS_API_CAPABILITY: CreationVideoCapability = {
@@ -463,6 +488,8 @@ const VIDEO_CAPABILITIES: Record<string, CreationVideoCapability> = {
   'video-2.0-480p': VIDEO2_480P_CAPABILITY,
   'video-2.0-fast-480p': VIDEO2_480P_CAPABILITY,
   'video-2.0-mini-480p': VIDEO2_480P_CAPABILITY,
+  'video-2.5': VIDEO25_720P_CAPABILITY,
+  'video-2.5-480p': VIDEO25_480P_CAPABILITY,
   'videos-standard': VIDEOS_API_CAPABILITY,
   'videos-fast': VIDEOS_API_CAPABILITY,
   'videos-mini': VIDEOS_API_CAPABILITY,
@@ -630,6 +657,12 @@ function isSeedance2Model(model?: CreationModelInput) {
 
 function isSeedance25Model(model?: CreationModelInput) {
   return getCreationModelIdCandidates(model).includes('seedance-2.5')
+}
+
+function isVideo25Model(model?: CreationModelInput) {
+  return getCreationModelIdCandidates(model).some((candidate) =>
+    ['video-2.5', 'video-2.5-480p'].includes(candidate)
+  )
 }
 
 function isSanbaoMetadata(
@@ -819,7 +852,7 @@ export function getCreationDurationOptions(model?: CreationModelInput) {
     return capability.durations.map(getDurationOption)
   }
   if (capability?.kind === 'video2') {
-    return VIDEO2_DURATION_OPTIONS
+    return capability.durations.map(getDurationOption)
   }
   if (capability?.kind === 'minimax-h3') {
     return capability.durations.map(getDurationOption)
@@ -880,6 +913,9 @@ export function getCreationVideoOptionsError(
     }
     if (isSeedance25Model(model)) {
       return 'Seedance 2.5 duration must be between 4 and 29 seconds.'
+    }
+    if (isVideo25Model(model)) {
+      return 'Video 2.5 duration must be between 4 and 30 seconds.'
     }
     return 'Duration must be between 4 and 15 seconds.'
   }
@@ -1297,6 +1333,9 @@ export function getCreationVideoReferenceError(
     if (capability.kind === 'minimax-h3') {
       return 'MiniMax H3 accepts at most 5 image references.'
     }
+    if (isVideo25Model(model)) {
+      return 'Video 2.5 accepts at most 30 image references.'
+    }
     return 'Video2 accepts at most 4 image references.'
   }
   if (normalized.videoUrls.length > referenceLimits.maxVideos) {
@@ -1312,6 +1351,9 @@ export function getCreationVideoReferenceError(
       }
       return 'Videos API accepts at most 3 reference videos.'
     }
+    if (isVideo25Model(model)) {
+      return 'Video 2.5 accepts at most 10 reference videos.'
+    }
     return 'Video2 accepts at most 3 video references.'
   }
   if (audioCount > referenceLimits.maxAudios) {
@@ -1326,6 +1368,9 @@ export function getCreationVideoReferenceError(
     }
     if (capability.kind === 'sanbao') {
       return 'Sanbao accepts too many reference audios.'
+    }
+    if (isVideo25Model(model)) {
+      return 'Video 2.5 accepts at most 10 reference audios.'
     }
     return 'Video2 accepts at most 1 audio reference.'
   }
@@ -1343,23 +1388,46 @@ export function getCreationVideoReferenceError(
       }
       return 'Videos API accepts too many reference assets.'
     }
+    if (isVideo25Model(model)) {
+      return 'Video 2.5 accepts too many reference assets.'
+    }
     return 'Sanbao accepts too many reference assets.'
   }
 
-  if (isSeedance25Model(model)) {
+  if (isSeedance25Model(model) || isVideo25Model(model)) {
+    const minVideoDuration =
+      referenceLimits.minReferenceVideoDurationSeconds ?? 0
+    const maxVideoDuration =
+      referenceLimits.maxReferenceVideoDurationSeconds ?? Infinity
     const invalidVideoDuration = normalized.videoUrls.some((value) => {
       const duration = getCreationReferenceDurationSeconds(value)
-      return duration > 0 && (duration < 2 || duration > 30)
+      return (
+        duration > 0 &&
+        (duration < minVideoDuration || duration > maxVideoDuration)
+      )
     })
     if (invalidVideoDuration) {
+      if (isVideo25Model(model)) {
+        return 'Video 2.5 reference videos must be between 3 and 10 seconds each.'
+      }
       return 'Seedance 2.5 reference videos must be between 2 and 30 seconds each.'
     }
 
+    const minAudioDuration =
+      referenceLimits.minReferenceAudioDurationSeconds ?? 0
+    const maxAudioDuration =
+      referenceLimits.maxReferenceAudioDurationSeconds ?? Infinity
     const invalidAudioDuration = normalized.audioUrls.some((value) => {
       const duration = getCreationReferenceDurationSeconds(value)
-      return duration > 0 && (duration < 2 || duration > 30)
+      return (
+        duration > 0 &&
+        (duration < minAudioDuration || duration > maxAudioDuration)
+      )
     })
     if (invalidAudioDuration) {
+      if (isVideo25Model(model)) {
+        return 'Video 2.5 reference audios must be between 3 and 30 seconds each.'
+      }
       return 'Seedance 2.5 reference audios must be between 2 and 30 seconds each.'
     }
   }
@@ -1373,6 +1441,9 @@ export function getCreationVideoReferenceError(
     videoTotalDurationSeconds >
       referenceLimits.maxReferenceVideoTotalDurationSeconds
   ) {
+    if (isVideo25Model(model)) {
+      return 'Video 2.5 reference videos must not exceed 30 seconds in total.'
+    }
     return 'Seedance 2.5 reference videos must not exceed 30 seconds in total.'
   }
   const audioTotalDurationSeconds = normalized.audioUrls.reduce(
@@ -1384,6 +1455,9 @@ export function getCreationVideoReferenceError(
     audioTotalDurationSeconds >
       referenceLimits.maxReferenceAudioTotalDurationSeconds
   ) {
+    if (isVideo25Model(model)) {
+      return 'Video 2.5 reference audios must not exceed 30 seconds in total.'
+    }
     return 'Seedance 2.5 reference audios must not exceed 30 seconds in total.'
   }
 
@@ -1654,8 +1728,10 @@ export function getCreationVideoRequestOptions(
   if (normalizedReferences.endImageUrl) {
     request.end_image_url = normalizedReferences.endImageUrl
   }
-  if (audioUrls.length) {
+  if (audioUrls.length === 1) {
     request.audio_url = audioUrls[0]
+  } else if (audioUrls.length > 1) {
+    request.audio_reference = audioUrls.map((url) => ({ url }))
   }
 
   return request

@@ -455,6 +455,194 @@ describe('Sanbao creation model options', () => {
     )
   })
 
+  test('pairs JR Video 2.5 models with the documented async video contract', () => {
+    const model = 'video-2.5'
+    const fixed480pModel = 'video-2.5-480p'
+    const capability = getCreationVideoCapabilities(model)
+    const fixed480pCapability = getCreationVideoCapabilities(fixed480pModel)
+
+    assert.equal(capability?.kind, 'video2')
+    assert.deepEqual(capability?.referenceModes, [
+      'text',
+      'image',
+      'frames',
+      'video',
+      'multimodal',
+    ])
+    assert.deepEqual(capability?.aspectRatios, ['9:16', '16:9', '1:1'])
+    assert.equal(capability?.uploadTipProfile, 'video-2.5')
+    assert.equal(fixed480pCapability?.showResolution, false)
+    assert.deepEqual(
+      getCreationResolutionOptions(model).map((item) => item.value),
+      ['720p']
+    )
+    assert.deepEqual(
+      getCreationResolutionOptions(fixed480pModel).map((item) => item.value),
+      ['480p']
+    )
+    assert.deepEqual(
+      getCreationDurationOptions(model).map((item) => item.value),
+      Array.from({ length: 27 }, (_, index) => String(index + 4))
+    )
+    assert.deepEqual(
+      {
+        maxImages: getCreationVideoReferenceLimits(model).maxImages,
+        maxVideos: getCreationVideoReferenceLimits(model).maxVideos,
+        maxAudios: getCreationVideoReferenceLimits(model).maxAudios,
+        minVideo:
+          getCreationVideoReferenceLimits(model)
+            .minReferenceVideoDurationSeconds,
+        maxVideo:
+          getCreationVideoReferenceLimits(model)
+            .maxReferenceVideoDurationSeconds,
+        maxVideoTotal:
+          getCreationVideoReferenceLimits(model)
+            .maxReferenceVideoTotalDurationSeconds,
+        minAudio:
+          getCreationVideoReferenceLimits(model)
+            .minReferenceAudioDurationSeconds,
+        maxAudio:
+          getCreationVideoReferenceLimits(model)
+            .maxReferenceAudioDurationSeconds,
+        maxAudioTotal:
+          getCreationVideoReferenceLimits(model)
+            .maxReferenceAudioTotalDurationSeconds,
+      },
+      {
+        maxImages: 30,
+        maxVideos: 10,
+        maxAudios: 10,
+        minVideo: 3,
+        maxVideo: 10,
+        maxVideoTotal: 30,
+        minAudio: 3,
+        maxAudio: 30,
+        maxAudioTotal: 30,
+      }
+    )
+    assert.equal(
+      getCreationVideoOptionsError(
+        { resolution: '720p', duration: '31', aspectRatio: '16:9' },
+        model
+      ),
+      'Video 2.5 duration must be between 4 and 30 seconds.'
+    )
+
+    const options = normalizeCreationVideoOptions(
+      { resolution: '720p', duration: '30', aspectRatio: '1:1' },
+      model
+    )
+    assert.deepEqual(
+      getCreationVideoRequestOptions(options, model, {
+        referenceMode: 'multimodal',
+        imageUrls: [
+          { url: 'https://example.com/image-1.png' },
+          { url: 'https://example.com/image-2.png' },
+        ],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [
+          { url: 'https://example.com/video-1.mp4' },
+          { url: 'https://example.com/video-2.mp4' },
+        ],
+        audioUrls: [
+          { url: 'https://example.com/audio-1.mp3' },
+          { url: 'https://example.com/audio-2.wav' },
+        ],
+        audioUrl: '',
+      }),
+      {
+        duration: 30,
+        aspect_ratio: '1:1',
+        resolution: '720p',
+        async: true,
+        estimateSeconds: 510,
+        image_urls: [
+          'https://example.com/image-1.png',
+          'https://example.com/image-2.png',
+        ],
+        video_reference: [
+          { url: 'https://example.com/video-1.mp4' },
+          { url: 'https://example.com/video-2.mp4' },
+        ],
+        audio_reference: [
+          { url: 'https://example.com/audio-1.mp3' },
+          { url: 'https://example.com/audio-2.wav' },
+        ],
+      }
+    )
+
+    assert.deepEqual(
+      getCreationVideoRequestOptions(
+        { resolution: '720p', duration: '4', aspectRatio: '16:9' },
+        fixed480pModel,
+        {
+          referenceMode: 'frames',
+          imageUrls: [],
+          startImageUrl: 'https://example.com/start.png',
+          endImageUrl: 'https://example.com/end.png',
+          videoUrls: [],
+          audioUrls: [],
+          audioUrl: '',
+        }
+      ),
+      {
+        duration: 4,
+        aspect_ratio: '16:9',
+        resolution: '480p',
+        async: true,
+        estimateSeconds: 120,
+        start_image_url: 'https://example.com/start.png',
+        end_image_url: 'https://example.com/end.png',
+      }
+    )
+
+    assert.equal(
+      getCreationVideoReferenceError(model, {
+        referenceMode: 'video',
+        imageUrls: [],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [
+          { url: 'https://example.com/video.mp4', durationSeconds: 11 },
+        ],
+        audioUrls: [],
+        audioUrl: '',
+      }),
+      'Video 2.5 reference videos must be between 3 and 10 seconds each.'
+    )
+    assert.equal(
+      getCreationVideoReferenceError(model, {
+        referenceMode: 'video',
+        imageUrls: [],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [7, 8, 8, 8].map((duration, index) => ({
+          url: `https://example.com/video-${index}.mp4`,
+          durationSeconds: duration,
+        })),
+        audioUrls: [],
+        audioUrl: '',
+      }),
+      'Video 2.5 reference videos must not exceed 30 seconds in total.'
+    )
+    assert.equal(
+      getCreationVideoReferenceError(model, {
+        referenceMode: 'multimodal',
+        imageUrls: [],
+        startImageUrl: '',
+        endImageUrl: '',
+        videoUrls: [],
+        audioUrls: [
+          { url: 'https://example.com/audio-1.mp3', durationSeconds: 16 },
+          { url: 'https://example.com/audio-2.wav', durationSeconds: 15 },
+        ],
+        audioUrl: '',
+      }),
+      'Video 2.5 reference audios must not exceed 30 seconds in total.'
+    )
+  })
+
   test('uses videos-4 controls, limits, and videos api request fields', () => {
     for (const model of [
       'videos-4 (4图3视频1音频)',
