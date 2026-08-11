@@ -189,7 +189,8 @@ func TaskErrorWrapperLocal(err error, code string, statusCode int) *dto.TaskErro
 }
 
 func TaskErrorWrapper(err error, code string, statusCode int) *dto.TaskError {
-	text := err.Error()
+	rawText := err.Error()
+	text := rawText
 	lowerText := strings.ToLower(text)
 	if strings.Contains(lowerText, "post") || strings.Contains(lowerText, "dial") || strings.Contains(lowerText, "http") {
 		common.SysLog(fmt.Sprintf("error: %s", text))
@@ -202,6 +203,7 @@ func TaskErrorWrapper(err error, code string, statusCode int) *dto.TaskError {
 		Message:    text,
 		StatusCode: statusCode,
 		Error:      err,
+		RawMessage: sanitizeTaskRawError(rawText),
 	}
 
 	return taskError
@@ -217,5 +219,6 @@ func TaskErrorFromAPIError(apiErr *types.NewAPIError) *dto.TaskError {
 		Message:    apiErr.Err.Error(),
 		StatusCode: apiErr.StatusCode,
 		Error:      apiErr.Err,
+		RawMessage: sanitizeTaskRawError(apiErr.Err.Error()),
 	}
 }

@@ -135,6 +135,7 @@ type TaskPrivateData struct {
 	Key            string `json:"key,omitempty"`
 	UpstreamTaskID string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
 	ResultURL      string `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
+	UpstreamError  string `json:"upstream_error,omitempty"`   // 上游真实错误（脱敏，仅超级管理员可见）
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
 	RequestId      string              `json:"request_id,omitempty"`      // 订阅预扣账本的幂等请求 ID
 	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"

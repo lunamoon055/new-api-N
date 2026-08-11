@@ -38,6 +38,7 @@ import {
   getTaskLogVideoPreviewUrl,
   getVisibleTaskLogInputMaterials,
 } from '../../lib/task-preview'
+import { getTaskFailureDetails } from '../../lib/task-errors'
 import type { TaskLog } from '../../types'
 import {
   AudioPreviewDialog,
@@ -209,7 +210,7 @@ function PromptCell({
 
 export function useTaskLogsColumns(
   isAdmin: boolean,
-  canViewInputMaterials: boolean
+  canViewPrivateTaskDetails: boolean
 ): ColumnDef<TaskLog>[] {
   const { t } = useTranslation()
   const columns: ColumnDef<TaskLog>[] = [
@@ -368,7 +369,7 @@ export function useTaskLogsColumns(
       cell: ({ row }) => (
         <PromptCell
           log={row.original}
-          canViewInputMaterials={canViewInputMaterials}
+          canViewInputMaterials={canViewPrivateTaskDetails}
         />
       ),
       meta: { label: t('Prompt'), mobileHidden: true },
@@ -410,6 +411,10 @@ export function useTaskLogsColumns(
       cell: function DetailsCell({ row }) {
         const log = row.original
         const failReason = row.getValue('fail_reason') as string
+        const { downstreamMessage, upstreamRawError } = getTaskFailureDetails(
+          log,
+          canViewPrivateTaskDetails
+        )
         const status = log.status
         const [dialogOpen, setDialogOpen] = useState(false)
 
@@ -433,7 +438,7 @@ export function useTaskLogsColumns(
           return <VideoPreviewCell log={log} />
         }
 
-        if (!failReason) {
+        if (!failReason && !upstreamRawError) {
           return <span className='text-muted-foreground/60 text-xs'>-</span>
         }
 
@@ -446,11 +451,12 @@ export function useTaskLogsColumns(
               title={t('Click to view full error message')}
             >
               <span className='truncate leading-snug text-red-600 group-hover:underline dark:text-red-400'>
-                {failReason}
+                {downstreamMessage || failReason}
               </span>
             </button>
             <FailReasonDialog
-              failReason={failReason}
+              failReason={downstreamMessage || failReason}
+              rawFailReason={upstreamRawError}
               open={dialogOpen}
               onOpenChange={setDialogOpen}
             />

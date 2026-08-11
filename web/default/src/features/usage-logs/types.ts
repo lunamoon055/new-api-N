@@ -251,6 +251,7 @@ export interface TaskLog {
   properties?: unknown
   data?: unknown // JSON payload from the task response
   fail_reason?: string
+  raw_fail_reason?: string // Super-administrator task-log responses only
   result_url?: string
   status: string // NOT_START, SUBMITTED, IN_PROGRESS, SUCCESS, FAILURE, QUEUED, UNKNOWN
   other?: string

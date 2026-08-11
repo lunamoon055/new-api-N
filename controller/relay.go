@@ -471,11 +471,7 @@ func RelayNotFound(c *gin.Context) {
 func RelayTaskFetch(c *gin.Context) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, &dto.TaskError{
-			Code:       "gen_relay_info_failed",
-			Message:    err.Error(),
-			StatusCode: http.StatusInternalServerError,
-		})
+		respondTaskError(c, service.TaskErrorWrapperLocal(err, "gen_relay_info_failed", http.StatusInternalServerError))
 		return
 	}
 	if taskErr := relay.RelayTaskFetch(c, relayInfo.RelayMode); taskErr != nil {
@@ -486,11 +482,7 @@ func RelayTaskFetch(c *gin.Context) {
 func RelayTask(c *gin.Context) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, &dto.TaskError{
-			Code:       "gen_relay_info_failed",
-			Message:    err.Error(),
-			StatusCode: http.StatusInternalServerError,
-		})
+		respondTaskError(c, service.TaskErrorWrapperLocal(err, "gen_relay_info_failed", http.StatusInternalServerError))
 		return
 	}
 
@@ -583,8 +575,12 @@ func RelayTask(c *gin.Context) {
 	}
 
 	if taskErr != nil {
+		videoTaskError := isVideoTaskErrorRequest(c)
+		if videoTaskError {
+			service.LocalizeVideoTaskError(taskErr)
+		}
 		if relayInfo.PersistentTaskID > 0 {
-			if refundErr := failPersistentTaskSubmission(c, relayInfo.PersistentTaskID, taskErr.Message); refundErr != nil {
+			if refundErr := failPersistentTaskSubmission(c, relayInfo.PersistentTaskID, taskErr, videoTaskError); refundErr != nil {
 				common.SysError("persist failed task refund error: " + refundErr.Error())
 			}
 		}
@@ -651,7 +647,7 @@ func completePersistentTaskSubmission(c *gin.Context, relayInfo *relaycommon.Rel
 	return nil
 }
 
-func failPersistentTaskSubmission(ctx context.Context, taskID int64, reason string) error {
+func failPersistentTaskSubmission(ctx context.Context, taskID int64, taskError *dto.TaskError, videoTaskError bool) error {
 	task, err := model.GetTaskByID(taskID)
 	if err != nil {
 		return err
@@ -662,7 +658,17 @@ func failPersistentTaskSubmission(ctx context.Context, taskID int64, reason stri
 	snapshot := task.Snapshot()
 	task.Status = model.TaskStatusFailure
 	task.Progress = "100%"
-	task.FailReason = reason
+	reason := taskError.Message
+	if videoTaskError {
+		rawMessage := taskError.RawMessage
+		if strings.TrimSpace(rawMessage) == "" {
+			rawMessage = taskError.Message
+		}
+		translated := service.SetVideoTaskFailure(task, rawMessage, taskError.Code, taskError.StatusCode)
+		reason = translated.Message
+	} else {
+		task.FailReason = reason
+	}
 	task.FinishTime = time.Now().Unix()
 	task.BillingStatus = model.TaskBillingStatusFinalizePending
 	task.BillingTargetQuota = 0
@@ -685,12 +691,20 @@ func attachTaskPromptFromRequest(c *gin.Context, task *model.Task) {
 	}
 }
 
-// respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写）
+// respondTaskError translates video-task failures before returning them to downstream clients.
 func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
-	if taskErr.StatusCode == http.StatusTooManyRequests {
-		taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
+	if isVideoTaskErrorRequest(c) {
+		service.LocalizeVideoTaskError(taskErr)
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
+}
+
+func isVideoTaskErrorRequest(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	path := strings.ToLower(c.Request.URL.Path)
+	return strings.Contains(path, "/video") || strings.Contains(path, "/videos")
 }
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError, retryTimes int) bool {

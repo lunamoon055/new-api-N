@@ -32,13 +32,31 @@ func updateVideoTaskAll(ctx context.Context, platform constant.TaskPlatform, cha
 	}
 	cacheGetChannel, err := model.CacheGetChannel(channelId)
 	if err != nil {
-		errUpdate := model.TaskBulkUpdate(taskIds, map[string]any{
-			"fail_reason": fmt.Sprintf("Failed to get channel info, channel ID: %d", channelId),
-			"status":      "FAILURE",
-			"progress":    "100%",
-		})
-		if errUpdate != nil {
-			common.SysLog(fmt.Sprintf("UpdateVideoTask error: %v", errUpdate))
+		rawReason := fmt.Sprintf("Failed to get channel info, channel ID: %d", channelId)
+		translated := service.TranslateVideoTaskError(rawReason, "get_channel_failed", 0)
+		unresolvedTaskIDs := make([]string, 0)
+		for _, taskID := range taskIds {
+			task := taskM[taskID]
+			if task == nil {
+				unresolvedTaskIDs = append(unresolvedTaskIDs, taskID)
+				continue
+			}
+			task.Status = model.TaskStatusFailure
+			task.Progress = "100%"
+			service.SetVideoTaskFailure(task, rawReason, "get_channel_failed", 0)
+			if updateErr := task.Update(); updateErr != nil {
+				common.SysLog(fmt.Sprintf("UpdateVideoTask error: %v", updateErr))
+			}
+		}
+		if len(unresolvedTaskIDs) > 0 {
+			errUpdate := model.TaskBulkUpdate(unresolvedTaskIDs, map[string]any{
+				"fail_reason": translated.Message,
+				"status":      "FAILURE",
+				"progress":    "100%",
+			})
+			if errUpdate != nil {
+				common.SysLog(fmt.Sprintf("UpdateVideoTask error: %v", errUpdate))
+			}
 		}
 		return fmt.Errorf("CacheGetChannel failed: %w", err)
 	}
@@ -160,7 +178,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		if task.FinishTime == 0 {
 			task.FinishTime = now
 		}
-		task.FailReason = taskResult.Reason
+		service.SetVideoTaskFailure(task, taskResult.Reason, "", 0)
 		logger.LogInfo(ctx, fmt.Sprintf("Task %s failed: %s", task.TaskID, task.FailReason))
 		taskResult.Progress = "100%"
 		if quota != 0 {

@@ -485,7 +485,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 				taskResp = service.TaskErrorWrapper(err, "convert_to_openai_video_failed", http.StatusInternalServerError)
 				return
 			}
-			respBody = openAIVideoData
+			respBody = normalizeOpenAIVideoErrorResponse(openAIVideoData, originTask)
 			return
 		}
 		taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("not_implemented:%s", originTask.Platform), "not_implemented", http.StatusNotImplemented)
@@ -560,7 +560,7 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		task.Progress = ti.Progress
 	}
 	if task.Status == model.TaskStatusFailure && ti.Reason != "" {
-		task.FailReason = ti.Reason
+		service.SetVideoTaskFailure(task, ti.Reason, "", 0)
 	}
 	if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {
 		task.Progress = taskcommon.ProgressComplete
@@ -600,13 +600,20 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 
 	// 非 OpenAI Video API: 构建自定义格式响应
 	format := detectVideoFormat(body)
+	var publicError any
+	publicURL := task.GetResultURL()
+	if task.Status == model.TaskStatusFailure {
+		message, _ := service.VideoTaskFailureMessages(task)
+		publicError = map[string]any{"message": message}
+		publicURL = ""
+	}
 	out := map[string]any{
-		"error":    nil,
+		"error":    publicError,
 		"format":   format,
 		"metadata": nil,
 		"status":   mapTaskStatusToSimple(task.Status),
 		"task_id":  task.TaskID,
-		"url":      task.GetResultURL(),
+		"url":      publicURL,
 	}
 	respBody, _ := common.Marshal(dto.TaskResponse[any]{
 		Code: "success",
@@ -659,48 +666,107 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 }
 
 // TaskModel2DtoWithInputMaterials is reserved for task-log responses to root
-// users. All other task DTO paths use TaskModel2Dto so uploaded material URLs
-// are redacted by default.
+// users. It includes private diagnostic fields and uploaded material URLs.
+// All other task DTO paths use TaskModel2Dto so these fields are redacted.
 func TaskModel2DtoWithInputMaterials(task *model.Task) *dto.TaskDto {
 	return taskModel2Dto(task, true)
 }
 
-func taskModel2Dto(task *model.Task, includeInputMaterials bool) *dto.TaskDto {
+func taskModel2Dto(task *model.Task, includePrivateDetails bool) *dto.TaskDto {
 	resultURL := task.GetResultURL()
+	if task.Status == model.TaskStatusFailure {
+		// GetResultURL falls back to FailReason for historical compatibility.
+		// A failed task has no result URL, and that fallback may contain a raw
+		// upstream error that must never be exposed as a media URL.
+		resultURL = ""
+	}
 	if service.IsTaskVideoProxyURL(resultURL, task.TaskID) {
 		if dataURL := service.ExtractTaskDataVideoURL(task); dataURL != "" {
 			resultURL = dataURL
 		}
 	}
 	properties := task.Properties
-	if !includeInputMaterials {
+	if !includePrivateDetails {
 		properties.InputImages = nil
 		properties.InputVideos = nil
 		properties.InputAudios = nil
 	}
 
-	return &dto.TaskDto{
-		ID:         task.ID,
-		CreatedAt:  task.CreatedAt,
-		UpdatedAt:  task.UpdatedAt,
-		TaskID:     task.TaskID,
-		ModelName:  task.Properties.ModelName(),
-		Platform:   string(task.Platform),
-		UserId:     task.UserId,
-		Group:      task.Group,
-		ChannelId:  task.ChannelId,
-		Quota:      task.Quota,
-		Action:     task.Action,
-		Status:     string(task.Status),
-		FailReason: task.FailReason,
-		ResultURL:  resultURL,
-		Prompt:     task.Properties.Input,
-		SubmitTime: task.SubmitTime,
-		StartTime:  task.StartTime,
-		FinishTime: task.FinishTime,
-		Progress:   task.Progress,
-		Properties: properties,
-		Username:   task.Username,
-		Data:       task.Data,
+	failReason := task.FailReason
+	rawFailReason := ""
+	taskData := task.Data
+	if task.Status == model.TaskStatusFailure &&
+		task.Platform != constant.TaskPlatformSuno &&
+		task.Platform != constant.TaskPlatformMidjourney {
+		failReason, rawFailReason = service.VideoTaskFailureMessages(task)
+		safeData, err := common.Marshal(map[string]any{
+			"error": map[string]any{
+				"message": failReason,
+			},
+		})
+		if err == nil {
+			taskData = safeData
+		}
 	}
+	if !includePrivateDetails {
+		rawFailReason = ""
+	}
+
+	return &dto.TaskDto{
+		ID:            task.ID,
+		CreatedAt:     task.CreatedAt,
+		UpdatedAt:     task.UpdatedAt,
+		TaskID:        task.TaskID,
+		ModelName:     task.Properties.ModelName(),
+		Platform:      string(task.Platform),
+		UserId:        task.UserId,
+		Group:         task.Group,
+		ChannelId:     task.ChannelId,
+		Quota:         task.Quota,
+		Action:        task.Action,
+		Status:        string(task.Status),
+		FailReason:    failReason,
+		RawFailReason: rawFailReason,
+		ResultURL:     resultURL,
+		Prompt:        task.Properties.Input,
+		SubmitTime:    task.SubmitTime,
+		StartTime:     task.StartTime,
+		FinishTime:    task.FinishTime,
+		Progress:      task.Progress,
+		Properties:    properties,
+		Username:      task.Username,
+		Data:          taskData,
+	}
+}
+
+func normalizeOpenAIVideoErrorResponse(body []byte, task *model.Task) []byte {
+	if task == nil || task.Status != model.TaskStatusFailure {
+		return body
+	}
+
+	var response dto.OpenAIVideo
+	if err := common.Unmarshal(body, &response); err != nil {
+		return body
+	}
+	rawMessage := task.PrivateData.UpstreamError
+	code := ""
+	if response.Error != nil {
+		code = response.Error.Code
+		if strings.TrimSpace(response.Error.Message) != "" {
+			rawMessage = response.Error.Message
+		}
+	}
+	if strings.TrimSpace(rawMessage) == "" {
+		rawMessage = task.FailReason
+	}
+	translated := service.TranslateVideoTaskError(rawMessage, code, 0)
+	if response.Error == nil {
+		response.Error = &dto.OpenAIVideoError{}
+	}
+	response.Error.Message = translated.Message
+	normalized, err := common.Marshal(response)
+	if err != nil {
+		return body
+	}
+	return normalized
 }

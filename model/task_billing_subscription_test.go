@@ -469,12 +469,16 @@ func TestRefundSubscriptionPreConsume_CASIsIdempotent(t *testing.T) {
 }
 
 func TestTaskPrivateDataRequestIDJSONRoundTrip(t *testing.T) {
-	privateData := TaskPrivateData{RequestId: "req_json_round_trip"}
+	privateData := TaskPrivateData{
+		RequestId:     "req_json_round_trip",
+		UpstreamError: `{"error":{"message":"upstream failed"}}`,
+	}
 	value, err := privateData.Value()
 	require.NoError(t, err)
 
 	var restored TaskPrivateData
 	require.NoError(t, restored.Scan(value))
 	assert.Equal(t, privateData.RequestId, restored.RequestId)
+	assert.Equal(t, privateData.UpstreamError, restored.UpstreamError)
 	assert.Equal(t, common.GetJsonType(json.RawMessage(value.([]byte))), "object")
 }

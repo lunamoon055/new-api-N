@@ -58,7 +58,7 @@ interface UsageLogsTableProps {
 export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const { t } = useTranslation()
   const isAdmin = useIsAdmin()
-  const canViewTaskInputMaterials = useIsSuperAdmin()
+  const canViewPrivateTaskDetails = useIsSuperAdmin()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
 
@@ -100,7 +100,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       'logs',
       logCategory,
       isAdmin,
-      canViewTaskInputMaterials,
+      canViewPrivateTaskDetails,
       pagination.pageIndex + 1,
       pagination.pageSize,
       columnFilters,
@@ -128,7 +128,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       if (
         previousQuery?.queryKey[1] === logCategory &&
         previousQuery.queryKey[2] === isAdmin &&
-        previousQuery.queryKey[3] === canViewTaskInputMaterials
+        previousQuery.queryKey[3] === canViewPrivateTaskDetails
       ) {
         return previousData
       }
@@ -140,7 +140,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const columns = useColumnsByCategory(
     logCategory,
     isAdmin,
-    canViewTaskInputMaterials
+    canViewPrivateTaskDetails
   )
   const isLoadingData = isLoading || (isFetching && !data)
 

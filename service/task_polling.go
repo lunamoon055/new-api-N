@@ -481,11 +481,11 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 					return nil
 				}
 
-				// 其他错误认为是任务失败，记录错误信息并更新任务状态
-				taskResult = relaycommon.FailTaskInfo("upstream returned error")
+				// 其他错误认为是任务失败，原始上游消息只进入私有诊断字段。
+				taskResult = relaycommon.FailTaskInfo(openaiError.Message)
 			} else {
 				logger.LogError(ctx, fmt.Sprintf("Task %s returned empty status with unrecognized error format, body_bytes=%d", taskId, len(responseBody)))
-				taskResult = relaycommon.FailTaskInfo("upstream returned unrecognized message")
+				taskResult = relaycommon.FailTaskInfo(string(responseBody))
 			}
 		}
 	}
@@ -525,7 +525,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		if task.FinishTime == 0 {
 			task.FinishTime = now
 		}
-		task.FailReason = taskResult.Reason
+		SetVideoTaskFailure(task, taskResult.Reason, "", 0)
 		logger.LogInfo(ctx, fmt.Sprintf("Task %s failed: %s", task.TaskID, task.FailReason))
 		taskResult.Progress = taskcommon.ProgressComplete
 	default:

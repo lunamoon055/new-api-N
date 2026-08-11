@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	"github.com/stretchr/testify/require"
@@ -131,6 +133,87 @@ func TestTaskModel2DtoWithInputMaterialsIncludesRootOnlyFields(t *testing.T) {
 	require.Equal(t, task.Properties.InputImages, properties.InputImages)
 	require.Equal(t, task.Properties.InputVideos, properties.InputVideos)
 	require.Equal(t, task.Properties.InputAudios, properties.InputAudios)
+}
+
+func TestTaskModel2DtoTranslatesHistoricalVideoFailureAndRedactsRawError(t *testing.T) {
+	rawReason := `{"error":{"message":"invalid image_urls[0]: image url returned 404"}}`
+	task := &model.Task{
+		Platform:   constant.TaskPlatform("37"),
+		Status:     model.TaskStatusFailure,
+		FailReason: rawReason,
+		Data:       []byte(rawReason),
+	}
+
+	taskDto := TaskModel2Dto(task)
+
+	require.Equal(t, "参考图片链接不存在或已失效，请重新上传图片后再试。", taskDto.FailReason)
+	require.Empty(t, taskDto.RawFailReason)
+	require.Empty(t, taskDto.ResultURL)
+	payload, err := common.Marshal(taskDto)
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), "image url returned 404")
+	require.Contains(t, string(payload), "参考图片链接不存在或已失效")
+}
+
+func TestTaskModel2DtoWithInputMaterialsIncludesRootFailureDiagnostics(t *testing.T) {
+	rawReason := `{"error":{"message":"invalid audio_url: audio url returned 404"}}`
+	task := &model.Task{
+		Platform:   constant.TaskPlatform("37"),
+		Status:     model.TaskStatusFailure,
+		FailReason: "参考音频链接不存在或已失效，请重新上传音频后再试。",
+		PrivateData: model.TaskPrivateData{
+			UpstreamError: rawReason,
+		},
+		Data: []byte(rawReason),
+	}
+
+	taskDto := TaskModel2DtoWithInputMaterials(task)
+
+	require.Equal(t, task.FailReason, taskDto.FailReason)
+	require.Equal(t, rawReason, taskDto.RawFailReason)
+	require.NotContains(t, string(taskDto.Data), "audio url returned 404")
+}
+
+func TestTaskModel2DtoKeepsNonVideoFailureUnchanged(t *testing.T) {
+	rawReason := "midjourney upstream failed"
+	task := &model.Task{
+		Platform:   constant.TaskPlatformMidjourney,
+		Status:     model.TaskStatusFailure,
+		FailReason: rawReason,
+		Data:       []byte(`{"description":"midjourney upstream failed"}`),
+	}
+
+	taskDto := TaskModel2Dto(task)
+
+	require.Equal(t, rawReason, taskDto.FailReason)
+	require.Equal(t, task.Data, taskDto.Data)
+}
+
+func TestNormalizeOpenAIVideoErrorResponseReturnsTranslatedMessage(t *testing.T) {
+	rawReason := "PROVIDER_MODERATION_ERROR: TRADEMARK"
+	body, err := common.Marshal(dto.OpenAIVideo{
+		ID:     "task_public",
+		Status: dto.VideoStatusFailed,
+		Error: &dto.OpenAIVideoError{
+			Code:    "provider_moderation_error",
+			Message: rawReason,
+		},
+	})
+	require.NoError(t, err)
+	task := &model.Task{
+		Status: model.TaskStatusFailure,
+		PrivateData: model.TaskPrivateData{
+			UpstreamError: rawReason,
+		},
+	}
+
+	normalized := normalizeOpenAIVideoErrorResponse(body, task)
+
+	var response dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(normalized, &response))
+	require.NotNil(t, response.Error)
+	require.Equal(t, "内容审核未通过，可能涉及商标或品牌侵权，请修改提示词或参考素材。", response.Error.Message)
+	require.NotContains(t, string(normalized), rawReason)
 }
 
 func TestIsTaskSubmitSuccessStatusAcceptsAny2xx(t *testing.T) {
