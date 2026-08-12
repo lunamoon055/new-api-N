@@ -41,4 +41,57 @@ describe('task failure details visibility', () => {
       upstreamRawError: undefined,
     })
   })
+
+  test('does not retranslate an already-Chinese upstream message', () => {
+    const rawMessage = '内容触发安全审核或版权限制，请调整输入内容或素材后重试'
+
+    assert.deepEqual(
+      getTaskFailureDetails(
+        {
+          fail_reason:
+            '视频生成失败，请稍后重试；如持续失败，请提供任务 ID 联系管理员。',
+          raw_fail_reason: rawMessage,
+        },
+        true
+      ),
+      {
+        downstreamMessage: rawMessage,
+        upstreamRawError: rawMessage,
+      }
+    )
+  })
+
+  test('extracts a Chinese message from a structured upstream error', () => {
+    const rawMessage = JSON.stringify({
+      error: {
+        message: '内容触发安全审核或版权限制，请调整输入内容或素材后重试',
+      },
+    })
+
+    assert.equal(
+      getTaskFailureDetails(
+        {
+          fail_reason:
+            '视频生成失败，请稍后重试；如持续失败，请提供任务 ID 联系管理员。',
+          raw_fail_reason: rawMessage,
+        },
+        true
+      ).downstreamMessage,
+      '内容触发安全审核或版权限制，请调整输入内容或素材后重试'
+    )
+  })
+
+  test('keeps the unified insufficient-credit message', () => {
+    assert.equal(
+      getTaskFailureDetails(
+        {
+          fail_reason:
+            '视频生成失败，请稍后重试；如持续失败，请提供任务 ID 联系管理员。',
+          raw_fail_reason: '上游积分不足，请充值后重试',
+        },
+        true
+      ).downstreamMessage,
+      '积分不足，请联系管理员'
+    )
+  })
 })

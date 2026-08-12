@@ -21,12 +21,7 @@ export type CreationResolution = '480p' | '720p' | '1080p' | '2k' | '4k'
 export type CreationAspectRatio = string
 export type CreationDuration = string
 export type CreationVideoReferenceMode =
-  | 'text'
-  | 'image'
-  | 'video'
-  | 'multimodal'
-  | 'frames'
-  | 'image-audio'
+  'text' | 'image' | 'video' | 'multimodal' | 'frames' | 'image-audio'
 type Sora2AspectRatio = '9:16' | '16:9'
 
 export type CreationVideoOptions = {
@@ -247,7 +242,7 @@ const VIDEOS_API_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
 
 const SEEDANCE_25_REFERENCE_LIMITS: CreationVideoReferenceLimits = {
   maxImages: 30,
-  maxVideos: 10,
+  maxVideos: 0,
   maxAudios: 10,
   maxMediaFiles: 50,
   maxImageSizeBytes: 5 * 1024 * 1024,
@@ -453,7 +448,7 @@ const SEEDANCE_25_API_CAPABILITY: CreationVideoCapability = {
   durations: SEEDANCE_25_DURATIONS,
   resolutions: ['720p', '480p'],
   aspectRatios: ['16:9', '9:16', '1:1'],
-  referenceModes: ['text', 'image', 'video', 'multimodal'],
+  referenceModes: ['text', 'image', 'image-audio'],
   referenceLimits: SEEDANCE_25_REFERENCE_LIMITS,
   uploadTipProfile: 'seedance-2.5',
   showResolution: true,
@@ -1005,11 +1000,18 @@ function normalizeReferenceString(value: string | undefined) {
 
 function normalizeReferenceMode(
   value: CreationVideoReferenceMode | undefined,
-  capability: CreationVideoCapability
+  capability: CreationVideoCapability,
+  model?: CreationModelInput
 ): CreationVideoReferenceMode {
-  return value && capability.referenceModes.includes(value)
-    ? value
-    : (capability.referenceModes[0] ?? 'text')
+  if (value && capability.referenceModes.includes(value)) return value
+  if (
+    isSeedance25Model(model) &&
+    value === 'multimodal' &&
+    capability.referenceModes.includes('image-audio')
+  ) {
+    return 'image-audio'
+  }
+  return capability.referenceModes[0] ?? 'text'
 }
 
 export function normalizeCreationVideoReferences(
@@ -1021,7 +1023,8 @@ export function normalizeCreationVideoReferences(
 
   const referenceMode = normalizeReferenceMode(
     references?.referenceMode,
-    capability
+    capability,
+    model
   )
   const supportsMultiMedia =
     referenceMode === 'multimodal' && capability.referenceLimits.maxAudios > 0
@@ -1646,7 +1649,6 @@ export function getCreationVideoRequestOptions(
     }
     if (isSeedance25Model(model)) {
       if (imageUrls.length) request.referenceImages = imageUrls
-      if (videoUrls.length) request.referenceVideos = videoUrls
       if (audioUrls.length) request.referenceAudios = audioUrls
     } else if (isSeedance2Model(model)) {
       if (normalizedReferences.referenceMode === 'image') {

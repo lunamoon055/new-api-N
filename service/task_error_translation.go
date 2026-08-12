@@ -145,6 +145,92 @@ func extractChineseTaskErrorMessage(rawMessage string) string {
 	return ""
 }
 
+func taskFailureStatusMessage(value any) string {
+	status, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	trimmed := strings.TrimSpace(status)
+	lower := strings.ToLower(trimmed)
+	if !strings.Contains(lower, "fail") && !strings.Contains(lower, "error") {
+		return ""
+	}
+	if separator := strings.Index(trimmed, ":"); separator >= 0 {
+		trimmed = strings.TrimSpace(trimmed[separator+1:])
+	}
+	switch strings.ToLower(trimmed) {
+	case "", "failed", "failure", "error":
+		return ""
+	default:
+		return trimmed
+	}
+}
+
+func findTaskFailureDataMessage(value any, depth int, acceptPlainString bool) string {
+	if depth > 6 || value == nil {
+		return ""
+	}
+
+	switch typed := value.(type) {
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return ""
+		}
+		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, `"`) {
+			var nested any
+			if common.Unmarshal([]byte(trimmed), &nested) == nil {
+				if message := findTaskFailureDataMessage(nested, depth+1, acceptPlainString); message != "" {
+					return message
+				}
+			}
+		}
+		if !acceptPlainString {
+			return ""
+		}
+		return trimmed
+	case map[string]any:
+		for _, key := range []string{"error", "fail_reason", "failure_reason", "message", "msg", "detail", "reason"} {
+			if nested, ok := typed[key]; ok {
+				if message := findTaskFailureDataMessage(nested, depth+1, true); message != "" {
+					return message
+				}
+			}
+		}
+		if status, ok := typed["status"]; ok {
+			if message := taskFailureStatusMessage(status); message != "" {
+				return message
+			}
+		}
+		for _, key := range []string{"data", "response", "result"} {
+			if nested, ok := typed[key]; ok {
+				if message := findTaskFailureDataMessage(nested, depth+1, false); message != "" {
+					return message
+				}
+			}
+		}
+	case []any:
+		for _, nested := range typed {
+			if message := findTaskFailureDataMessage(nested, depth+1, acceptPlainString); message != "" {
+				return message
+			}
+		}
+	}
+
+	return ""
+}
+
+func extractTaskFailureDataMessage(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+	var payload any
+	if common.Unmarshal(data, &payload) != nil {
+		return ""
+	}
+	return sanitizeTaskRawError(findTaskFailureDataMessage(payload, 0, true))
+}
+
 func sanitizeTaskRawError(rawMessage string) string {
 	masked := strings.TrimSpace(common.MaskSensitiveInfo(rawMessage))
 	for _, pattern := range taskErrorSecretPatterns {
@@ -338,6 +424,12 @@ func VideoTaskFailureMessages(task *model.Task) (userMessage string, rawMessage 
 	}
 
 	rawMessage = strings.TrimSpace(task.PrivateData.UpstreamError)
+	if rawMessage == "" {
+		// Older tasks stored the provider response only in Data. Recover its
+		// explicit error/status message so already-Chinese upstream messages are
+		// not replaced by a previously persisted generic translation.
+		rawMessage = extractTaskFailureDataMessage(task.Data)
+	}
 	if rawMessage != "" {
 		translated := TranslateVideoTaskError(rawMessage, "", 0)
 		return translated.Message, rawMessage

@@ -286,3 +286,45 @@ func TestVideoTaskFailureMessagesRepairsPreviouslyTranslatedChineseUpstreamMessa
 	require.Equal(t, upstreamMessage, message)
 	require.Equal(t, upstreamMessage, raw)
 }
+
+func TestVideoTaskFailureMessagesRecoversChineseUpstreamMessageFromHistoricalData(t *testing.T) {
+	rawReason := "内容触发安全审核或版权限制，请调整输入内容或素材后重试"
+	task := &model.Task{
+		Status:     model.TaskStatusFailure,
+		FailReason: "视频生成失败，请稍后重试；如持续失败，请提供任务 ID 联系管理员。",
+		Data: []byte(
+			`{"created_at":1786108415,"status":"FAILED: 内容触发安全审核或版权限制，请调整输入内容或素材后重试"}`,
+		),
+	}
+
+	message, raw := VideoTaskFailureMessages(task)
+
+	require.Equal(t, rawReason, message)
+	require.Equal(t, rawReason, raw)
+}
+
+func TestVideoTaskFailureMessagesKeepsCreditNormalizationForHistoricalChineseData(t *testing.T) {
+	task := &model.Task{
+		Status:     model.TaskStatusFailure,
+		FailReason: "视频生成失败，请稍后重试；如持续失败，请提供任务 ID 联系管理员。",
+		Data:       []byte(`{"error":"上游积分不足，请充值后重试"}`),
+	}
+
+	message, raw := VideoTaskFailureMessages(task)
+
+	require.Equal(t, "积分不足，请联系管理员", message)
+	require.Equal(t, "上游积分不足，请充值后重试", raw)
+}
+
+func TestVideoTaskFailureMessagesIgnoresUnrelatedHistoricalDataStrings(t *testing.T) {
+	task := &model.Task{
+		Status:     model.TaskStatusFailure,
+		FailReason: "视频生成失败，请稍后重试。",
+		Data:       []byte(`{"data":{"status":"failed","video_url":"https://cdn.example.com/failed.mp4"}}`),
+	}
+
+	message, raw := VideoTaskFailureMessages(task)
+
+	require.Equal(t, task.FailReason, message)
+	require.Empty(t, raw)
+}

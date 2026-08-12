@@ -324,7 +324,11 @@ function getReferenceAccept(
   if (mode === 'image' || mode === 'frames') return imageAccept
   if (mode === 'video') return VIDEO_REFERENCE_ACCEPT
   if (mode === 'image-audio') {
-    return [imageAccept, MINIMAX_H3_AUDIO_REFERENCE_ACCEPT].join(',')
+    const audioAccept =
+      profile === 'seedance-2.5'
+        ? AUDIO_REFERENCE_ACCEPT
+        : MINIMAX_H3_AUDIO_REFERENCE_ACCEPT
+    return [imageAccept, audioAccept].join(',')
   }
   return [
     limits.maxImages > 0 ? imageAccept : '',
@@ -372,24 +376,13 @@ function getReferenceUploadTip(
         { imageSize: limits.maxImageSizeMB }
       )
     }
-    if (mode === 'video') {
+    if (mode === 'image-audio') {
       return t(
-        'Seedance 2.5 tip: Upload up to {{videoCount}} MP4 (H.264) videos at 24, 25, or 30 fps. Each video must be 2-30 seconds and no more than {{videoSize}} MB; all reference videos together must not exceed 30 seconds.',
-        {
-          videoCount: limits.maxVideos,
-          videoSize: limits.maxVideoSizeMB,
-        }
-      )
-    }
-    if (mode === 'multimodal') {
-      return t(
-        'Seedance 2.5 tip: Images support JPG, PNG, or WebP, up to {{imageCount}}, {{imageSize}} MB each, recommended 1080p to 4K. Videos support MP4 (H.264) at 24, 25, or 30 fps, up to {{videoCount}}, 2-30 seconds and {{videoSize}} MB each, 30 seconds total. Audio supports MP3 or WAV, up to {{audioCount}}, 2-30 seconds and {{audioSize}} MB each, 30 seconds total.',
+        'Seedance 2.5 tip: Images support JPG, PNG, or WebP, up to {{imageCount}}, {{imageSize}} MB each, recommended 1080p to 4K. Audio supports MP3 or WAV, up to {{audioCount}}, 2-30 seconds and {{audioSize}} MB each, 30 seconds total.',
         {
           imageCount: limits.maxImages,
-          videoCount: limits.maxVideos,
           audioCount: limits.maxAudios,
           imageSize: limits.maxImageSizeMB,
-          videoSize: limits.maxVideoSizeMB,
           audioSize: limits.maxAudioSizeMB,
         }
       )

@@ -192,6 +192,12 @@ describe('Sanbao creation model options', () => {
       '4:3',
       '3:4',
     ])
+    assert.deepEqual(getCreationVideoCapabilities(model)?.referenceModes, [
+      'text',
+      'image',
+      'frames',
+      'multimodal',
+    ])
 
     const options = normalizeCreationVideoOptions(
       { resolution: '480p', duration: '10', aspectRatio: '4:3' },
@@ -249,8 +255,7 @@ describe('Sanbao creation model options', () => {
     assert.deepEqual(capability?.referenceModes, [
       'text',
       'image',
-      'video',
-      'multimodal',
+      'image-audio',
     ])
     assert.deepEqual(capability?.aspectRatios, ['16:9', '9:16', '1:1'])
     assert.deepEqual(
@@ -268,7 +273,7 @@ describe('Sanbao creation model options', () => {
       },
       {
         maxImages: 30,
-        maxVideos: 10,
+        maxVideos: 0,
         maxAudios: 10,
         maxImageSizeMB: 5,
         maxVideoSizeMB: 200,
@@ -278,14 +283,6 @@ describe('Sanbao creation model options', () => {
     assert.deepEqual(
       getCreationDurationOptions(model).map((item) => item.value),
       Array.from({ length: 26 }, (_, index) => String(index + 4))
-    )
-    assert.equal(
-      getCreationVideoReferenceLimits(model).minReferenceVideoDurationSeconds,
-      2
-    )
-    assert.equal(
-      getCreationVideoReferenceLimits(model).maxReferenceVideoDurationSeconds,
-      30
     )
     assert.equal(
       getCreationVideoReferenceLimits(model).minReferenceAudioDurationSeconds,
@@ -320,7 +317,7 @@ describe('Sanbao creation model options', () => {
     )
     assert.deepEqual(
       getCreationVideoRequestOptions(options, model, {
-        referenceMode: 'multimodal',
+        referenceMode: 'image-audio',
         imageUrls: [{ url: 'https://example.com/ref.png' }],
         startImageUrl: '',
         endImageUrl: '',
@@ -334,76 +331,53 @@ describe('Sanbao creation model options', () => {
         resolution: '480p',
         estimateSeconds: 495,
         referenceImages: ['https://example.com/ref.png'],
-        referenceVideos: ['https://example.com/ref.mp4'],
         referenceAudios: ['https://example.com/ref.wav'],
       }
     )
 
-    assert.equal(
-      getCreationVideoReferenceError(model, {
+    const normalizedLegacyVideoReference = normalizeCreationVideoReferences(
+      {
         referenceMode: 'video',
         imageUrls: [],
         startImageUrl: '',
         endImageUrl: '',
-        videoUrls: [
-          {
-            url: 'https://example.com/ref-1.mp4',
-            durationSeconds: 15,
-          },
-          {
-            url: 'https://example.com/ref-2.mp4',
-            durationSeconds: 16,
-          },
-        ],
+        videoUrls: [{ url: 'https://example.com/ref.mp4' }],
         audioUrls: [],
         audioUrl: '',
-      }),
-      'Seedance 2.5 reference videos must not exceed 30 seconds in total.'
+      },
+      model
     )
+    assert.equal(normalizedLegacyVideoReference.referenceMode, 'text')
+    assert.deepEqual(normalizedLegacyVideoReference.videoUrls, [])
+
+    const normalizedLegacyMultimodalReference =
+      normalizeCreationVideoReferences(
+        {
+          referenceMode: 'multimodal',
+          imageUrls: [{ url: 'https://example.com/ref.png' }],
+          startImageUrl: '',
+          endImageUrl: '',
+          videoUrls: [{ url: 'https://example.com/ref.mp4' }],
+          audioUrls: [{ url: 'https://example.com/ref.wav' }],
+          audioUrl: '',
+        },
+        model
+      )
+    assert.equal(
+      normalizedLegacyMultimodalReference.referenceMode,
+      'image-audio'
+    )
+    assert.deepEqual(normalizedLegacyMultimodalReference.imageUrls, [
+      { url: 'https://example.com/ref.png' },
+    ])
+    assert.deepEqual(normalizedLegacyMultimodalReference.videoUrls, [])
+    assert.deepEqual(normalizedLegacyMultimodalReference.audioUrls, [
+      { url: 'https://example.com/ref.wav' },
+    ])
 
     assert.equal(
       getCreationVideoReferenceError(model, {
-        referenceMode: 'video',
-        imageUrls: [],
-        startImageUrl: '',
-        endImageUrl: '',
-        videoUrls: [
-          {
-            url: 'https://example.com/ref-1.mp4',
-            durationSeconds: 15,
-          },
-          {
-            url: 'https://example.com/ref-2.mp4',
-            durationSeconds: 15,
-          },
-        ],
-        audioUrls: [],
-        audioUrl: '',
-      }),
-      undefined
-    )
-
-    assert.equal(
-      getCreationVideoReferenceError(model, {
-        referenceMode: 'video',
-        imageUrls: [],
-        startImageUrl: '',
-        endImageUrl: '',
-        videoUrls: [
-          {
-            url: 'https://example.com/ref.mp4',
-            durationSeconds: 31,
-          },
-        ],
-        audioUrls: [],
-        audioUrl: '',
-      }),
-      'Seedance 2.5 reference videos must be between 2 and 30 seconds each.'
-    )
-
-    assert.equal(
-      getCreationVideoReferenceError(model, {
-        referenceMode: 'multimodal',
+        referenceMode: 'image-audio',
         imageUrls: [],
         startImageUrl: '',
         endImageUrl: '',
@@ -425,7 +399,7 @@ describe('Sanbao creation model options', () => {
 
     assert.equal(
       getCreationVideoReferenceError(model, {
-        referenceMode: 'multimodal',
+        referenceMode: 'image-audio',
         imageUrls: [],
         startImageUrl: '',
         endImageUrl: '',

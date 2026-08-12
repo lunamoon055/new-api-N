@@ -192,6 +192,42 @@ describe('Creation Center video request payload', () => {
     )
   })
 
+  test('never submits video references for Seedance 2.5', () => {
+    assert.deepEqual(
+      buildCreationVideoSubmitRequest({
+        model: createVideoModel('Seedance-2.5'),
+        prompt: '让角色参考图片和音频自然运动',
+        videoOptions: {
+          resolution: '720p',
+          duration: '10',
+          aspectRatio: '16:9',
+        },
+        videoReferences: {
+          referenceMode: 'image-audio',
+          imageUrls: [{ url: 'https://example.com/reference.png' }],
+          startImageUrl: '',
+          endImageUrl: '',
+          videoUrls: [{ url: 'https://example.com/blocked.mp4' }],
+          audioUrls: [{ url: 'https://example.com/reference.wav' }],
+          audioUrl: '',
+        },
+      }),
+      {
+        endpoint: '/api/creation/video/async-generations',
+        payload: {
+          model: 'Seedance-2.5',
+          prompt: '让角色参考图片和音频自然运动',
+          duration: 10,
+          ratio: '16:9',
+          resolution: '720p',
+          referenceImages: ['https://example.com/reference.png'],
+          referenceAudios: ['https://example.com/reference.wav'],
+        },
+        transport: 'async-video',
+      }
+    )
+  })
+
   test('submits the 993 fixed-resolution models without an unsupported resolution field', () => {
     for (const model of ['sd2-1080P(993按秒)', 'sd2-4k(993按秒)']) {
       assert.deepEqual(

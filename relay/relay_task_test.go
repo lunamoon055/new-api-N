@@ -174,6 +174,24 @@ func TestTaskModel2DtoWithInputMaterialsIncludesRootFailureDiagnostics(t *testin
 	require.NotContains(t, string(taskDto.Data), "audio url returned 404")
 }
 
+func TestTaskModel2DtoRecoversHistoricalChineseFailureWithoutRetranslating(t *testing.T) {
+	rawReason := "内容触发安全审核或版权限制，请调整输入内容或素材后重试"
+	task := &model.Task{
+		Platform:   constant.TaskPlatform("1"),
+		Status:     model.TaskStatusFailure,
+		FailReason: "视频生成失败，请稍后重试；如持续失败，请提供任务 ID 联系管理员。",
+		Data:       []byte(`{"status":"FAILED: 内容触发安全审核或版权限制，请调整输入内容或素材后重试"}`),
+	}
+
+	publicDto := TaskModel2Dto(task)
+	rootDto := TaskModel2DtoWithInputMaterials(task)
+
+	require.Equal(t, rawReason, publicDto.FailReason)
+	require.Empty(t, publicDto.RawFailReason)
+	require.Equal(t, rawReason, rootDto.FailReason)
+	require.Equal(t, rawReason, rootDto.RawFailReason)
+}
+
 func TestTaskModel2DtoKeepsNonVideoFailureUnchanged(t *testing.T) {
 	rawReason := "midjourney upstream failed"
 	task := &model.Task{
