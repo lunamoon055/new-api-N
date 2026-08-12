@@ -136,6 +136,31 @@ func TestTranslateVideoTaskErrorMappings(t *testing.T) {
 			statusCode: http.StatusTooManyRequests,
 			expected:   "当前视频服务繁忙，请稍后再试。",
 		},
+		{
+			name:     "plain Chinese provider message passes through",
+			raw:      "参考音频总时长超过 15 秒上限，请裁剪后重试",
+			expected: "参考音频总时长超过 15 秒上限，请裁剪后重试",
+		},
+		{
+			name:     "mixed field name and Chinese provider message passes through",
+			raw:      "audio_urls 共 3 个参考音频，总时长 16.80 秒，超过总和 15 秒上限，请裁剪后重试",
+			expected: "audio_urls 共 3 个参考音频，总时长 16.80 秒，超过总和 15 秒上限，请裁剪后重试",
+		},
+		{
+			name:     "Chinese message is extracted from structured response",
+			raw:      `{"error":{"message":"参考视频总时长超过 30 秒上限，请裁剪后重试","type":"invalid_request_error"}}`,
+			expected: "参考视频总时长超过 30 秒上限，请裁剪后重试",
+		},
+		{
+			name:     "Chinese validation detail is extracted from array",
+			raw:      `{"detail":[{"type":"missing","loc":["prompt"],"msg":"缺少必填字段：prompt"}]}`,
+			expected: "缺少必填字段：prompt",
+		},
+		{
+			name:     "Chinese insufficient credits still uses unified message",
+			raw:      "当前账户积分不足，请充值后重试",
+			expected: "积分不足，请联系管理员",
+		},
 	}
 
 	for _, test := range tests {
@@ -168,6 +193,26 @@ func TestLocalizeVideoTaskErrorDoesNotSerializeRawMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(payload), "image url returned 404")
 	require.Contains(t, string(payload), "参考图片链接不存在或已失效")
+}
+
+func TestLocalizeVideoTaskErrorPreservesReadableChineseProviderMessage(t *testing.T) {
+	raw := "audio_urls 共 3 个参考音频，总时长 16.80 秒，超过总和 15 秒上限，请裁剪后重试"
+	taskError := &dto.TaskError{
+		Code:       "fail_to_fetch_task",
+		Message:    raw,
+		StatusCode: http.StatusBadRequest,
+	}
+
+	LocalizeVideoTaskError(taskError)
+
+	require.Equal(t, raw, taskError.Message)
+	require.Equal(t, raw, taskError.RawMessage)
+	publicData, ok := taskError.Data.(dto.TaskErrorPublicData)
+	require.True(t, ok)
+	require.Equal(t, "upstream_message", publicData.Category)
+	payload, err := common.Marshal(taskError)
+	require.NoError(t, err)
+	require.Contains(t, string(payload), raw)
 }
 
 func TestSetVideoTaskFailureKeepsMaskedRawErrorPrivate(t *testing.T) {
@@ -224,4 +269,20 @@ func TestVideoTaskFailureMessagesDoesNotInventRawErrorForHistoricalLocalizedReas
 
 	require.Equal(t, task.FailReason, message)
 	require.Empty(t, raw)
+}
+
+func TestVideoTaskFailureMessagesRepairsPreviouslyTranslatedChineseUpstreamMessage(t *testing.T) {
+	upstreamMessage := "audio_urls 共 3 个参考音频，总时长 16.80 秒，超过总和 15 秒上限，请裁剪后重试"
+	task := &model.Task{
+		Status:     model.TaskStatusFailure,
+		FailReason: "视频生成失败，请稍后重试；如持续失败，请提供任务 ID 联系管理员。",
+		PrivateData: model.TaskPrivateData{
+			UpstreamError: upstreamMessage,
+		},
+	}
+
+	message, raw := VideoTaskFailureMessages(task)
+
+	require.Equal(t, upstreamMessage, message)
+	require.Equal(t, upstreamMessage, raw)
 }

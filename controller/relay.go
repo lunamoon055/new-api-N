@@ -576,9 +576,6 @@ func RelayTask(c *gin.Context) {
 
 	if taskErr != nil {
 		videoTaskError := isVideoTaskErrorRequest(c)
-		if videoTaskError {
-			service.LocalizeVideoTaskError(taskErr)
-		}
 		if relayInfo.PersistentTaskID > 0 {
 			if refundErr := failPersistentTaskSubmission(c, relayInfo.PersistentTaskID, taskErr, videoTaskError); refundErr != nil {
 				common.SysError("persist failed task refund error: " + refundErr.Error())

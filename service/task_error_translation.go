@@ -85,6 +85,66 @@ func taskErrorSearchText(rawMessage string, code string, statusCode int) string 
 	return strings.ToLower(strings.Join(parts, "\n"))
 }
 
+func findChineseTaskErrorMessage(value any, depth int) string {
+	if depth > 6 || value == nil {
+		return ""
+	}
+
+	switch typed := value.(type) {
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return ""
+		}
+		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, `"`) {
+			var nested any
+			if common.Unmarshal([]byte(trimmed), &nested) == nil {
+				if message := findChineseTaskErrorMessage(nested, depth+1); message != "" {
+					return message
+				}
+			}
+		}
+		if containsHan(trimmed) {
+			return trimmed
+		}
+	case map[string]any:
+		// Prefer human-readable provider fields over codes and metadata.
+		for _, key := range []string{"message", "msg", "detail", "reason", "error"} {
+			if nested, ok := typed[key]; ok {
+				if message := findChineseTaskErrorMessage(nested, depth+1); message != "" {
+					return message
+				}
+			}
+		}
+	case []any:
+		for _, nested := range typed {
+			if message := findChineseTaskErrorMessage(nested, depth+1); message != "" {
+				return message
+			}
+		}
+	}
+
+	return ""
+}
+
+func extractChineseTaskErrorMessage(rawMessage string) string {
+	trimmed := strings.TrimSpace(rawMessage)
+	if trimmed == "" {
+		return ""
+	}
+
+	var payload any
+	if common.Unmarshal([]byte(trimmed), &payload) == nil {
+		if message := findChineseTaskErrorMessage(payload, 0); message != "" {
+			return sanitizeTaskRawError(message)
+		}
+	}
+	if containsHan(trimmed) {
+		return sanitizeTaskRawError(trimmed)
+	}
+	return ""
+}
+
 func sanitizeTaskRawError(rawMessage string) string {
 	masked := strings.TrimSpace(common.MaskSensitiveInfo(rawMessage))
 	for _, pattern := range taskErrorSecretPatterns {
@@ -100,11 +160,11 @@ func sanitizeTaskRawError(rawMessage string) string {
 	return string(runes[:maxStoredTaskRawErrorRunes]) + "\n...[truncated]"
 }
 
-// TranslateVideoTaskError converts provider-specific video errors into stable,
-// customer-facing Chinese messages. The raw upstream text never appears in the
-// returned message.
+// TranslateVideoTaskError preserves already-readable Chinese provider messages
+// and converts non-Chinese provider errors into stable customer-facing text.
 func TranslateVideoTaskError(rawMessage string, code string, statusCode int) TaskErrorTranslation {
 	text := taskErrorSearchText(rawMessage, code, statusCode)
+	chineseMessage := extractChineseTaskErrorMessage(rawMessage)
 
 	switch {
 	case containsAny(text,
@@ -133,6 +193,8 @@ func TranslateVideoTaskError(rawMessage string, code string, statusCode int) Tas
 		"credit balance is too low",
 	):
 		return taskErrorTranslation("积分不足，请联系管理员", "credits", false)
+	case chineseMessage != "":
+		return taskErrorTranslation(chineseMessage, "upstream_message", false)
 
 	case containsAny(text, "image url returned 404", "image_url returned 404"):
 		return taskErrorTranslation("参考图片链接不存在或已失效，请重新上传图片后再试。", "reference_media", false)
@@ -277,11 +339,6 @@ func VideoTaskFailureMessages(task *model.Task) (userMessage string, rawMessage 
 
 	rawMessage = strings.TrimSpace(task.PrivateData.UpstreamError)
 	if rawMessage != "" {
-		if strings.TrimSpace(task.FailReason) != "" &&
-			containsHan(task.FailReason) &&
-			!looksLikeStructuredTaskError(task.FailReason) {
-			return task.FailReason, rawMessage
-		}
 		translated := TranslateVideoTaskError(rawMessage, "", 0)
 		return translated.Message, rawMessage
 	}
