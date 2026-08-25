@@ -370,6 +370,10 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, summary.Quota)
 	}
 
+	// Compatibility clients consume the exact settled quota through a stable
+	// response header. The idempotency middleware buffers media responses until
+	// this final (including tiered billing) value is available.
+	ctx.Set("creation_actual_quota", summary.Quota)
 	if err := SettleBilling(ctx, relayInfo, summary.Quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}

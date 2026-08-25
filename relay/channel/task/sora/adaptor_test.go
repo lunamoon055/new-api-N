@@ -126,19 +126,31 @@ func TestBuildRequestURLKeepsVideos4CatalogModelsOnStandardEndpoint(t *testing.T
 
 func TestBuildRequestURLUsesVideosAPIForSeedanceAlias(t *testing.T) {
 	adaptor := &TaskAdaptor{baseURL: "https://api.example.com"}
-	info := &relaycommon.RelayInfo{
-		OriginModelName: "(线路3)sd-2.0-933",
-		RequestURLPath:  "/v1/video/async-generations",
-		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
-		ChannelMeta: &relaycommon.ChannelMeta{
-			UpstreamModelName: "sd-2-c8",
-		},
+	for _, test := range []struct {
+		name          string
+		originModel   string
+		upstreamModel string
+	}{
+		{name: "933 alias", originModel: "(线路3)sd-2.0-933", upstreamModel: "sd-2-c8"},
+		{name: "fast alias", originModel: "(线路3)sd-2.0-fast", upstreamModel: "sd-2-c6"},
+		{name: "documented c-series model", originModel: "sd-2-c1", upstreamModel: "sd-2-c1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				OriginModelName: test.originModel,
+				RequestURLPath:  "/v1/video/async-generations",
+				TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+				ChannelMeta: &relaycommon.ChannelMeta{
+					UpstreamModelName: test.upstreamModel,
+				},
+			}
+
+			got, err := adaptor.BuildRequestURL(info)
+
+			require.NoError(t, err)
+			require.Equal(t, "https://api.example.com/v1/videos", got)
+		})
 	}
-
-	got, err := adaptor.BuildRequestURL(info)
-
-	require.NoError(t, err)
-	require.Equal(t, "https://api.example.com/v1/videos", got)
 }
 
 func TestSeedance25UsesDocumentedFlatRequestBody(t *testing.T) {
@@ -360,6 +372,43 @@ func TestSeedanceRequestUsesDocumentedNestedBody(t *testing.T) {
 		{Type: "reference_video", URL: "https://cdn.example/ref.mp4"},
 		{Type: "reference_voice", URL: "https://cdn.example/ref.mp3"},
 	}, got.Input.Media)
+}
+
+func TestFastSeedanceMappingUsesDocumentedNestedBody(t *testing.T) {
+	c := newVideo2JSONContext(t, `{
+		"model":"(线路3)sd-2.0-fast",
+		"prompt":"小猫玩耍",
+		"duration":15,
+		"ratio":"16:9",
+		"resolution":"720p"
+	}`)
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "(线路3)sd-2.0-fast",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "sd-2-c6",
+		},
+	}
+	adaptor := &TaskAdaptor{baseURL: "https://api.meaicc.com"}
+
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	requestURL, err := adaptor.BuildRequestURL(info)
+	require.NoError(t, err)
+	require.Equal(t, "https://api.meaicc.com/v1/videos", requestURL)
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+
+	var got seedance2Request
+	require.NoError(t, common.Unmarshal(encoded, &got))
+	require.Equal(t, "sd-2-c6", got.Model)
+	require.Equal(t, "小猫玩耍", got.Input.Prompt)
+	require.Empty(t, got.Input.Media)
+	require.Equal(t, "720p", got.Parameters.Resolution)
+	require.Equal(t, "16:9", got.Parameters.Ratio)
+	require.NotNil(t, got.Parameters.Duration)
+	require.Equal(t, 15, *got.Parameters.Duration)
 }
 
 func TestFetchTaskUsesAsyncGenerationsForSora2(t *testing.T) {

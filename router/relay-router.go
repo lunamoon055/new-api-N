@@ -59,6 +59,30 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 	}
 
+	creationV1Router := router.Group("/v1/creation")
+	creationV1Router.Use(middleware.RouteTag("relay"))
+	creationV1Router.Use(middleware.SystemPerformanceCheck())
+	creationV1Router.Use(middleware.TokenAuth())
+	creationV1Router.Use(middleware.ModelRequestRateLimit())
+	{
+		creationV1Router.GET("/models", controller.GetCreationTokenModels)
+		creationV1Router.POST(
+			"/images/generations",
+			middleware.CreationIdempotency(),
+			rewriteCreationCompatibilityPath("/v1/images/generations"),
+			middleware.Distribute(),
+			controller.CreationTokenRelayImage,
+		)
+		creationV1Router.POST(
+			"/video/async-generations",
+			middleware.CreationIdempotency(),
+			rewriteCreationCompatibilityPath("/v1/video/async-generations"),
+			middleware.Distribute(),
+			controller.CreationTokenRelayTask,
+		)
+		creationV1Router.GET("/tasks/:task_id", controller.GetCreationTask)
+	}
+
 	playgroundRouter := router.Group("/pg")
 	playgroundRouter.Use(middleware.RouteTag("relay"))
 	playgroundRouter.Use(middleware.SystemPerformanceCheck())
@@ -197,6 +221,20 @@ func SetRelayRouter(router *gin.Engine) {
 		relayGeminiRouter.POST("/models/*path", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatGemini)
 		})
+	}
+}
+
+func rewriteCreationCompatibilityPath(path string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		originalPath := c.Request.URL.Path
+		originalRawPath := c.Request.URL.RawPath
+		c.Request.URL.Path = path
+		c.Request.URL.RawPath = ""
+		defer func() {
+			c.Request.URL.Path = originalPath
+			c.Request.URL.RawPath = originalRawPath
+		}()
+		c.Next()
 	}
 }
 

@@ -9,9 +9,29 @@ type CreationModel struct {
 	Icon                   string                  `json:"icon,omitempty"`
 	Tags                   []string                `json:"tags,omitempty"`
 	VendorID               int                     `json:"vendor_id,omitempty"`
+	QuotaPerUnit           int                     `json:"quota_per_unit"`
 	Cost                   *CreationModelCost      `json:"cost,omitempty"`
 	Metadata               *CreationModelMetadata  `json:"metadata,omitempty"`
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
+}
+
+type CreationTaskError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type CreationTask struct {
+	TaskID        string             `json:"task_id"`
+	RequestID     string             `json:"request_id,omitempty"`
+	Status        string             `json:"status"`
+	Progress      *int               `json:"progress"`
+	ResultURL     string             `json:"result_url,omitempty"`
+	ResultType    string             `json:"result_type,omitempty"`
+	Error         *CreationTaskError `json:"error,omitempty"`
+	ActualQuota   int                `json:"actual_quota"`
+	BillingStatus string             `json:"billing_status"`
+	CreatedAt     int64              `json:"created_at"`
+	UpdatedAt     int64              `json:"updated_at"`
 }
 
 type CreationModelMetadata struct {

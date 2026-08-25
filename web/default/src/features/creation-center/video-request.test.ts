@@ -151,6 +151,31 @@ describe('Creation Center video request payload', () => {
     )
   })
 
+  test('routes the fast Seedance mapping through the videos api contract', () => {
+    assert.deepEqual(
+      buildCreationVideoSubmitRequest({
+        model: createVideoModel('(线路3)sd-2.0-fast'),
+        prompt: '小猫玩耍',
+        videoOptions: {
+          resolution: '720p',
+          duration: '15',
+          aspectRatio: '16:9',
+        },
+      }),
+      {
+        endpoint: '/api/creation/video/async-generations',
+        payload: {
+          model: '(线路3)sd-2.0-fast',
+          prompt: '小猫玩耍',
+          duration: 15,
+          ratio: '16:9',
+          resolution: '720p',
+        },
+        transport: 'async-video',
+      }
+    )
+  })
+
   test('routes Seedance 2.5 through the documented flat videos interface', () => {
     assert.deepEqual(
       buildCreationVideoSubmitRequest({

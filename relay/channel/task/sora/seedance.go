@@ -68,12 +68,25 @@ type seedance25Request struct {
 // isSeedance2ModelName identifies configured Seedance 2.x display aliases and
 // mapped model names used by OpenAI-compatible upstream channels.
 func isSeedance2ModelName(modelName string) bool {
-	switch normalizeVideosModelName(modelName) {
-	case "sd-2.0-933", "sd-2-c8", "seedance-2.0", "seedance-2.5":
+	normalized := normalizeVideosModelName(modelName)
+	switch normalized {
+	case "seedance-2.0", "seedance-2.5":
 		return true
-	default:
+	}
+	return strings.HasPrefix(normalized, "sd-2.0-") || isSeedance2CSeriesModelName(normalized)
+}
+
+func isSeedance2CSeriesModelName(modelName string) bool {
+	suffix := strings.TrimPrefix(modelName, "sd-2-c")
+	if suffix == "" || suffix == modelName {
 		return false
 	}
+	for _, value := range suffix {
+		if value < '0' || value > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func isSeedance25ModelName(modelName string) bool {

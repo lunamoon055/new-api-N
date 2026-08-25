@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -570,6 +571,8 @@ func RelayTask(c *gin.Context) {
 			common.SysError("complete task submission error: " + completeErr.Error())
 			taskErr = service.TaskErrorWrapperLocal(completeErr, "complete_task_submission_failed", http.StatusInternalServerError)
 		} else {
+			c.Set("creation_actual_quota", result.Quota)
+			c.Header("X-Oneapi-Actual-Quota", strconv.Itoa(result.Quota))
 			service.LogTaskConsumption(c, relayInfo)
 		}
 	}

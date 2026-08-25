@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -144,6 +147,114 @@ func GetCreationModels(c *gin.Context) {
 	))
 }
 
+// GetCreationTokenModels exposes the existing dynamic catalog to service-token
+// clients while deliberately limiting this compatibility surface to media.
+func GetCreationTokenModels(c *gin.Context) {
+	mode := strings.ToLower(strings.TrimSpace(c.Query("mode")))
+	if mode != creationModeImage && mode != creationModeVideo {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"type":    "invalid_request_error",
+				"code":    "invalid_mode",
+				"message": "mode must be image or video",
+			},
+		})
+		return
+	}
+	GetCreationModels(c)
+}
+
+func creationTaskStatus(status model.TaskStatus) string {
+	switch status {
+	case model.TaskStatusSuccess:
+		return "succeeded"
+	case model.TaskStatusFailure:
+		return "failed"
+	case model.TaskStatusInProgress:
+		return "running"
+	default:
+		return "queued"
+	}
+}
+
+func creationTaskProgress(value string) *int {
+	value = strings.TrimSuffix(strings.TrimSpace(value), "%")
+	if value == "" {
+		return nil
+	}
+	progress, err := strconv.Atoi(value)
+	if err != nil {
+		return nil
+	}
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 100 {
+		progress = 100
+	}
+	return &progress
+}
+
+func safeCreationResultURL(value string) string {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || net.ParseIP(parsed.Hostname()) != nil {
+		return ""
+	}
+	return parsed.String()
+}
+
+func creationTaskFailure(task *model.Task) *dto.CreationTaskError {
+	if task == nil || task.Status != model.TaskStatusFailure {
+		return nil
+	}
+	message := "生成任务失败，请稍后重试。"
+	if task.Platform != constant.TaskPlatformSuno && task.Platform != constant.TaskPlatformMidjourney {
+		if translated, _ := service.VideoTaskFailureMessages(task); strings.TrimSpace(translated) != "" {
+			message = translated
+		}
+	}
+	return &dto.CreationTaskError{Code: "provider_failed", Message: message}
+}
+
+// GetCreationTask returns only the fields required by downstream workflow
+// clients. Raw upstream errors, provider credentials and internal channel data
+// are intentionally excluded.
+func GetCreationTask(c *gin.Context) {
+	taskID := strings.TrimSpace(c.Param("task_id"))
+	task, exists, err := model.GetByTaskId(c.GetInt("id"), taskID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "task_query_failed", "message": "unable to query task"}})
+		return
+	}
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "task_not_found", "message": "task not found"}})
+		return
+	}
+
+	resultType := "video"
+	resultURL := ""
+	if task.Action == "imageGenerate" {
+		resultType = "image"
+		if task.Status == model.TaskStatusSuccess {
+			resultURL = safeCreationResultURL(task.GetResultURL())
+		}
+	}
+	c.Header("X-Oneapi-Actual-Quota", strconv.Itoa(task.Quota))
+	common.ApiSuccess(c, dto.CreationTask{
+		TaskID:        task.TaskID,
+		RequestID:     task.PrivateData.RequestId,
+		Status:        creationTaskStatus(task.Status),
+		Progress:      creationTaskProgress(task.Progress),
+		ResultURL:     resultURL,
+		ResultType:    resultType,
+		Error:         creationTaskFailure(task),
+		ActualQuota:   task.Quota,
+		BillingStatus: strings.ToLower(string(task.BillingStatus)),
+		CreatedAt:     task.CreatedAt,
+		UpdatedAt:     task.UpdatedAt,
+	})
+}
+
 func CreationRelayImage(c *gin.Context) {
 	if newAPIError := setupCreationRelayContext(c, "creation-image"); newAPIError != nil {
 		respondCreationRelayError(c, newAPIError)
@@ -176,6 +287,27 @@ func CreationRelayTask(c *gin.Context) {
 
 func CreationRelayTaskFetch(c *gin.Context) {
 	RelayTaskFetch(c)
+}
+
+// CreationTokenRelayImage/Task reuse the established provider-specific media
+// conversion without replacing the real API token context prepared by
+// TokenAuth. Existing /v1 routes remain untouched.
+func CreationTokenRelayImage(c *gin.Context) {
+	if shouldUseSanbaoCreationTaskRelay(c) {
+		applySanbaoCreationTaskRelayContext(c)
+		c.Request.URL.Path = "/pg/images/generations"
+		RelayTask(c)
+		return
+	}
+	Relay(c, types.RelayFormatOpenAIImage)
+}
+
+func CreationTokenRelayTask(c *gin.Context) {
+	if shouldUseSanbaoCreationTaskRelay(c) {
+		applySanbaoCreationTaskRelayContext(c)
+		c.Request.URL.Path = "/pg/video/async-generations"
+	}
+	RelayTask(c)
 }
 
 func setupCreationRelayContext(c *gin.Context, tokenPrefix string) *types.NewAPIError {
@@ -333,6 +465,7 @@ func buildCreationModelCatalogWithCategoriesAndMetadata(
 			responseMetadata = &meta
 		}
 
+		cost := buildCreationModelCost(item, groupRatio)
 		modelsByMode[mode] = append(modelsByMode[mode], dto.CreationModel{
 			ID:                     item.ModelName,
 			Description:            description,
@@ -340,7 +473,8 @@ func buildCreationModelCatalogWithCategoriesAndMetadata(
 			Icon:                   item.Icon,
 			Tags:                   mergeCreationModelTags(splitCreationModelTags(item.Tags), metadataTags),
 			VendorID:               item.VendorID,
-			Cost:                   buildCreationModelCost(item, groupRatio),
+			QuotaPerUnit:           creationModelQuotaPerUnit(cost),
+			Cost:                   cost,
 			Metadata:               responseMetadata,
 			SupportedEndpointTypes: item.SupportedEndpointTypes,
 		})
@@ -400,6 +534,22 @@ func buildCreationModelCatalogWithCategoriesAndMetadata(
 		Modes:   groups,
 		Vendors: catalogVendors,
 	}
+}
+
+func creationModelQuotaPerUnit(cost *dto.CreationModelCost) int {
+	if cost == nil {
+		return 0
+	}
+	if cost.RequestQuota != nil && *cost.RequestQuota > 0 {
+		return *cost.RequestQuota
+	}
+	minimum := 0
+	for _, quota := range cost.VideoResolutionQuotas {
+		if quota > 0 && (minimum == 0 || quota < minimum) {
+			minimum = quota
+		}
+	}
+	return minimum
 }
 
 func getCreationCatalogGroupRatio(userGroup string) float64 {

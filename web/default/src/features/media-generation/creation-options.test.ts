@@ -247,6 +247,29 @@ describe('Sanbao creation model options', () => {
     )
   })
 
+  test('supports the fast Seedance 2.0 alias and mapped c-series model', () => {
+    for (const model of [
+      '(线路3)sd-2.0-fast',
+      {
+        id: '(线路3)sd-2.0-fast',
+        metadata: { upstream_model_id: 'sd-2-c6' },
+      },
+      'sd-2-c1',
+    ]) {
+      const capability = getCreationVideoCapabilities(model)
+
+      assert.equal(capability?.kind, 'videos')
+      assert.deepEqual(capability?.resolutions, ['720p'])
+      assert.deepEqual(capability?.aspectRatios, [
+        '16:9',
+        '9:16',
+        '1:1',
+        '4:3',
+        '3:4',
+      ])
+    }
+  })
+
   test('pairs Seedance 2.5 with the Seedance upload controls and request fields', () => {
     const model = 'Seedance-2.5'
     const capability = getCreationVideoCapabilities(model)

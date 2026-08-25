@@ -21,7 +21,12 @@ export type CreationResolution = '480p' | '720p' | '1080p' | '2k' | '4k'
 export type CreationAspectRatio = string
 export type CreationDuration = string
 export type CreationVideoReferenceMode =
-  'text' | 'image' | 'video' | 'multimodal' | 'frames' | 'image-audio'
+  | 'text'
+  | 'image'
+  | 'video'
+  | 'multimodal'
+  | 'frames'
+  | 'image-audio'
 type Sora2AspectRatio = '9:16' | '16:9'
 
 export type CreationVideoOptions = {
@@ -643,11 +648,14 @@ function isMiniMaxH3Model(model?: CreationModelInput) {
 }
 
 function isSeedance2Model(model?: CreationModelInput) {
-  return getCreationModelIdCandidates(model).some((candidate) =>
-    ['sd-2.0-933', 'sd-2-c8', 'seedance-2.0', 'seedance-2.5'].includes(
-      candidate
+  return getCreationModelIdCandidates(model).some((candidate) => {
+    return (
+      candidate === 'seedance-2.0' ||
+      candidate === 'seedance-2.5' ||
+      candidate.startsWith('sd-2.0-') ||
+      /^sd-2-c\d+$/u.test(candidate)
     )
-  )
+  })
 }
 
 function isSeedance25Model(model?: CreationModelInput) {
@@ -799,6 +807,7 @@ export function getCreationVideoCapabilities(model?: CreationModelInput) {
     const capability = VIDEO_CAPABILITIES[candidate]
     if (capability) return capability
   }
+  if (isSeedance2Model(model)) return SEEDANCE_2_API_CAPABILITY
   return undefined
 }
 
