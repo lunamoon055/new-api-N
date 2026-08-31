@@ -116,6 +116,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 	if err != nil {
 		return fmt.Errorf("read response failed for task %s: %w", taskId, err)
 	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("poll upstream returned status %d for task %s", resp.StatusCode, taskId)
+	}
 
 	logger.LogDebug(ctx, "UpdateVideoSingleTask response bytes: %d", len(responseBody))
 

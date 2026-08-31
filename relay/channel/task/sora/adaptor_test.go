@@ -18,6 +18,11 @@ import (
 func TestModelListIncludesSupportedVideoModels(t *testing.T) {
 	require.Contains(t, ModelList, "sora2")
 	require.Contains(t, ModelList, "minimax-h3")
+	require.Contains(t, ModelList, "minimax-h3-768p")
+	require.Contains(t, ModelList, "minimax-h3-4k")
+	require.Contains(t, ModelList, "wan3.0-480p")
+	require.Contains(t, ModelList, "wan3.0-720p")
+	require.Contains(t, ModelList, "wan3.0-1080p")
 	require.Contains(t, ModelList, "video-2.0")
 	require.Contains(t, ModelList, "video-2.0-fast")
 	require.Contains(t, ModelList, "video-2.0-mini")
@@ -80,6 +85,28 @@ func TestBuildRequestURLUsesAsyncGenerationsForLinkskyDocPath(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "https://linksky.top/v1/video/async-generations", got)
+}
+
+func TestBuildRequestURLUsesAsyncFamilyFromOriginWhenModelIsMapped(t *testing.T) {
+	adaptor := &TaskAdaptor{baseURL: "https://linksky.top"}
+	for _, modelName := range []string{"minimax-h3-768p", "minimax-h3-4k", "wan3.0-1080p"} {
+		t.Run(modelName, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				OriginModelName: modelName,
+				RequestURLPath:  "/pg/video/async-generations",
+				TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+				ChannelMeta: &relaycommon.ChannelMeta{
+					UpstreamModelName: "provider-specific-video",
+				},
+			}
+
+			got, err := adaptor.BuildRequestURL(info)
+
+			require.NoError(t, err)
+			require.Equal(t, "https://linksky.top/v1/video/async-generations", got)
+			require.Equal(t, "/v1/video/async-generations", info.UpstreamEndpoint)
+		})
+	}
 }
 
 func TestBuildRequestURLKeepsVideosApiModelOnStandardEndpoint(t *testing.T) {
@@ -485,6 +512,13 @@ func TestFetchTaskUsesAsyncGenerationsForLinkskyVideoModels(t *testing.T) {
 		"video-2.5",
 		"video-2.5-480p",
 		"minimax-h3",
+		"minimax-h3-480p",
+		"minimax-h3-768p",
+		"minimax-h3-2k",
+		"minimax-h3-4k",
+		"wan3.0-480p",
+		"wan3.0-720p",
+		"wan3.0-1080p",
 		"ko3",
 		"veo31",
 		"veo31-fast",
@@ -512,6 +546,70 @@ func TestFetchTaskUsesAsyncGenerationsForLinkskyVideoModels(t *testing.T) {
 			require.Equal(t, "/v1/video/async-generations/task_upstream", gotPath)
 		})
 	}
+}
+
+func TestConfiguredModelsPollCompletedTaskFromSameAsyncEndpoint(t *testing.T) {
+	models := []string{
+		"video-2.5",
+		"video-2.5-480p",
+		"minimax-h3-768p",
+		"minimax-h3-4k",
+		"wan3.0-480p",
+		"wan3.0-720p",
+		"wan3.0-1080p",
+	}
+	for _, modelName := range models {
+		t.Run(modelName, func(t *testing.T) {
+			var gotPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{
+					"id":"task_upstream",
+					"status":"completed",
+					"video_url":"https://cdn.example/video.mp4"
+				}`))
+			}))
+			t.Cleanup(server.Close)
+
+			adaptor := &TaskAdaptor{}
+			resp, err := adaptor.FetchTask(server.URL, "sk-test", map[string]any{
+				"task_id":           "task_upstream",
+				"model":             modelName,
+				"upstream_endpoint": "/v1/video/async-generations",
+			}, "")
+			require.NoError(t, err)
+			require.Equal(t, "/v1/video/async-generations/task_upstream", gotPath)
+			responseBody, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+
+			result, err := adaptor.ParseTaskResult(responseBody)
+			require.NoError(t, err)
+			require.Equal(t, string(model.TaskStatusSuccess), result.Status)
+			require.Equal(t, "https://cdn.example/video.mp4", result.Url)
+		})
+	}
+}
+
+func TestFetchTaskPrefersPersistedEndpointOverModelGuess(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"task_upstream","status":"completed"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	resp, err := (&TaskAdaptor{}).FetchTask(server.URL, "sk-test", map[string]any{
+		"task_id":           "task_upstream",
+		"model":             "minimax-h3-4k",
+		"upstream_endpoint": "/v1/videos",
+	}, "")
+
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, "/v1/videos/task_upstream", gotPath)
 }
 
 func TestFetchTaskUsesOriginModelWhenUpstreamModelIsMapped(t *testing.T) {

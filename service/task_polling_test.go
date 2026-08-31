@@ -20,6 +20,74 @@ type sunoPollingTestAdaptor struct {
 	responseBody string
 }
 
+type videoPollingHTTPErrorAdaptor struct {
+	parseCalled bool
+}
+
+func (a *videoPollingHTTPErrorAdaptor) Init(_ *relaycommon.RelayInfo) {}
+
+func (a *videoPollingHTTPErrorAdaptor) FetchTask(string, string, map[string]any, string) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusBadGateway,
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"temporary gateway error"}}`)),
+	}, nil
+}
+
+func (a *videoPollingHTTPErrorAdaptor) ParseTaskResult([]byte) (*relaycommon.TaskInfo, error) {
+	a.parseCalled = true
+	return relaycommon.FailTaskInfo("must not be parsed"), nil
+}
+
+func (a *videoPollingHTTPErrorAdaptor) AdjustBillingOnComplete(*model.Task, *relaycommon.TaskInfo) int {
+	return 0
+}
+
+func TestBuildVideoTaskFetchBodyIncludesPersistedEndpoint(t *testing.T) {
+	task := &model.Task{
+		PrivateData: model.TaskPrivateData{
+			UpstreamTaskID:   "task_upstream",
+			UpstreamEndpoint: "/v1/video/async-generations",
+		},
+		Properties: model.Properties{
+			OriginModelName:   "minimax-h3-4k",
+			UpstreamModelName: "provider-specific-video",
+		},
+	}
+
+	body := buildVideoTaskFetchBody(task)
+
+	require.Equal(t, "task_upstream", body["task_id"])
+	require.Equal(t, "provider-specific-video", body["model"])
+	require.Equal(t, "minimax-h3-4k", body["origin_model"])
+	require.Equal(t, "/v1/video/async-generations", body["upstream_endpoint"])
+}
+
+func TestUpdateVideoSingleTaskDoesNotFailTaskOnPollingHTTPError(t *testing.T) {
+	adaptor := &videoPollingHTTPErrorAdaptor{}
+	task := &model.Task{
+		TaskID:   "task_public",
+		Status:   model.TaskStatusInProgress,
+		Progress: "30%",
+		PrivateData: model.TaskPrivateData{
+			UpstreamTaskID: "task_upstream",
+		},
+	}
+
+	err := updateVideoSingleTask(
+		context.Background(),
+		adaptor,
+		&model.Channel{Type: constant.ChannelTypeOpenAI, Key: "sk-test"},
+		"task_upstream",
+		map[string]*model.Task{"task_upstream": task},
+	)
+
+	require.ErrorContains(t, err, "status 502")
+	require.False(t, adaptor.parseCalled)
+	require.Equal(t, model.TaskStatus(model.TaskStatusInProgress), task.Status)
+	require.Equal(t, "30%", task.Progress)
+	require.Empty(t, task.FailReason)
+}
+
 func (a *sunoPollingTestAdaptor) Init(_ *relaycommon.RelayInfo) {}
 
 func (a *sunoPollingTestAdaptor) FetchTask(string, string, map[string]any, string) (*http.Response, error) {

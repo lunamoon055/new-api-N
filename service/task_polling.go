@@ -443,6 +443,13 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if err != nil {
 		return fmt.Errorf("read response failed for task %s: %w", taskId, err)
 	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		// A polling transport/API error is not a terminal generation result. The
+		// upstream job may still be running or already completed, so keep the local
+		// task pending and retry on the next cycle. Only a parsed task-level failed
+		// status is allowed to transition billing and lifecycle to FAILURE.
+		return fmt.Errorf("poll upstream returned status %d for task %s", resp.StatusCode, taskId)
+	}
 
 	logger.LogDebug(ctx, "updateVideoSingleTask response bytes: %d", len(responseBody))
 
@@ -573,6 +580,9 @@ func buildVideoTaskFetchBody(task *model.Task) map[string]any {
 		if _, ok := body["model"]; !ok {
 			body["model"] = task.Properties.OriginModelName
 		}
+	}
+	if task.PrivateData.UpstreamEndpoint != "" {
+		body["upstream_endpoint"] = task.PrivateData.UpstreamEndpoint
 	}
 	return body
 }

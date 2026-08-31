@@ -199,16 +199,17 @@ func isAsyncGenerationsVideoTask(task *model.Task) bool {
 	if task == nil {
 		return false
 	}
+	if strings.HasPrefix(strings.TrimSpace(task.PrivateData.UpstreamEndpoint), "/v1/video/async-generations") {
+		return true
+	}
+	if strings.HasPrefix(strings.TrimSpace(task.PrivateData.UpstreamEndpoint), "/v1/videos") {
+		return false
+	}
 	for _, modelName := range []string{
 		task.Properties.UpstreamModelName,
 		task.Properties.OriginModelName,
 	} {
-		normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
-		if isVideo2ModelName(normalizedModelName) {
-			return true
-		}
-		switch normalizedModelName {
-		case "sora2", "sora-2", "kling-v3", "ko3", "veo31", "veo31-fast", "veo31-ref", "grok-imagine-video":
+		if isOpenAIAsyncVideoModelName(modelName) {
 			return true
 		}
 	}

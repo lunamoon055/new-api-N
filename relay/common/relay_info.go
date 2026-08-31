@@ -661,6 +661,10 @@ func (info *RelayInfo) HasSendResponse() bool {
 type TaskRelayInfo struct {
 	Action       string
 	OriginTaskID string
+	// UpstreamEndpoint records the provider endpoint selected during submission.
+	// Polling and content proxying must reuse it instead of guessing solely from
+	// the model name, because providers may expose resolution-specific aliases.
+	UpstreamEndpoint string
 	// PublicTaskID 是提交时预生成的 task_xxxx 格式公开 ID，
 	// 供 DoResponse 在返回给客户端时使用（避免暴露上游真实 ID）。
 	PublicTaskID string

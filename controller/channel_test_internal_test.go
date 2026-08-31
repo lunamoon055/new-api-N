@@ -48,6 +48,30 @@ func TestResolveChannelTestEndpointUsesAsyncVideoForJRVideo25Models(t *testing.T
 	}
 }
 
+func TestResolveChannelTestEndpointUsesAsyncVideoForConfiguredModels(t *testing.T) {
+	for _, modelName := range []string{
+		"video-2.5",
+		"video-2.5-480p",
+		"minimax-h3-768p",
+		"minimax-h3-4k",
+		"wan3.0-480p",
+		"wan3.0-720p",
+		"wan3.0-1080p",
+	} {
+		t.Run(modelName, func(t *testing.T) {
+			endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(
+				&model.Channel{Type: constant.ChannelTypeOpenAI, Models: modelName},
+				modelName,
+				"",
+			)
+
+			require.Equal(t, channelTestEndpointOpenAIVideoAsync, endpointType)
+			require.Equal(t, "/v1/video/async-generations", requestPath)
+			require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
+		})
+	}
+}
+
 func TestResolveChannelTestEndpointUsesStandardOpenAIVideosForSeedance(t *testing.T) {
 	channel := &model.Channel{
 		Type:   constant.ChannelTypeOpenAI,
@@ -174,6 +198,27 @@ func TestBuildTestRequestUses480pPayloadForJRVideo25FixedModel(t *testing.T) {
 	require.Equal(t, "video-2.5-480p", videoRequest.Model)
 	require.Equal(t, "496x864", videoRequest.Size)
 	require.Equal(t, 4, videoRequest.Duration)
+}
+
+func TestBuildTestRequestUsesSafePayloadForFixedResolutionAsyncFamilies(t *testing.T) {
+	for _, modelName := range []string{
+		"minimax-h3-768p",
+		"minimax-h3-4k",
+		"wan3.0-480p",
+		"wan3.0-720p",
+		"wan3.0-1080p",
+	} {
+		t.Run(modelName, func(t *testing.T) {
+			request := buildTestRequest(modelName, channelTestEndpointOpenAIVideoAsync, &model.Channel{}, false)
+
+			require.IsType(t, relaycommon.TaskSubmitReq{}, request)
+			videoRequest := request.(relaycommon.TaskSubmitReq)
+			require.Equal(t, modelName, videoRequest.Model)
+			require.Equal(t, 5, videoRequest.Duration)
+			require.Empty(t, videoRequest.Size)
+			require.Empty(t, videoRequest.Resolution)
+		})
+	}
 }
 
 func TestResolveChannelTestEndpointUsesOpenAIVideoForVideosApiModels(t *testing.T) {

@@ -226,6 +226,11 @@ func TestIsAsyncGenerationsVideoTaskIncludesLinkskyModels(t *testing.T) {
 		"video-2.0-mini-480p",
 		"video-2.5",
 		"video-2.5-480p",
+		"minimax-h3-768p",
+		"minimax-h3-4k",
+		"wan3.0-480p",
+		"wan3.0-720p",
+		"wan3.0-1080p",
 		"ko3",
 		"veo31",
 		"veo31-fast",
@@ -242,4 +247,15 @@ func TestIsAsyncGenerationsVideoTaskIncludesLinkskyModels(t *testing.T) {
 			require.True(t, isAsyncGenerationsVideoTask(task))
 		})
 	}
+}
+
+func TestIsAsyncGenerationsVideoTaskPrefersPersistedEndpoint(t *testing.T) {
+	require.True(t, isAsyncGenerationsVideoTask(&model.Task{
+		PrivateData: model.TaskPrivateData{UpstreamEndpoint: "/v1/video/async-generations"},
+		Properties:  model.Properties{OriginModelName: "provider-specific-video"},
+	}))
+	require.False(t, isAsyncGenerationsVideoTask(&model.Task{
+		PrivateData: model.TaskPrivateData{UpstreamEndpoint: "/v1/videos"},
+		Properties:  model.Properties{OriginModelName: "minimax-h3-4k"},
+	}))
 }

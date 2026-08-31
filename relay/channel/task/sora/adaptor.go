@@ -95,13 +95,23 @@ type TaskAdaptor struct {
 	baseURL     string
 }
 
+func isMiniMaxH3Model(modelName string) bool {
+	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
+	return normalizedModelName == "minimax-h3" || strings.HasPrefix(normalizedModelName, "minimax-h3-")
+}
+
+func isWan30Model(modelName string) bool {
+	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
+	return normalizedModelName == "wan3.0" || strings.HasPrefix(normalizedModelName, "wan3.0-")
+}
+
 func isAsyncGenerationsModel(modelName string) bool {
 	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
-	if isVideo2Model(normalizedModelName) {
+	if isVideo2Model(normalizedModelName) || isMiniMaxH3Model(normalizedModelName) || isWan30Model(normalizedModelName) {
 		return true
 	}
 	switch normalizedModelName {
-	case "sora2", "sora-2", "minimax-h3", "kling-v3", "ko3", "veo31", "veo31-fast", "veo31-ref", "grok-imagine-video":
+	case "sora2", "sora-2", "kling-v3", "ko3", "veo31", "veo31-fast", "veo31-ref", "grok-imagine-video":
 		return true
 	default:
 		return false
@@ -110,6 +120,12 @@ func isAsyncGenerationsModel(modelName string) bool {
 
 func isAsyncGenerationsPath(path string) bool {
 	return strings.HasPrefix(strings.Split(path, "?")[0], "/v1/video/async-generations")
+}
+
+func setUpstreamEndpoint(info *relaycommon.RelayInfo, endpoint string) {
+	if info != nil && info.TaskRelayInfo != nil {
+		info.UpstreamEndpoint = endpoint
+	}
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
@@ -192,6 +208,7 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if getTaskAction(info) == constant.TaskActionRemix {
+		setUpstreamEndpoint(info, "/v1/videos")
 		return fmt.Sprintf("%s/v1/videos/%s/remix", a.baseURL, getOriginTaskID(info)), nil
 	}
 	upstreamModelName := ""
@@ -199,11 +216,16 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 		upstreamModelName = info.UpstreamModelName
 	}
 	if isVideosModelName(info.OriginModelName) || isVideosModelName(upstreamModelName) {
+		setUpstreamEndpoint(info, "/v1/videos")
 		return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
 	}
-	if isAsyncGenerationsPath(info.RequestURLPath) || isAsyncGenerationsModel(upstreamModelName) {
+	if isAsyncGenerationsPath(info.RequestURLPath) ||
+		isAsyncGenerationsModel(info.OriginModelName) ||
+		isAsyncGenerationsModel(upstreamModelName) {
+		setUpstreamEndpoint(info, "/v1/video/async-generations")
 		return fmt.Sprintf("%s/v1/video/async-generations", a.baseURL), nil
 	}
+	setUpstreamEndpoint(info, "/v1/videos")
 	return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
 }
 
@@ -382,8 +404,16 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 
 	modelName, _ := body["model"].(string)
 	originModelName, _ := body["origin_model"].(string)
+	upstreamEndpoint, _ := body["upstream_endpoint"].(string)
 	uri := fmt.Sprintf("%s/v1/videos/%s", baseUrl, taskID)
-	if isAsyncGenerationsModel(modelName) || isAsyncGenerationsModel(originModelName) {
+	useAsyncGenerations := isAsyncGenerationsModel(modelName) || isAsyncGenerationsModel(originModelName)
+	switch strings.TrimSuffix(strings.TrimSpace(upstreamEndpoint), "/") {
+	case "/v1/video/async-generations":
+		useAsyncGenerations = true
+	case "/v1/videos":
+		useAsyncGenerations = false
+	}
+	if useAsyncGenerations {
 		uri = fmt.Sprintf("%s/v1/video/async-generations/%s", baseUrl, taskID)
 	}
 

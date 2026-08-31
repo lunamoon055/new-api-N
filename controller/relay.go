@@ -604,6 +604,7 @@ func completePersistentTaskSubmission(c *gin.Context, relayInfo *relaycommon.Rel
 	task.Platform = result.Platform
 	task.ChannelId = relayInfo.ChannelId
 	task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
+	task.PrivateData.UpstreamEndpoint = relayInfo.UpstreamEndpoint
 	task.PrivateData.BillingSource = relayInfo.BillingSource
 	task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 	task.PrivateData.TokenId = relayInfo.TokenId

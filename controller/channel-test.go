@@ -217,6 +217,9 @@ func isChannelTestEmbeddingModel(channel *model.Channel, modelName string) bool 
 
 func isChannelTestVideoModel(channel *model.Channel, modelName string) bool {
 	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	if isOpenAIAsyncVideoModelName(modelName) {
+		return true
+	}
 	if channel != nil {
 		switch channel.Type {
 		case constant.ChannelTypeSora, constant.ChannelTypeDoubaoVideo:
@@ -233,8 +236,24 @@ func isChannelTestVideoModel(channel *model.Channel, modelName string) bool {
 }
 
 func isChannelTestAsyncVideoModel(modelName string) bool {
+	return isOpenAIAsyncVideoModelName(modelName)
+}
+
+func isMiniMaxH3ModelName(modelName string) bool {
 	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
-	if isVideo2ModelName(normalizedModelName) {
+	return normalizedModelName == "minimax-h3" || strings.HasPrefix(normalizedModelName, "minimax-h3-")
+}
+
+func isWan30ModelName(modelName string) bool {
+	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
+	return normalizedModelName == "wan3.0" || strings.HasPrefix(normalizedModelName, "wan3.0-")
+}
+
+func isOpenAIAsyncVideoModelName(modelName string) bool {
+	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
+	if isVideo2ModelName(normalizedModelName) ||
+		isMiniMaxH3ModelName(normalizedModelName) ||
+		isWan30ModelName(normalizedModelName) {
 		return true
 	}
 	switch normalizedModelName {
@@ -1359,6 +1378,13 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	// 根据端点类型构建不同的测试请求
 	if endpointType != "" {
 		if endpointType == channelTestEndpointOpenAIVideoAsync {
+			if isMiniMaxH3ModelName(model) || isWan30ModelName(model) {
+				return relaycommon.TaskSubmitReq{
+					Model:    model,
+					Prompt:   "a short product video",
+					Duration: 5,
+				}
+			}
 			return relaycommon.TaskSubmitReq{
 				Model:    model,
 				Prompt:   "a short product video",
