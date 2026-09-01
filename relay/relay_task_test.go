@@ -234,6 +234,34 @@ func TestNormalizeOpenAIVideoErrorResponseReturnsTranslatedMessage(t *testing.T)
 	require.NotContains(t, string(normalized), rawReason)
 }
 
+func TestNormalizeOpenAIVideoErrorResponsePassesThroughDetailedMessage(t *testing.T) {
+	rawReason := `generation failed: graphql request failed: Post "https://gateway.example.ai/graphql" http: server gave HTTP response to HTTPS client`
+	expected := `generation failed: graphql request failed: Post "https://***.ai/***" http: server gave HTTP response to HTTPS client`
+	body, err := common.Marshal(dto.OpenAIVideo{
+		ID:     "task_public",
+		Status: dto.VideoStatusFailed,
+		Error: &dto.OpenAIVideoError{
+			Code:    "server_error",
+			Message: rawReason,
+		},
+	})
+	require.NoError(t, err)
+	task := &model.Task{
+		Status: model.TaskStatusFailure,
+		PrivateData: model.TaskPrivateData{
+			UpstreamError: rawReason,
+		},
+	}
+
+	normalized := normalizeOpenAIVideoErrorResponse(body, task)
+
+	var response dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(normalized, &response))
+	require.NotNil(t, response.Error)
+	require.Equal(t, expected, response.Error.Message)
+	require.NotContains(t, response.Error.Message, "上游视频服务")
+}
+
 func TestIsTaskSubmitSuccessStatusAcceptsAny2xx(t *testing.T) {
 	require.True(t, isTaskSubmitSuccessStatus(http.StatusOK))
 	require.True(t, isTaskSubmitSuccessStatus(http.StatusCreated))

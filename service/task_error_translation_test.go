@@ -161,6 +161,17 @@ func TestTranslateVideoTaskErrorMappings(t *testing.T) {
 			raw:      "当前账户积分不足，请充值后重试",
 			expected: "积分不足，请联系管理员",
 		},
+		{
+			name:     "detailed duration validation passes through",
+			raw:      `{"error":{"message":"minimax-h3 video reference duration must be between 1 and 15 seconds","type":"invalid_request_error"}}`,
+			expected: "minimax-h3 video reference duration must be between 1 and 15 seconds",
+		},
+		{
+			name:       "detailed upstream transport error passes through",
+			raw:        `{"error":{"message":"generation failed: graphql request failed: Post \"https://gateway.example.ai/graphql\" http: server gave HTTP response to HTTPS client","type":"server_error"}}`,
+			statusCode: http.StatusInternalServerError,
+			expected:   `generation failed: graphql request failed: Post "https://***.ai/***" http: server gave HTTP response to HTTPS client`,
+		},
 	}
 
 	for _, test := range tests {
@@ -235,6 +246,19 @@ func TestSetVideoTaskFailureUsesErrorCodeForConsistentTranslation(t *testing.T) 
 
 	require.Equal(t, "调用上游视频服务失败，请稍后重试；如持续失败，请联系管理员。", task.FailReason)
 	require.Equal(t, "EOF", task.PrivateData.UpstreamError)
+}
+
+func TestSetVideoTaskFailurePersistsDetailedUpstreamMessageForDownstream(t *testing.T) {
+	raw := `{"error":{"message":"minimax-h3 video reference duration must be between 1 and 15 seconds","type":"invalid_request_error"}}`
+	expected := "minimax-h3 video reference duration must be between 1 and 15 seconds"
+	task := &model.Task{Status: model.TaskStatusFailure}
+
+	SetVideoTaskFailure(task, raw, "fail_to_fetch_task", http.StatusBadRequest)
+	message, privateRaw := VideoTaskFailureMessages(task)
+
+	require.Equal(t, expected, task.FailReason)
+	require.Equal(t, expected, message)
+	require.Equal(t, raw, privateRaw)
 }
 
 func TestSanitizeTaskRawErrorMasksCredentials(t *testing.T) {

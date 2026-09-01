@@ -97,3 +97,25 @@ func TestRespondTaskErrorTranslatesVideoErrorWithoutReturningRawBody(t *testing.
 	require.NotContains(t, recorder.Body.String(), "image url returned 404")
 	require.Equal(t, "fail_to_fetch_task", response["code"])
 }
+
+func TestRespondTaskErrorPassesThroughDetailedVideoError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/video/async-generations", nil)
+	rawReason := `{"error":{"message":"minimax-h3 video reference duration must be between 1 and 15 seconds","type":"invalid_request_error"}}`
+	expected := "minimax-h3 video reference duration must be between 1 and 15 seconds"
+
+	respondTaskError(ctx, service.TaskErrorWrapper(
+		errors.New(rawReason),
+		"fail_to_fetch_task",
+		http.StatusBadRequest,
+	))
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	var response map[string]any
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, expected, response["message"])
+	require.NotContains(t, recorder.Body.String(), "请求参数无效")
+	require.Equal(t, "fail_to_fetch_task", response["code"])
+}

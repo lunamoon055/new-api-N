@@ -13,7 +13,10 @@ import (
 	"github.com/QuantumNous/new-api/model"
 )
 
-const maxStoredTaskRawErrorRunes = 8000
+const (
+	maxStoredTaskRawErrorRunes = 8000
+	minDetailedTaskErrorRunes  = 48
+)
 
 var taskErrorSecretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)((?:authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password)\s*["']?\s*[:=]\s*["']?(?:bearer\s+)?)[^"'\s,}\]]+`),
@@ -231,6 +234,25 @@ func extractTaskFailureDataMessage(data []byte) string {
 	return sanitizeTaskRawError(findTaskFailureDataMessage(payload, 0, true))
 }
 
+// extractDetailedTaskErrorMessage returns an upstream-supplied explanation
+// when it is long enough to be useful on its own. Known errors are still
+// normalized by TranslateVideoTaskError before this fallback is reached.
+func extractDetailedTaskErrorMessage(rawMessage string) string {
+	trimmed := strings.TrimSpace(rawMessage)
+	if trimmed == "" {
+		return ""
+	}
+
+	message := extractTaskFailureDataMessage([]byte(trimmed))
+	if message == "" {
+		message = sanitizeTaskRawError(trimmed)
+	}
+	if len([]rune(message)) < minDetailedTaskErrorRunes {
+		return ""
+	}
+	return message
+}
+
 func sanitizeTaskRawError(rawMessage string) string {
 	masked := strings.TrimSpace(common.MaskSensitiveInfo(rawMessage))
 	for _, pattern := range taskErrorSecretPatterns {
@@ -246,11 +268,12 @@ func sanitizeTaskRawError(rawMessage string) string {
 	return string(runes[:maxStoredTaskRawErrorRunes]) + "\n...[truncated]"
 }
 
-// TranslateVideoTaskError preserves already-readable Chinese provider messages
-// and converts non-Chinese provider errors into stable customer-facing text.
+// TranslateVideoTaskError preserves readable provider explanations and
+// converts short error codes or known generic failures into stable text.
 func TranslateVideoTaskError(rawMessage string, code string, statusCode int) TaskErrorTranslation {
 	text := taskErrorSearchText(rawMessage, code, statusCode)
 	chineseMessage := extractChineseTaskErrorMessage(rawMessage)
+	detailedMessage := extractDetailedTaskErrorMessage(rawMessage)
 
 	switch {
 	case containsAny(text,
@@ -319,8 +342,6 @@ func TranslateVideoTaskError(rawMessage string, code string, statusCode int) Tas
 	case containsAny(text, "missing prompt", "prompt is required") ||
 		(strings.Contains(text, "field required") && strings.Contains(text, "prompt")):
 		return taskErrorTranslation("视频提示词不能为空，请填写视频描述后重试。", "request_parameters", false)
-	case strings.Contains(text, "provider_invalid_request"):
-		return taskErrorTranslation("请求参数无效，请检查提示词、参考素材和生成参数。", "request_parameters", false)
 	case containsAny(text, "unsupported duration", "unsupported resolution", "invalid resolution", "unsupported media", "unsupported file"):
 		return taskErrorTranslation("当前模型不支持所选参数，请调整分辨率、时长或参考素材后重试。", "request_parameters", false)
 	case strings.Contains(text, "invalid url") && containsAny(text, "/video/", "/videos/", "async-generations"):
@@ -352,11 +373,16 @@ func TranslateVideoTaskError(rawMessage string, code string, statusCode int) Tas
 		return taskErrorTranslation("当前视频渠道暂不可用，请稍后重试或联系管理员。", "configuration", true)
 	case containsAny(text, "model_price_error", "invalid_billing_config"):
 		return taskErrorTranslation("模型计费配置异常，请联系管理员。", "configuration", false)
+	case containsAny(text, "an error occurred", "generate error"):
+		return taskErrorTranslation("视频生成失败，上游服务返回未知错误，请稍后重试。", "generation", true)
+
+	case detailedMessage != "":
+		return taskErrorTranslation(detailedMessage, "upstream_message", statusCode >= http.StatusInternalServerError)
+	case strings.Contains(text, "provider_invalid_request"):
+		return taskErrorTranslation("请求参数无效，请检查提示词、参考素材和生成参数。", "request_parameters", false)
 	case containsAny(text, "read_request_body_failed", "invalid_request"):
 		return taskErrorTranslation("请求参数无效，请检查提示词、参考素材和生成参数。", "request_parameters", false)
 
-	case containsAny(text, "an error occurred", "generate error"):
-		return taskErrorTranslation("视频生成失败，上游服务返回未知错误，请稍后重试。", "generation", true)
 	case containsAny(text, "generation status failed", "generation failed", "status failed"):
 		return taskErrorTranslation("视频生成失败，请检查提示词和参考素材后重试。", "generation", true)
 	case statusCode >= http.StatusInternalServerError:
