@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,7 +12,15 @@ import (
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
+
+const maxModelDescriptionRunes = 2000
+
+type updateModelDescriptionRequest struct {
+	ModelName   string `json:"model_name"`
+	Description string `json:"description"`
+}
 
 // GetAllModelsMeta 获取模型列表（分页）
 func GetAllModelsMeta(c *gin.Context) {
@@ -142,6 +151,40 @@ func UpdateModelMeta(c *gin.Context) {
 	}
 	model.RefreshPricing()
 	common.ApiSuccess(c, &m)
+}
+
+// UpdateModelDescription updates only the public note shown in Model Square.
+// The route is protected by AdminAuth in api-router.go.
+func UpdateModelDescription(c *gin.Context) {
+	var req updateModelDescriptionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	req.ModelName = strings.TrimSpace(req.ModelName)
+	req.Description = strings.TrimSpace(req.Description)
+	if req.ModelName == "" {
+		common.ApiErrorMsg(c, "模型名称不能为空")
+		return
+	}
+	if len([]rune(req.Description)) > maxModelDescriptionRunes {
+		common.ApiErrorMsg(c, "模型备注不能超过 2000 个字符")
+		return
+	}
+
+	item, err := model.SaveModelDescription(req.ModelName, req.Description)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		common.ApiErrorMsg(c, "模型不存在或未在模型广场启用")
+		return
+	}
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	model.RefreshPricing()
+	common.ApiSuccess(c, item)
 }
 
 // DeleteModelMeta 删除模型

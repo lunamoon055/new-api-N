@@ -28,3 +28,14 @@ export async function getPricing(): Promise<PricingData> {
   const res = await api.get('/api/pricing')
   return res.data
 }
+
+export async function updateModelDescription(
+  modelName: string,
+  description: string
+): Promise<{ success: boolean; message?: string }> {
+  const res = await api.put('/api/models/description', {
+    model_name: modelName,
+    description,
+  })
+  return res.data
+}

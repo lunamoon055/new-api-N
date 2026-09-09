@@ -38,6 +38,7 @@ import {
   isVideoResolutionTierModel,
 } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
+import { ModelDescriptionEditor } from './model-description-editor'
 import { ModelPerfBadge, type ModelPerfBadgeData } from './model-perf-badge'
 
 export interface ModelCardProps {
@@ -258,10 +259,17 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         </div>
       </div>
 
-      {/* Description */}
-      <p className='text-muted-foreground mt-2 line-clamp-1 flex-1 text-[13px] leading-relaxed sm:mt-4 sm:line-clamp-2 sm:min-h-[2.5rem]'>
-        {props.model.description || t('No description available.')}
-      </p>
+      {/* Description and administrator note action */}
+      <div className='mt-2 flex min-h-[2.5rem] flex-1 items-start gap-2 sm:mt-4'>
+        <p className='text-muted-foreground line-clamp-1 min-w-0 flex-1 text-[13px] leading-relaxed sm:line-clamp-2'>
+          {props.model.description || t('No description available.')}
+        </p>
+        <ModelDescriptionEditor
+          modelName={props.model.model_name}
+          description={props.model.description}
+          compact
+        />
+      </div>
 
       {/* Footer: left metadata and right performance summary share row alignment */}
       <div className='mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 sm:mt-4'>

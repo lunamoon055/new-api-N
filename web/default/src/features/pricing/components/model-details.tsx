@@ -77,6 +77,7 @@ import type {
 } from '../types'
 import { DynamicPricingBreakdown } from './dynamic-pricing-breakdown'
 import { ModelDetailsApi, ModelDetailsProviderInfo } from './model-details-api'
+import { ModelDescriptionEditor } from './model-description-editor'
 import { ModalityIcons } from './model-details-modalities'
 import { ModelDetailsPerformance } from './model-details-performance'
 import { ModelDetailsQuickStats } from './model-details-quick-stats'
@@ -322,11 +323,15 @@ function ModelHeader(props: { model: PricingModel }) {
           </>
         )}
       </div>
-      {description && (
-        <p className='text-muted-foreground mt-2 text-sm leading-relaxed'>
-          {description}
+      <div className='mt-2 flex items-start gap-2'>
+        <p className='text-muted-foreground min-w-0 flex-1 text-sm leading-relaxed'>
+          {description || t('No description available.')}
         </p>
-      )}
+        <ModelDescriptionEditor
+          modelName={model.model_name}
+          description={model.description}
+        />
+      </div>
       {tags.length > 0 && (
         <div className='mt-2.5 flex flex-wrap gap-1'>
           {tags.map((tag) => (

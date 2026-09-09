@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
@@ -80,6 +81,56 @@ func (mi *Model) Update() error {
 	return DB.Model(&Model{}).Where("id = ?", mi.Id).
 		Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "updated_time").
 		Updates(mi).Error
+}
+
+// SaveModelDescription updates only the public description for one concrete
+// model. When a model is visible through channel abilities but has no stored
+// metadata yet, it creates an exact metadata record from the effective pricing
+// metadata so adding a description does not discard its icon, tags, or vendor.
+func SaveModelDescription(modelName string, description string) (*Model, error) {
+	var item Model
+	err := DB.Where("model_name = ?", modelName).First(&item).Error
+	if err == nil {
+		item.Description = description
+		item.UpdatedTime = common.GetTimestamp()
+		if err := DB.Model(&Model{}).Where("id = ?", item.Id).Updates(map[string]any{
+			"description":  item.Description,
+			"updated_time": item.UpdatedTime,
+		}).Error; err != nil {
+			return nil, err
+		}
+		return &item, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	var effective *Pricing
+	for _, pricing := range GetPricing() {
+		if pricing.ModelName == modelName {
+			matched := pricing
+			effective = &matched
+			break
+		}
+	}
+	if effective == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	item = Model{
+		ModelName:    modelName,
+		Description:  description,
+		Icon:         effective.Icon,
+		Tags:         effective.Tags,
+		VendorID:     effective.VendorID,
+		Status:       1,
+		SyncOfficial: 0,
+		NameRule:     NameRuleExact,
+	}
+	if err := item.Insert(); err != nil {
+		return nil, err
+	}
+	return &item, nil
 }
 
 func (mi *Model) Delete() error {
