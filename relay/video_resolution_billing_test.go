@@ -64,3 +64,107 @@ func TestApplyVideoResolutionTierPriceErrorsWhenResolutionPriceMissing(t *testin
 
 	require.ErrorContains(t, err, "4k")
 }
+
+func TestApplyVideoResolutionTierPriceSupports1KAnd2K(t *testing.T) {
+	tests := []struct {
+		name       string
+		resolution string
+		mode       string
+		price      float64
+		seconds    float64
+		wantQuota  int
+	}{
+		{
+			name:       "1K per request",
+			resolution: "1K",
+			mode:       billing_setting.VideoBillingModeTieredRequest,
+			price:      0.03,
+			seconds:    8,
+			wantQuota:  int(0.03 * common.QuotaPerUnit),
+		},
+		{
+			name:       "2K per second",
+			resolution: "2K",
+			mode:       billing_setting.VideoBillingModeTieredSeconds,
+			price:      0.05,
+			seconds:    8,
+			wantQuota:  int(0.05 * common.QuotaPerUnit * 8),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			c, _ := gin.CreateTestContext(nil)
+			c.Set("task_request", relaycommon.TaskSubmitReq{
+				Model:      "video-priced",
+				Resolution: test.resolution,
+				Duration:   int(test.seconds),
+			})
+			info := &relaycommon.RelayInfo{
+				OriginModelName: "video-priced",
+				PriceData: types.PriceData{
+					GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+					OtherRatios:    map[string]float64{"seconds": test.seconds},
+				},
+			}
+			priceData := info.PriceData
+			prices := map[string]float64{
+				"1k": 0.03,
+				"2k": 0.05,
+			}
+
+			err := applyVideoResolutionTierPrice(c, info, &priceData, test.mode, prices)
+			require.NoError(t, err)
+			require.NoError(t, applyTaskOtherRatiosToQuota(&priceData, test.mode, false))
+			require.Equal(t, test.price, priceData.ModelPrice)
+			require.Equal(t, test.wantQuota, priceData.Quota)
+		})
+	}
+}
+
+func TestResolveTaskBillingResolutionSupports1KAnd2KSources(t *testing.T) {
+	tests := []struct {
+		name      string
+		request   relaycommon.TaskSubmitReq
+		modelName string
+		expected  string
+	}{
+		{
+			name:     "1K resolution",
+			request:  relaycommon.TaskSubmitReq{Resolution: "1K"},
+			expected: "1k",
+		},
+		{
+			name:     "1K size",
+			request:  relaycommon.TaskSubmitReq{Size: "1024x1024"},
+			expected: "1k",
+		},
+		{
+			name:     "2K size",
+			request:  relaycommon.TaskSubmitReq{Size: "2560x1440"},
+			expected: "2k",
+		},
+		{
+			name:      "model suffix",
+			modelName: "minimax-h3-2K",
+			expected:  "2k",
+		},
+		{
+			name:      "fixed resolution model",
+			modelName: "(线路3)minimax-h3",
+			expected:  "2k",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			c, _ := gin.CreateTestContext(nil)
+			c.Set("task_request", test.request)
+			info := &relaycommon.RelayInfo{OriginModelName: test.modelName}
+
+			require.Equal(t, test.expected, resolveTaskBillingResolution(c, info))
+		})
+	}
+}

@@ -70,7 +70,7 @@ function formatCostNumber(value: number) {
   return Number.parseFloat(value.toFixed(6)).toString()
 }
 
-const videoResolutionOrder = ['480p', '720p', '1080p', '4k']
+const videoResolutionOrder = ['480p', '720p', '1080p', '1k', '2k', '4k']
 
 function formatVideoResolutionTierCost(
   cost: CreationModelCost,
@@ -150,6 +150,16 @@ function normalizeVideoResolution(value?: string) {
     case '1080':
     case '1080p':
       return '1080p'
+    case '1k':
+    case '1024':
+    case '1024p':
+      return '1k'
+    case '2k':
+    case '1440':
+    case '1440p':
+    case '2048':
+    case '2048p':
+      return '2k'
     case '2160':
     case '2160p':
     case '4k':

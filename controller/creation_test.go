@@ -598,7 +598,7 @@ func TestBuildCreationModelCatalogAddsVideoResolutionTierCost(t *testing.T) {
 
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
 		"billing_setting.video_billing_mode":      `{"video-tiered-model":"tiered_request"}`,
-		"billing_setting.video_resolution_prices": `{"video-tiered-model":{"480p":0.01,"720p":0.02}}`,
+		"billing_setting.video_resolution_prices": `{"video-tiered-model":{"480p":0.01,"720p":0.02,"1k":0.03,"2k":0.04}}`,
 	}))
 
 	catalog := buildCreationModelCatalog([]model.Pricing{
@@ -621,8 +621,12 @@ func TestBuildCreationModelCatalogAddsVideoResolutionTierCost(t *testing.T) {
 	require.Contains(t, payloadText, `"video_billing_mode":"tiered_request"`)
 	require.Contains(t, payloadText, `"480p":0.0125`)
 	require.Contains(t, payloadText, `"720p":0.025`)
+	require.Contains(t, payloadText, `"1k":0.0375`)
+	require.Contains(t, payloadText, `"2k":0.05`)
 	require.Contains(t, payloadText, `"480p":6250`)
 	require.Contains(t, payloadText, `"720p":12500`)
+	require.Contains(t, payloadText, `"1k":18750`)
+	require.Contains(t, payloadText, `"2k":25000`)
 	require.NotContains(t, payloadText, "input_price_per_million")
 	require.NotContains(t, payloadText, "output_price_per_million")
 }

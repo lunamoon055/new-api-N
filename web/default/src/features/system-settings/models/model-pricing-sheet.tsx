@@ -102,7 +102,10 @@ type ModelPricingFormValues = z.infer<
 >
 
 type PricingMode =
-  'per-token' | 'per-request' | 'tiered_expr' | VideoResolutionPricingMode
+  | 'per-token'
+  | 'per-request'
+  | 'tiered_expr'
+  | VideoResolutionPricingMode
 type LaneKey =
   | 'completion'
   | 'cache'
@@ -317,9 +320,14 @@ function formatResolutionPriceSummary(
 ) {
   const summary = VIDEO_RESOLUTION_PRICE_KEYS.map((resolution) => {
     const value = prices[resolution]
-    return `${resolution}: ${value ? `$${value}` : t('Empty')}`
+    const priceLabel = value === '' ? t('Empty') : `$${value}`
+    return `${formatResolutionLabel(resolution)}: ${priceLabel}`
   }).join('\n')
   return summary || t('Empty')
+}
+
+function formatResolutionLabel(resolution: string) {
+  return resolution.endsWith('k') ? resolution.toUpperCase() : resolution
 }
 
 function buildPreviewRows(
@@ -775,7 +783,9 @@ export function ModelPricingEditorPanel({
       !hasCompleteVideoResolutionPrices(videoResolutionPrices)
     ) {
       nextWarnings.push(
-        t('Resolution prices for 480p, 720p, 1080p, and 4K are required.')
+        t(
+          'Resolution prices for 480p, 720p, 1080p, 1K, 2K, and 4K are required.'
+        )
       )
     }
 
@@ -821,7 +831,7 @@ export function ModelPricingEditorPanel({
     ) {
       form.setError('price', {
         message: t(
-          'Resolution prices for 480p, 720p, 1080p, and 4K are required.'
+          'Resolution prices for 480p, 720p, 1080p, 1K, 2K, and 4K are required.'
         ),
       })
       return
@@ -1275,7 +1285,7 @@ function VideoResolutionPricingFields(props: {
       <div className='grid gap-3 sm:grid-cols-2'>
         {VIDEO_RESOLUTION_PRICE_KEYS.map((resolution) => (
           <Field key={resolution} className='rounded-lg border p-3'>
-            <FieldLabel>{resolution}</FieldLabel>
+            <FieldLabel>{formatResolutionLabel(resolution)}</FieldLabel>
             <InputGroup>
               <InputGroupAddon>$</InputGroupAddon>
               <InputGroupInput

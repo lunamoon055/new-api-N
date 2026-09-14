@@ -60,6 +60,23 @@ func TestGetVideoBillingModeInvalidFallsBackToDynamic(t *testing.T) {
 	}
 }
 
+func TestNormalizeVideoResolutionSupports1KAnd2K(t *testing.T) {
+	tests := map[string]string{
+		"1K":    "1k",
+		"1024p": "1k",
+		"2K":    "2k",
+		"1440p": "2k",
+		"2048":  "2k",
+	}
+	for input, expected := range tests {
+		t.Run(input, func(t *testing.T) {
+			if got := NormalizeVideoResolution(input); got != expected {
+				t.Fatalf("expected %q to normalize to %q, got %q", input, expected, got)
+			}
+		})
+	}
+}
+
 func TestGetVideoResolutionPricesReturnsCopy(t *testing.T) {
 	original := billingSetting.VideoResolutionPrices
 	t.Cleanup(func() {
@@ -70,6 +87,8 @@ func TestGetVideoResolutionPricesReturnsCopy(t *testing.T) {
 			"480p":  0.01,
 			"720p":  0.02,
 			"1080p": 0.04,
+			"1K":    0.05,
+			"2K":    0.06,
 			"4k":    0.08,
 		},
 	}
@@ -86,6 +105,12 @@ func TestGetVideoResolutionPricesReturnsCopy(t *testing.T) {
 	}
 	if got := pricesAgain["720p"]; got != 0.02 {
 		t.Fatalf("expected copy mutation not to affect source, got %v", got)
+	}
+	if got := pricesAgain["1k"]; got != 0.05 {
+		t.Fatalf("expected 1K price to use canonical key, got %v", got)
+	}
+	if got := pricesAgain["2k"]; got != 0.06 {
+		t.Fatalf("expected 2K price to use canonical key, got %v", got)
 	}
 }
 

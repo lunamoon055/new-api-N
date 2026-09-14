@@ -27,6 +27,8 @@ const tieredVideoModel: PricingModel = {
   video_resolution_prices: {
     '480p': 0.05,
     '720p': 0.1,
+    '1k': 0.12,
+    '2k': 0.2,
   },
 }
 
@@ -45,6 +47,8 @@ describe('pricing video resolution tier helpers', () => {
     ).toEqual([
       { resolution: '480p', formatted: '$0.045' },
       { resolution: '720p', formatted: '$0.09' },
+      { resolution: '1k', formatted: '$0.108' },
+      { resolution: '2k', formatted: '$0.18' },
     ])
   })
 

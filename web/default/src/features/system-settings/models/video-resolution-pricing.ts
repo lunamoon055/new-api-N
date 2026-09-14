@@ -2,6 +2,8 @@ export const VIDEO_RESOLUTION_PRICE_KEYS = [
   '480p',
   '720p',
   '1080p',
+  '1k',
+  '2k',
   '4k',
 ] as const
 
@@ -14,7 +16,10 @@ export type VideoResolutionPriceMap = Partial<
 >
 
 export type VideoBillingMode =
-  'dynamic' | 'fixed' | 'tiered_seconds' | 'tiered_request'
+  | 'dynamic'
+  | 'fixed'
+  | 'tiered_seconds'
+  | 'tiered_request'
 
 export type VideoResolutionPricingMode = Extract<
   VideoBillingMode,
@@ -25,6 +30,8 @@ export const EMPTY_VIDEO_RESOLUTION_PRICE_INPUT: VideoResolutionPriceInput = {
   '480p': '',
   '720p': '',
   '1080p': '',
+  '1k': '',
+  '2k': '',
   '4k': '',
 }
 
@@ -78,7 +85,11 @@ export function hasCompleteVideoResolutionPrices(
   input: Partial<Record<VideoResolutionPriceKey, string | number>>
 ): boolean {
   return VIDEO_RESOLUTION_PRICE_KEYS.every((resolution) => {
-    const value = Number(input[resolution])
+    const raw = input[resolution]
+    if (raw === null || raw === undefined || String(raw).trim() === '') {
+      return false
+    }
+    const value = Number(raw)
     return Number.isFinite(value) && value >= 0
   })
 }

@@ -24,7 +24,14 @@ import type { PricingModel, TokenUnit, PriceType } from '../types'
 // Price Calculation Utilities
 // ----------------------------------------------------------------------------
 
-const VIDEO_RESOLUTION_PRICE_ORDER = ['480p', '720p', '1080p', '4k'] as const
+const VIDEO_RESOLUTION_PRICE_ORDER = [
+  '480p',
+  '720p',
+  '1080p',
+  '1k',
+  '2k',
+  '4k',
+] as const
 
 type VideoResolutionTierPriceOptions = {
   showWithRecharge?: boolean

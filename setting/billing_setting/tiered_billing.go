@@ -93,6 +93,10 @@ func NormalizeVideoResolution(value string) string {
 		return "720p"
 	case "1080", "1080p":
 		return "1080p"
+	case "1k", "1024", "1024p":
+		return "1k"
+	case "2k", "1440", "1440p", "2048", "2048p":
+		return "2k"
 	case "4k", "2160", "2160p":
 		return "4k"
 	default:

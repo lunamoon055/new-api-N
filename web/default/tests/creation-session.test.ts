@@ -115,6 +115,24 @@ describe('creation center session helpers', () => {
     expect(label).toBe(`${formatQuota(12500)}/次 · 720p`)
   })
 
+  it('shows the selected 2K video resolution tier quota', () => {
+    const label = formatCreationModelCost(
+      {
+        billing_mode: 'tiered_request',
+        video_billing_mode: 'tiered_request',
+        video_resolution_quotas: {
+          '1k': 15000,
+          '2k': 25000,
+        },
+      },
+      t,
+      'video',
+      '2K'
+    )
+
+    expect(label).toBe(`${formatQuota(25000)}/次 · 2k`)
+  })
+
   it('shows selected video resolution tier quota with per-second unit', () => {
     const label = formatCreationModelCost(
       {

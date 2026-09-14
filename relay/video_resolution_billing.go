@@ -98,8 +98,12 @@ func resolveTaskSizeResolution(size string) string {
 		return "480p"
 	case "720x1280", "1280x720", "960x960", "720x720":
 		return "720p"
+	case "1024x1024", "1024x1792", "1792x1024":
+		return "1k"
 	case "1080x1920", "1920x1080", "1440x1440":
 		return "1080p"
+	case "1080x2048", "2048x1080", "1440x2560", "2560x1440", "2048x2048":
+		return "2k"
 	case "2160x3840", "3840x2160", "2880x2880":
 		return "4k"
 	}
@@ -132,9 +136,16 @@ func resolveTaskSizeResolution(size string) string {
 
 func resolveTaskModelResolution(modelName string) string {
 	normalized := strings.ToLower(strings.TrimSpace(modelName))
-	for _, suffix := range []string{"-480p", "_480p", ".480p"} {
-		if strings.HasSuffix(normalized, suffix) {
-			return "480p"
+	if strings.HasSuffix(normalized, "minimax-h3") {
+		return "2k"
+	}
+	for _, separator := range []string{"-", "_", "."} {
+		index := strings.LastIndex(normalized, separator)
+		if index < 0 || index == len(normalized)-1 {
+			continue
+		}
+		if resolution := billing_setting.NormalizeVideoResolution(normalized[index+1:]); resolution != "" {
+			return resolution
 		}
 	}
 	return ""
