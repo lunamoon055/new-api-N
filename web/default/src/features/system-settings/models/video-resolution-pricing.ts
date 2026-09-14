@@ -81,10 +81,10 @@ export function formatVideoResolutionPriceInput(
   )
 }
 
-export function hasCompleteVideoResolutionPrices(
+export function hasAnyVideoResolutionPrice(
   input: Partial<Record<VideoResolutionPriceKey, string | number>>
 ): boolean {
-  return VIDEO_RESOLUTION_PRICE_KEYS.every((resolution) => {
+  return VIDEO_RESOLUTION_PRICE_KEYS.some((resolution) => {
     const raw = input[resolution]
     if (raw === null || raw === undefined || String(raw).trim() === '') {
       return false

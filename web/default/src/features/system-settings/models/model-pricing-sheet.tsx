@@ -72,7 +72,7 @@ import {
   VIDEO_RESOLUTION_PRICE_KEYS,
   buildVideoResolutionPricingData,
   formatVideoResolutionPriceInput,
-  hasCompleteVideoResolutionPrices,
+  hasAnyVideoResolutionPrice,
   isVideoResolutionPricingMode,
   normalizeVideoBillingMode,
   type VideoBillingMode,
@@ -318,10 +318,10 @@ function formatResolutionPriceSummary(
   prices: VideoResolutionPriceInput,
   t: (key: string) => string
 ) {
-  const summary = VIDEO_RESOLUTION_PRICE_KEYS.map((resolution) => {
+  const summary = VIDEO_RESOLUTION_PRICE_KEYS.flatMap((resolution) => {
     const value = prices[resolution]
-    const priceLabel = value === '' ? t('Empty') : `$${value}`
-    return `${formatResolutionLabel(resolution)}: ${priceLabel}`
+    if (value.trim() === '') return []
+    return [`${formatResolutionLabel(resolution)}: $${value}`]
   }).join('\n')
   return summary || t('Empty')
 }
@@ -780,13 +780,9 @@ export function ModelPricingEditorPanel({
 
     if (
       isVideoResolutionPricingMode(pricingMode) &&
-      !hasCompleteVideoResolutionPrices(videoResolutionPrices)
+      !hasAnyVideoResolutionPrice(videoResolutionPrices)
     ) {
-      nextWarnings.push(
-        t(
-          'Resolution prices for 480p, 720p, 1080p, 1K, 2K, and 4K are required.'
-        )
-      )
+      nextWarnings.push(t('At least one resolution price is required.'))
     }
 
     return nextWarnings
@@ -827,12 +823,10 @@ export function ModelPricingEditorPanel({
 
     if (
       isVideoResolutionPricingMode(pricingMode) &&
-      !hasCompleteVideoResolutionPrices(videoResolutionPrices)
+      !hasAnyVideoResolutionPrice(videoResolutionPrices)
     ) {
       form.setError('price', {
-        message: t(
-          'Resolution prices for 480p, 720p, 1080p, 1K, 2K, and 4K are required.'
-        ),
+        message: t('At least one resolution price is required.'),
       })
       return
     }
