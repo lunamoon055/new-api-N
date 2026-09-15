@@ -521,6 +521,13 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 			newAPIError: types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest)),
 		}
 	}
+	if err = relay.ApplyImageResolutionTierPrice(info, relayRequest, &priceData); err != nil {
+		return testResult{
+			context:     c,
+			localErr:    err,
+			newAPIError: types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest)),
+		}
+	}
 
 	adaptor.Init(info)
 

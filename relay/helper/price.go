@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -72,6 +73,14 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	// Check if this model uses tiered_expr billing
 	if billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeTieredExpr {
 		return modelPriceHelperTiered(c, info, promptTokens, meta, groupRatioInfo)
+	}
+
+	// Image generation requests can use the same per-resolution, per-request
+	// pricing configured for task models. The concrete price is selected from
+	// output_resolution/size by the relay controller before pre-consumption.
+	if !usePrice && hasImageResolutionTierPriceConfig(info) {
+		modelPrice = 0
+		usePrice = true
 	}
 
 	var preConsumedQuota int
@@ -252,6 +261,18 @@ func hasVideoResolutionTierPriceConfig(modelName string) bool {
 	}
 	_, ok := billing_setting.GetVideoResolutionPrices(modelName)
 	return ok
+}
+
+func hasImageResolutionTierPriceConfig(info *relaycommon.RelayInfo) bool {
+	if info == nil {
+		return false
+	}
+	switch info.RelayMode {
+	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:
+		return hasVideoResolutionTierPriceConfig(info.OriginModelName)
+	default:
+		return false
+	}
 }
 
 func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta, groupRatioInfo types.GroupRatioInfo) (types.PriceData, error) {

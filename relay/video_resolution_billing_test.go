@@ -4,8 +4,11 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -165,6 +168,101 @@ func TestResolveTaskBillingResolutionSupports1KAnd2KSources(t *testing.T) {
 			info := &relaycommon.RelayInfo{OriginModelName: test.modelName}
 
 			require.Equal(t, test.expected, resolveTaskBillingResolution(c, info))
+		})
+	}
+}
+
+func TestApplyImageResolutionTierPriceUsesOutputResolution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	saved := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		saved[key] = value
+		return nil
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
+	})
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.video_billing_mode":      `{"gpt-image-2":"tiered_request"}`,
+		"billing_setting.video_resolution_prices": `{"gpt-image-2":{"1k":0.06,"2k":0.07,"4k":0.09}}`,
+	}))
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-image-2",
+		RelayMode:       relayconstant.RelayModeImagesGenerations,
+	}
+	request := &dto.ImageRequest{
+		Model:            "gpt-image-2",
+		OutputResolution: []byte(`"2K"`),
+	}
+	priceData := types.PriceData{
+		GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 0.5},
+	}
+
+	err := ApplyImageResolutionTierPrice(info, request, &priceData)
+	require.NoError(t, err)
+	require.True(t, priceData.UsePrice)
+	require.Equal(t, 0.07, priceData.ModelPrice)
+	require.Equal(t, int(0.07*common.QuotaPerUnit*0.5), priceData.QuotaToPreConsume)
+	require.Equal(t, priceData, info.PriceData)
+}
+
+func TestApplyImageResolutionTierPriceErrorsWhenRequestedTierIsMissing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	saved := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		saved[key] = value
+		return nil
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
+	})
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.video_billing_mode":      `{"gpt-image-2":"tiered_request"}`,
+		"billing_setting.video_resolution_prices": `{"gpt-image-2":{"1k":0.06}}`,
+	}))
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-image-2",
+		RelayMode:       relayconstant.RelayModeImagesGenerations,
+	}
+	request := &dto.ImageRequest{OutputResolution: []byte(`"4K"`)}
+	priceData := types.PriceData{
+		GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+	}
+
+	err := ApplyImageResolutionTierPrice(info, request, &priceData)
+	require.ErrorContains(t, err, "4k")
+}
+
+func TestResolveImageBillingResolution(t *testing.T) {
+	tests := []struct {
+		name     string
+		request  *dto.ImageRequest
+		expected string
+	}{
+		{
+			name:     "output resolution has priority",
+			request:  &dto.ImageRequest{OutputResolution: []byte(`"2K"`), Size: "1024x1024"},
+			expected: "2k",
+		},
+		{
+			name:     "official portrait size maps to 1K",
+			request:  &dto.ImageRequest{Size: "1024x1536"},
+			expected: "1k",
+		},
+		{
+			name:     "missing resolution uses image default",
+			request:  &dto.ImageRequest{},
+			expected: "1k",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.expected, resolveImageBillingResolution(test.request))
 		})
 	}
 }

@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -32,6 +34,58 @@ func applyVideoResolutionTierPrice(c *gin.Context, info *relaycommon.RelayInfo, 
 	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
 		priceData.FreeModel = price == 0 || groupRatio == 0
 	}
+	return nil
+}
+
+// ApplyImageResolutionTierPrice selects the configured per-request price for
+// OpenAI-compatible image generation/edit requests. It must run after
+// helper.ModelPriceHelper and before quota pre-consumption.
+func ApplyImageResolutionTierPrice(info *relaycommon.RelayInfo, request dto.Request, priceData *types.PriceData) error {
+	if info == nil || priceData == nil {
+		return nil
+	}
+	switch info.RelayMode {
+	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:
+	default:
+		return nil
+	}
+
+	mode := billing_setting.GetVideoBillingMode(info.OriginModelName)
+	if !billing_setting.IsVideoResolutionTierMode(mode) {
+		return nil
+	}
+	if mode != billing_setting.VideoBillingModeTieredRequest {
+		return fmt.Errorf("image resolution pricing for model %s must use tiered_request mode", info.OriginModelName)
+	}
+
+	prices, ok := billing_setting.GetVideoResolutionPrices(info.OriginModelName)
+	if !ok {
+		return fmt.Errorf("image resolution prices for model %s are not configured", info.OriginModelName)
+	}
+	imageRequest, ok := request.(*dto.ImageRequest)
+	if !ok {
+		return fmt.Errorf("image resolution pricing requires an image request, got %T", request)
+	}
+
+	resolution := resolveImageBillingResolution(imageRequest)
+	price, ok := lookupVideoResolutionPrice(prices, resolution)
+	if !ok {
+		return fmt.Errorf("image resolution price for %s is not configured", resolution)
+	}
+
+	groupRatio := priceData.GroupRatioInfo.GroupRatio
+	quota := int(price * common.QuotaPerUnit * groupRatio)
+	priceData.ModelPrice = price
+	priceData.ModelRatio = 0
+	priceData.UsePrice = true
+	priceData.Quota = quota
+	priceData.QuotaToPreConsume = quota
+	priceData.VideoBillingMode = mode
+	priceData.FreeModel = false
+	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+		priceData.FreeModel = price == 0 || groupRatio == 0
+	}
+	info.PriceData = *priceData
 	return nil
 }
 
@@ -73,6 +127,26 @@ func resolveTaskBillingResolution(c *gin.Context, info *relaycommon.RelayInfo) s
 	return "720p"
 }
 
+func resolveImageBillingResolution(request *dto.ImageRequest) string {
+	if request == nil {
+		return "1k"
+	}
+
+	if len(request.OutputResolution) > 0 {
+		var outputResolution string
+		if err := common.Unmarshal(request.OutputResolution, &outputResolution); err == nil {
+			if resolution := billing_setting.NormalizeVideoResolution(outputResolution); resolution != "" {
+				return resolution
+			}
+		}
+	}
+
+	if resolution := resolveTaskSizeResolution(request.Size); resolution != "" {
+		return resolution
+	}
+	return "1k"
+}
+
 func resolveTaskMetadataResolution(metadata map[string]interface{}) string {
 	for _, key := range []string{"resolution", "output_resolution"} {
 		value, ok := metadata[key]
@@ -98,7 +172,7 @@ func resolveTaskSizeResolution(size string) string {
 		return "480p"
 	case "720x1280", "1280x720", "960x960", "720x720":
 		return "720p"
-	case "1024x1024", "1024x1792", "1792x1024":
+	case "1024x1024", "1024x1536", "1536x1024", "1024x1792", "1792x1024":
 		return "1k"
 	case "1080x1920", "1920x1080", "1440x1440":
 		return "1080p"
