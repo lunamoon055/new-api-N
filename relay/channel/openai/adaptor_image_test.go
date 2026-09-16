@@ -68,3 +68,36 @@ func TestConvertImageRequestPreservesGptImage2References(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "https://cdn.example/source.png", imageURL["url"])
 }
+
+func TestConvertImageRequestPreservesRequestedImageSize(t *testing.T) {
+	t.Parallel()
+
+	for _, size := range []string{"1024x1024", "2048x1152", "3840x2160"} {
+		t.Run(size, func(t *testing.T) {
+			t.Parallel()
+
+			request := dto.ImageRequest{
+				Model:  "gpt-image-2.5-flare",
+				Prompt: "make it cinematic",
+				Size:   size,
+			}
+			adaptor := &Adaptor{}
+			info := &relaycommon.RelayInfo{
+				RelayMode: relayconstant.RelayModeImagesGenerations,
+			}
+
+			converted, err := adaptor.ConvertImageRequest(
+				gin.CreateTestContextOnly(httptest.NewRecorder(), gin.New()),
+				info,
+				request,
+			)
+			require.NoError(t, err)
+
+			body, err := common.Marshal(converted)
+			require.NoError(t, err)
+			var payload map[string]any
+			require.NoError(t, common.Unmarshal(body, &payload))
+			require.Equal(t, size, payload["size"])
+		})
+	}
+}

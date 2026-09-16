@@ -172,7 +172,7 @@ func TestResolveTaskBillingResolutionSupports1KAnd2KSources(t *testing.T) {
 	}
 }
 
-func TestApplyImageResolutionTierPriceUsesOutputResolution(t *testing.T) {
+func TestApplyImageResolutionTierPriceUsesRequestedResolutionTier(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	saved := map[string]string{}
@@ -185,27 +185,49 @@ func TestApplyImageResolutionTierPriceUsesOutputResolution(t *testing.T) {
 	})
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
 		"billing_setting.video_billing_mode":      `{"gpt-image-2":"tiered_request"}`,
-		"billing_setting.video_resolution_prices": `{"gpt-image-2":{"1k":0.06,"2k":0.07,"4k":0.09}}`,
+		"billing_setting.video_resolution_prices": `{"gpt-image-2":{"1k":0.04,"2k":0.06,"4k":0.08}}`,
 	}))
 
-	info := &relaycommon.RelayInfo{
-		OriginModelName: "gpt-image-2",
-		RelayMode:       relayconstant.RelayModeImagesGenerations,
-	}
-	request := &dto.ImageRequest{
-		Model:            "gpt-image-2",
-		OutputResolution: []byte(`"2K"`),
-	}
-	priceData := types.PriceData{
-		GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 0.5},
+	tests := []struct {
+		name      string
+		request   *dto.ImageRequest
+		wantPrice float64
+	}{
+		{
+			name:      "1K square size",
+			request:   &dto.ImageRequest{Model: "gpt-image-2", Size: "1024x1024"},
+			wantPrice: 0.04,
+		},
+		{
+			name:      "2K documented landscape size",
+			request:   &dto.ImageRequest{Model: "gpt-image-2", Size: "2048x1152"},
+			wantPrice: 0.06,
+		},
+		{
+			name:      "4K landscape size",
+			request:   &dto.ImageRequest{Model: "gpt-image-2", Size: "3840x2160"},
+			wantPrice: 0.08,
+		},
 	}
 
-	err := ApplyImageResolutionTierPrice(info, request, &priceData)
-	require.NoError(t, err)
-	require.True(t, priceData.UsePrice)
-	require.Equal(t, 0.07, priceData.ModelPrice)
-	require.Equal(t, int(0.07*common.QuotaPerUnit*0.5), priceData.QuotaToPreConsume)
-	require.Equal(t, priceData, info.PriceData)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				OriginModelName: "gpt-image-2",
+				RelayMode:       relayconstant.RelayModeImagesGenerations,
+			}
+			priceData := types.PriceData{
+				GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 0.5},
+			}
+
+			err := ApplyImageResolutionTierPrice(info, test.request, &priceData)
+			require.NoError(t, err)
+			require.True(t, priceData.UsePrice)
+			require.Equal(t, test.wantPrice, priceData.ModelPrice)
+			require.Equal(t, int(test.wantPrice*common.QuotaPerUnit*0.5), priceData.QuotaToPreConsume)
+			require.Equal(t, priceData, info.PriceData)
+		})
+	}
 }
 
 func TestApplyImageResolutionTierPriceErrorsWhenRequestedTierIsMissing(t *testing.T) {
@@ -228,7 +250,7 @@ func TestApplyImageResolutionTierPriceErrorsWhenRequestedTierIsMissing(t *testin
 		OriginModelName: "gpt-image-2",
 		RelayMode:       relayconstant.RelayModeImagesGenerations,
 	}
-	request := &dto.ImageRequest{OutputResolution: []byte(`"4K"`)}
+	request := &dto.ImageRequest{Size: "3840x2160"}
 	priceData := types.PriceData{
 		GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
 	}
@@ -239,14 +261,15 @@ func TestApplyImageResolutionTierPriceErrorsWhenRequestedTierIsMissing(t *testin
 
 func TestResolveImageBillingResolution(t *testing.T) {
 	tests := []struct {
-		name     string
-		request  *dto.ImageRequest
-		expected string
+		name        string
+		request     *dto.ImageRequest
+		expected    string
+		errorString string
 	}{
 		{
-			name:     "output resolution has priority",
-			request:  &dto.ImageRequest{OutputResolution: []byte(`"2K"`), Size: "1024x1024"},
-			expected: "2k",
+			name:        "output resolution alone is rejected",
+			request:     &dto.ImageRequest{OutputResolution: []byte(`"2K"`)},
+			errorString: "requires an explicit size",
 		},
 		{
 			name:     "official portrait size maps to 1K",
@@ -254,15 +277,65 @@ func TestResolveImageBillingResolution(t *testing.T) {
 			expected: "1k",
 		},
 		{
-			name:     "missing resolution uses image default",
-			request:  &dto.ImageRequest{},
-			expected: "1k",
+			name:     "full HD image size remains 1080p",
+			request:  &dto.ImageRequest{Size: "1920x1080"},
+			expected: "1080p",
+		},
+		{
+			name:     "documented 2K landscape size",
+			request:  &dto.ImageRequest{Size: "2048x1152"},
+			expected: "2k",
+		},
+		{
+			name:        "conflicting fields are rejected",
+			request:     &dto.ImageRequest{OutputResolution: []byte(`"2K"`), Size: "1920x1080"},
+			errorString: "resolution conflict",
+		},
+		{
+			name:        "auto size is rejected",
+			request:     &dto.ImageRequest{Size: "auto"},
+			errorString: "explicit size",
+		},
+		{
+			name:        "missing resolution is rejected",
+			request:     &dto.ImageRequest{},
+			errorString: "requires an explicit size",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			require.Equal(t, test.expected, resolveImageBillingResolution(test.request))
+			actual, err := resolveImageBillingResolution(test.request)
+			if test.errorString != "" {
+				require.ErrorContains(t, err, test.errorString)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.expected, actual)
+		})
+	}
+}
+
+func TestResolveImageSizeResolutionUsesPriceTierDimensions(t *testing.T) {
+	tests := []struct {
+		size     string
+		expected string
+	}{
+		{size: "1024x1024", expected: "1k"},
+		{size: "1536x1024", expected: "1k"},
+		{size: "1024x1536", expected: "1k"},
+		{size: "2048x2048", expected: "2k"},
+		{size: "2048x1152", expected: "2k"},
+		{size: "1152x2048", expected: "2k"},
+		{size: "3840x2160", expected: "4k"},
+		{size: "2160x3840", expected: "4k"},
+		{size: "1920x1080", expected: "1080p"},
+		{size: "1080x1920", expected: "1080p"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.size, func(t *testing.T) {
+			require.Equal(t, test.expected, resolveImageSizeResolution(test.size))
 		})
 	}
 }

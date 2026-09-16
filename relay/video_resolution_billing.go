@@ -67,7 +67,10 @@ func ApplyImageResolutionTierPrice(info *relaycommon.RelayInfo, request dto.Requ
 		return fmt.Errorf("image resolution pricing requires an image request, got %T", request)
 	}
 
-	resolution := resolveImageBillingResolution(imageRequest)
+	resolution, err := resolveImageBillingResolution(imageRequest)
+	if err != nil {
+		return err
+	}
 	price, ok := lookupVideoResolutionPrice(prices, resolution)
 	if !ok {
 		return fmt.Errorf("image resolution price for %s is not configured", resolution)
@@ -127,24 +130,66 @@ func resolveTaskBillingResolution(c *gin.Context, info *relaycommon.RelayInfo) s
 	return "720p"
 }
 
-func resolveImageBillingResolution(request *dto.ImageRequest) string {
+func resolveImageBillingResolution(request *dto.ImageRequest) (string, error) {
 	if request == nil {
-		return "1k"
+		return "", fmt.Errorf("image resolution pricing requires a non-nil image request")
 	}
 
+	var outputResolution string
+	hasOutputResolution := len(request.OutputResolution) > 0
 	if len(request.OutputResolution) > 0 {
-		var outputResolution string
-		if err := common.Unmarshal(request.OutputResolution, &outputResolution); err == nil {
-			if resolution := billing_setting.NormalizeVideoResolution(outputResolution); resolution != "" {
-				return resolution
-			}
+		if err := common.Unmarshal(request.OutputResolution, &outputResolution); err != nil {
+			return "", fmt.Errorf("invalid image output_resolution: %w", err)
+		}
+		if strings.TrimSpace(outputResolution) == "" {
+			return "", fmt.Errorf("image output_resolution must not be empty")
 		}
 	}
 
-	if resolution := resolveTaskSizeResolution(request.Size); resolution != "" {
-		return resolution
+	outputTier := billing_setting.NormalizeVideoResolution(outputResolution)
+	if hasOutputResolution && outputTier == "" {
+		return "", fmt.Errorf("unsupported image output_resolution %q", outputResolution)
 	}
-	return "1k"
+
+	size := strings.TrimSpace(request.Size)
+	hasSize := size != ""
+	if strings.EqualFold(size, "auto") {
+		return "", fmt.Errorf("image size %q cannot be used with resolution-tier pricing; specify an explicit size", size)
+	}
+	sizeTier := resolveImageSizeResolution(size)
+	if hasSize && sizeTier == "" {
+		return "", fmt.Errorf("unsupported image size %q for resolution-tier pricing", size)
+	}
+
+	if hasOutputResolution && hasSize && outputTier != sizeTier {
+		return "", fmt.Errorf(
+			"image resolution conflict: output_resolution %q maps to %s but size %q maps to %s",
+			outputResolution,
+			outputTier,
+			size,
+			sizeTier,
+		)
+	}
+	if !hasSize {
+		if hasOutputResolution {
+			return "", fmt.Errorf(
+				"image resolution-tier pricing requires an explicit size; output_resolution %q alone does not guarantee the upstream image dimensions",
+				outputResolution,
+			)
+		}
+		return "", fmt.Errorf("image resolution-tier pricing requires an explicit size")
+	}
+	return sizeTier, nil
+}
+
+func resolveImageSizeResolution(size string) string {
+	normalized := strings.ToLower(strings.TrimSpace(size))
+	normalized = strings.ReplaceAll(normalized, " ", "")
+	switch normalized {
+	case "1152x2048", "2048x1152":
+		return "2k"
+	}
+	return resolveTaskSizeResolution(normalized)
 }
 
 func resolveTaskMetadataResolution(metadata map[string]interface{}) string {
