@@ -1,11 +1,34 @@
 package service
 
 import (
+	"context"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/types"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRelayErrorHandlerPreservesLongUpstreamImageError(t *testing.T) {
+	t.Parallel()
+
+	const message = `generation failed: graphql request failed: Post "https://example.ai/graphql" http: server gave HTTP response to HTTPS client`
+	const downstreamMessage = `generation failed: graphql request failed: Post "https://***.ai/***" http: server gave HTTP response to HTTPS client`
+	response := &http.Response{
+		StatusCode: http.StatusBadGateway,
+		Body: io.NopCloser(strings.NewReader(`{"error":{"message":"` +
+			strings.ReplaceAll(message, `"`, `\"`) +
+			`","type":"server_error"}}`)),
+	}
+
+	apiErr := RelayErrorHandler(context.Background(), response, false)
+	require.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
+	openAIError := apiErr.ToOpenAIError()
+	require.Equal(t, downstreamMessage, openAIError.Message)
+	require.Equal(t, "server_error", openAIError.Type)
+}
 
 func TestResetStatusCode(t *testing.T) {
 	t.Parallel()

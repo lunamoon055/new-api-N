@@ -1,6 +1,10 @@
 package common
 
-import "github.com/QuantumNous/new-api/constant"
+import (
+	"strings"
+
+	"github.com/QuantumNous/new-api/constant"
+)
 
 // GetEndpointTypesByChannelType 获取渠道最优先端点类型（所有的渠道都支持 OpenAI 端点）
 func GetEndpointTypesByChannelType(channelType int, modelName string) []constant.EndpointType {
@@ -37,9 +41,24 @@ func GetEndpointTypesByChannelType(channelType int, modelName string) []constant
 			endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAI}
 		}
 	}
-	if IsImageGenerationModel(modelName) {
+	if supportsImageGenerationEndpoint(channelType, modelName) {
 		// add to first
 		endpointTypes = append([]constant.EndpointType{constant.EndpointTypeImageGeneration}, endpointTypes...)
 	}
 	return endpointTypes
+}
+
+func supportsImageGenerationEndpoint(channelType int, modelName string) bool {
+	if !IsImageGenerationModel(modelName) {
+		return false
+	}
+
+	// Native Gemini and Vertex image adapters currently implement the Imagen
+	// predict API only. Gemini/Nano image models on those channel types must keep
+	// using generateContent; OpenAI-compatible channels can expose them through
+	// /v1/images/generations.
+	if channelType == constant.ChannelTypeGemini || channelType == constant.ChannelTypeVertexAi {
+		return strings.HasPrefix(strings.ToLower(strings.TrimSpace(modelName)), "imagen-")
+	}
+	return true
 }

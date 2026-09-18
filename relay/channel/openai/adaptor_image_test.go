@@ -1,16 +1,61 @@
 package openai
 
 import (
+	"bytes"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGetRequestURLPreservesImageAndChatEndpoints(t *testing.T) {
+	t.Parallel()
+
+	adaptor := &Adaptor{}
+	testCases := []struct {
+		name      string
+		path      string
+		relayMode int
+		wantURL   string
+	}{
+		{
+			name:      "image generation",
+			path:      "/v1/images/generations",
+			relayMode: relayconstant.RelayModeImagesGenerations,
+			wantURL:   "https://linksky.top/v1/images/generations",
+		},
+		{
+			name:      "chat completions",
+			path:      "/v1/chat/completions",
+			relayMode: relayconstant.RelayModeChatCompletions,
+			wantURL:   "https://linksky.top/v1/chat/completions",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				RequestURLPath: tc.path,
+				RelayMode:      tc.relayMode,
+				ChannelMeta: &relaycommon.ChannelMeta{
+					ChannelBaseUrl: "https://linksky.top",
+					ChannelType:    constant.ChannelTypeOpenAI,
+				},
+			}
+			got, err := adaptor.GetRequestURL(info)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantURL, got)
+		})
+	}
+}
 
 func TestConvertImageRequestPreservesGptImage2References(t *testing.T) {
 	t.Parallel()
@@ -100,4 +145,54 @@ func TestConvertImageRequestPreservesRequestedImageSize(t *testing.T) {
 			require.Equal(t, size, payload["size"])
 		})
 	}
+}
+
+func TestConvertImageRequestPreservesNanoBananaPayload(t *testing.T) {
+	t.Parallel()
+
+	var request dto.ImageRequest
+	require.NoError(t, common.Unmarshal([]byte(`{
+		"model":"nano-banana-pro",
+		"prompt":"create a product photo",
+		"size":"2048x2048",
+		"aspect_ratio":"1:1",
+		"images":["https://cdn.example/reference.png"]
+	}`), &request))
+
+	converted, err := (&Adaptor{}).ConvertImageRequest(
+		gin.CreateTestContextOnly(httptest.NewRecorder(), gin.New()),
+		&relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeImagesGenerations},
+		request,
+	)
+	require.NoError(t, err)
+
+	body, err := common.Marshal(converted)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, common.Unmarshal(body, &payload))
+	require.Equal(t, "nano-banana-pro", payload["model"])
+	require.Equal(t, "create a product photo", payload["prompt"])
+	require.Equal(t, "2048x2048", payload["size"])
+	require.Equal(t, "1:1", payload["aspect_ratio"])
+	require.Equal(t, []any{"https://cdn.example/reference.png"}, payload["images"])
+}
+
+func TestOpenaiHandlerWithUsagePassesImageResponseThrough(t *testing.T) {
+	t.Parallel()
+
+	const responseJSON = `{"created":1789700000,"data":[{"b64_json":"aW1hZ2U="}],"usage":{"input_tokens":7,"output_tokens":11,"total_tokens":18}}`
+	response := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewBufferString(responseJSON)),
+	}
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+
+	usage, apiErr := OpenaiHandlerWithUsage(ctx, &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{},
+	}, response)
+	require.Nil(t, apiErr)
+	require.Equal(t, responseJSON, recorder.Body.String())
+	require.Equal(t, 18, usage.TotalTokens)
 }

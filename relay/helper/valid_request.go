@@ -223,7 +223,34 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 		}
 	}
 
+	normalizeGPTImage2Quality(imageRequest)
+
 	return imageRequest, nil
+}
+
+// normalizeGPTImage2Quality keeps DALL-E-compatible clients working with the
+// GPT Image 2 family. The GPT Image API uses medium/high instead of the legacy
+// standard/hd values. Omitting auto is equivalent to using the provider's
+// default and also works with OpenAI-compatible providers that reject an
+// explicit auto value.
+func normalizeGPTImage2Quality(imageRequest *dto.ImageRequest) {
+	if imageRequest == nil {
+		return
+	}
+
+	model := strings.ToLower(strings.TrimSpace(imageRequest.Model))
+	if !strings.Contains(model, "gpt-image-2") && !strings.Contains(model, "gpt-image2") {
+		return
+	}
+
+	switch strings.ToLower(strings.TrimSpace(imageRequest.Quality)) {
+	case "standard":
+		imageRequest.Quality = "medium"
+	case "hd":
+		imageRequest.Quality = "high"
+	case "auto":
+		imageRequest.Quality = ""
+	}
 }
 
 func GetAndValidateClaudeRequest(c *gin.Context) (textRequest *dto.ClaudeRequest, err error) {
