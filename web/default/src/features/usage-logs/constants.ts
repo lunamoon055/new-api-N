@@ -108,6 +108,7 @@ export const LOG_TYPE_FILTERS = LOG_TYPES.map((type) => ({
  * Must match backend constants in constant/midjourney.go
  */
 export const MJ_TASK_TYPES = {
+  IMAGE_GENERATION: 'IMAGE_GENERATION', // OpenAI-compatible image generation
   IMAGINE: 'IMAGINE', // 绘图
   UPSCALE: 'UPSCALE', // 放大
   VIDEO: 'VIDEO', // 视频
@@ -211,6 +212,10 @@ export interface StatusMapping {
  * Midjourney task type mappings
  */
 export const MJ_TASK_TYPE_MAPPINGS: Record<string, StatusMapping> = {
+  [MJ_TASK_TYPES.IMAGE_GENERATION]: {
+    label: 'Image Generation',
+    variant: 'blue',
+  },
   [MJ_TASK_TYPES.IMAGINE]: { label: 'Draw', variant: 'blue' },
   [MJ_TASK_TYPES.UPSCALE]: { label: 'Upscale', variant: 'orange' },
   [MJ_TASK_TYPES.VIDEO]: { label: 'Video', variant: 'orange' },

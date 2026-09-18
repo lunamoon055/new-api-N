@@ -336,6 +336,7 @@ func aliImageHandler(a *Adaptor, c *gin.Context, resp *http.Response, info *rela
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
+	service.CaptureImageGenerationData(c, imageResponses.Data)
 	service.IOCopyBytesGracefully(c, resp, jsonResponse)
 
 	return nil, &dto.Usage{}

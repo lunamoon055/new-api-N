@@ -63,6 +63,10 @@ const (
 	// It is not returned to end users, but can be persisted into consume/error logs for debugging.
 	ContextKeyAdminRejectReason ContextKey = "admin_reject_reason"
 
+	// ContextKeyImageResultURLs stores previewable image URLs captured from a
+	// successful synchronous image-generation response.
+	ContextKeyImageResultURLs ContextKey = "image_result_urls"
+
 	// ContextKeyLanguage stores the user's language preference for i18n
 	ContextKeyLanguage ContextKey = "language"
 	ContextKeyIsStream ContextKey = "is_stream"

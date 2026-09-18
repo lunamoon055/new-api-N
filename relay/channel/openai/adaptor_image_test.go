@@ -180,7 +180,7 @@ func TestConvertImageRequestPreservesNanoBananaPayload(t *testing.T) {
 func TestOpenaiHandlerWithUsagePassesImageResponseThrough(t *testing.T) {
 	t.Parallel()
 
-	const responseJSON = `{"created":1789700000,"data":[{"b64_json":"aW1hZ2U="}],"usage":{"input_tokens":7,"output_tokens":11,"total_tokens":18}}`
+	const responseJSON = `{"created":1789700000,"data":[{"url":"https://cdn.example/generated.png"}],"usage":{"input_tokens":7,"output_tokens":11,"total_tokens":18}}`
 	response := &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     make(http.Header),
@@ -195,4 +195,5 @@ func TestOpenaiHandlerWithUsagePassesImageResponseThrough(t *testing.T) {
 	require.Nil(t, apiErr)
 	require.Equal(t, responseJSON, recorder.Body.String())
 	require.Equal(t, 18, usage.TotalTokens)
+	require.Equal(t, []string{"https://cdn.example/generated.png"}, common.GetContextKeyStringSlice(ctx, constant.ContextKeyImageResultURLs))
 }

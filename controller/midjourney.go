@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -272,7 +273,9 @@ func GetAllMidjourney(c *gin.Context) {
 
 	if setting.MjForwardUrlEnabled {
 		for i, midjourney := range items {
-			midjourney.ImageUrl = system_setting.ServerAddress + "/mj/image/" + midjourney.MjId
+			if shouldForwardMidjourneyImage(midjourney) {
+				midjourney.ImageUrl = system_setting.ServerAddress + "/mj/image/" + midjourney.MjId
+			}
 			items[i] = midjourney
 		}
 	}
@@ -297,11 +300,17 @@ func GetUserMidjourney(c *gin.Context) {
 
 	if setting.MjForwardUrlEnabled {
 		for i, midjourney := range items {
-			midjourney.ImageUrl = system_setting.ServerAddress + "/mj/image/" + midjourney.MjId
+			if shouldForwardMidjourneyImage(midjourney) {
+				midjourney.ImageUrl = system_setting.ServerAddress + "/mj/image/" + midjourney.MjId
+			}
 			items[i] = midjourney
 		}
 	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(items)
 	common.ApiSuccess(c, pageInfo)
+}
+
+func shouldForwardMidjourneyImage(task *model.Midjourney) bool {
+	return task != nil && task.Action != constant.MjActionImageGeneration
 }

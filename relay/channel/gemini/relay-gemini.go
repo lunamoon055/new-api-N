@@ -1571,6 +1571,7 @@ func GeminiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 	if jsonErr != nil {
 		return nil, types.NewError(jsonErr, types.ErrorCodeBadResponseBody)
 	}
+	service.CaptureImageGenerationData(c, openAIResponse.Data)
 
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)

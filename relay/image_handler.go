@@ -151,5 +151,9 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	}
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), logContent)
+	resultURLs := service.GetCapturedImageGenerationResultURLs(c)
+	if err := service.RecordImageGenerationLog(c, info, request, resultURLs); err != nil {
+		logger.LogError(c, "failed to record image generation result: "+err.Error())
+	}
 	return nil
 }

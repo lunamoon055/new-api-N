@@ -46,6 +46,7 @@ import {
   mjStatusMapper,
   mjSubmitResultMapper,
 } from '../../lib/mappers'
+import { getDrawingLogImageUrls } from '../../lib/drawing-results'
 import type { MidjourneyLog } from '../../types'
 import { ImageDialog } from '../dialogs/image-dialog'
 import { PromptDialog } from '../dialogs/prompt-dialog'
@@ -57,6 +58,7 @@ import {
 } from './column-helpers'
 
 const drawingTypeIconMap: Record<string, LucideIcon> = {
+  [MJ_TASK_TYPES.IMAGE_GENERATION]: ImageIcon,
   [MJ_TASK_TYPES.IMAGINE]: ImageIcon,
   [MJ_TASK_TYPES.UPSCALE]: Maximize2,
   [MJ_TASK_TYPES.VIDEO]: Video,
@@ -206,10 +208,10 @@ export function useDrawingLogsColumns(
       ),
       cell: function ImageCell({ row }) {
         const log = row.original
-        const imageUrl = row.getValue('image_url') as string
+        const imageUrls = getDrawingLogImageUrls(log)
         const [dialogOpen, setDialogOpen] = useState(false)
 
-        if (!imageUrl) {
+        if (imageUrls.length === 0) {
           return <span className='text-muted-foreground/60 text-xs'>-</span>
         }
 
@@ -223,14 +225,17 @@ export function useDrawingLogsColumns(
             >
               <span className='text-foreground truncate leading-snug group-hover:underline'>
                 {t('View')}
+                {imageUrls.length > 1 ? ` (${imageUrls.length})` : ''}
               </span>
             </button>
-            <ImageDialog
-              imageUrl={imageUrl}
-              taskId={log.mj_id}
-              open={dialogOpen}
-              onOpenChange={setDialogOpen}
-            />
+            {dialogOpen && (
+              <ImageDialog
+                imageUrls={imageUrls}
+                taskId={log.mj_id}
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+              />
+            )}
           </>
         )
       },
