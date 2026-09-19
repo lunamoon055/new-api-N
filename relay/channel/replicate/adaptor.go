@@ -277,13 +277,12 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 	if len(imageResponse.Data) == 0 {
 		return nil, types.NewError(errors.New("replicate adaptor: no usable image data"), types.ErrorCodeBadResponse)
 	}
+	service.CaptureImageGenerationData(c, imageResponse.Data)
 
 	responseBytes, err := common.Marshal(imageResponse)
 	if err != nil {
 		return nil, types.NewError(fmt.Errorf("replicate adaptor: encode response failed: %w", err), types.ErrorCodeBadResponseBody)
 	}
-	service.CaptureImageGenerationData(c, imageResponse.Data)
-
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(http.StatusOK)
 	_, _ = c.Writer.Write(responseBytes)

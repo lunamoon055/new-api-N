@@ -1566,13 +1566,12 @@ func GeminiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 			B64Json: prediction.BytesBase64Encoded,
 		})
 	}
+	service.CaptureImageGenerationData(c, openAIResponse.Data)
 
 	jsonResponse, jsonErr := json.Marshal(openAIResponse)
 	if jsonErr != nil {
 		return nil, types.NewError(jsonErr, types.ErrorCodeBadResponseBody)
 	}
-	service.CaptureImageGenerationData(c, openAIResponse.Data)
-
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.WriteHeader(resp.StatusCode)
 	_, _ = c.Writer.Write(jsonResponse)

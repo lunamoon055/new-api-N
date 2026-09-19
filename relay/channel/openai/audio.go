@@ -35,9 +35,10 @@ func OpenaiTTSHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 		}
 		c.Writer.Header().Set(k, v[0])
 	}
-	c.Writer.WriteHeader(resp.StatusCode)
-
 	if info.IsStream {
+		// Streaming audio cannot be buffered for a second upload response; keep
+		// the original streaming contract and send headers immediately.
+		c.Writer.WriteHeader(resp.StatusCode)
 		helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 			if service.SundaySearch(data, "usage") {
 				var simpleResponse dto.SimpleResponse
@@ -60,11 +61,16 @@ func OpenaiTTSHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			logger.LogError(c, fmt.Sprintf("failed to read TTS response body: %v", err))
-			c.Writer.WriteHeaderNow()
+			c.Writer.WriteHeader(resp.StatusCode)
 			return usage
 		}
 
 		// 写入响应到客户端
+		audioFormat := "mp3" // 默认格式
+		if audioReq, ok := info.Request.(*dto.AudioRequest); ok && audioReq.ResponseFormat != "" {
+			audioFormat = audioReq.ResponseFormat
+		}
+		service.AttachAudioStorageURL(c, bodyBytes, "generated."+audioFormat, resp.Header.Get("Content-Type"))
 		c.Writer.WriteHeaderNow()
 		_, err = c.Writer.Write(bodyBytes)
 		if err != nil {
@@ -72,11 +78,6 @@ func OpenaiTTSHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 		}
 
 		// 计算音频时长并更新 usage
-		audioFormat := "mp3" // 默认格式
-		if audioReq, ok := info.Request.(*dto.AudioRequest); ok && audioReq.ResponseFormat != "" {
-			audioFormat = audioReq.ResponseFormat
-		}
-
 		var duration float64
 		var durationErr error
 

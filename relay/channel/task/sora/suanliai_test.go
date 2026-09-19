@@ -2,6 +2,8 @@ package sora
 
 import (
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -92,4 +94,105 @@ func TestSuanliaiTaskResultExtractsNestedVideoURL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(model.TaskStatusSuccess), result.Status)
 	require.Equal(t, "https://suanliai.top/v1/videos/vid_01/content", result.Url)
+}
+
+func TestBuildRequestURLSupportsOfficialVideoGenerationsCompatibilityPath(t *testing.T) {
+	adaptor := &TaskAdaptor{baseURL: "https://suanliai.top/v1"}
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "官转稳定-sd2-720p(933满血不卡脸)",
+		RequestURLPath:  "/v1/video/generations",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "官转稳定-sd2-720p(933满血不卡脸)"},
+	}
+
+	got, err := adaptor.BuildRequestURL(info)
+	require.NoError(t, err)
+	require.Equal(t, "https://suanliai.top/v1/video/generations", got)
+	require.Equal(t, "/v1/video/generations", info.UpstreamEndpoint)
+}
+
+func TestSuanliaiDocumentedModelsUseTheirDocumentedEndpoints(t *testing.T) {
+	tests := []struct {
+		name     string
+		model    string
+		path     string
+		expected string
+	}{
+		{name: "特价 wan video", model: "wan3.0-video", path: "/v1/videos", expected: "/v1/videos"},
+		{name: "特价 sd mini", model: "sd-mini", path: "/v1/videos", expected: "/v1/videos"},
+		{name: "官转", model: "官转稳定-sd2-720p(933满血不卡脸)", path: "/v1/videos", expected: "/v1/video/generations"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			adaptor := &TaskAdaptor{baseURL: "https://suanliai.top"}
+			info := &relaycommon.RelayInfo{
+				OriginModelName: test.model,
+				RequestURLPath:  test.path,
+				TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: test.model},
+			}
+			got, err := adaptor.BuildRequestURL(info)
+			require.NoError(t, err)
+			require.Equal(t, "https://suanliai.top"+test.expected, got)
+			require.Equal(t, test.expected, info.UpstreamEndpoint)
+		})
+	}
+}
+
+func TestTaskSubmitReqKeepsNewReferenceShapesAndExplicitFalse(t *testing.T) {
+	var req relaycommon.TaskSubmitReq
+	err := common.Unmarshal([]byte(`{
+		"model":"wan3.0-video",
+		"prompt":"demo",
+		"reference_images":[{"url":"https://cdn.example/image.jpg","role":"first_frame"}],
+		"reference_videos":[{"url":"https://cdn.example/video.mp4"}],
+		"reference_audios":[{"url":"https://cdn.example/audio.mp3"}],
+		"generate_audio":false,
+		"n":0,
+		"start_frame":"https://cdn.example/start.jpg"
+	}`), &req)
+	require.NoError(t, err)
+	require.Len(t, req.ReferenceImageObjects, 1)
+	require.Equal(t, "https://cdn.example/image.jpg", req.ReferenceImageObjects[0].URL)
+	require.Equal(t, "first_frame", req.ReferenceImageObjects[0].Role)
+	require.NotNil(t, req.GenerateAudio)
+	require.False(t, *req.GenerateAudio)
+	require.NotNil(t, req.N)
+	require.Equal(t, 0, *req.N)
+	images, videos, audios := req.InputMaterialURLs()
+	require.Contains(t, images, "https://cdn.example/image.jpg")
+	require.Contains(t, images, "https://cdn.example/start.jpg")
+	require.Contains(t, videos, "https://cdn.example/video.mp4")
+	require.Contains(t, audios, "https://cdn.example/audio.mp3")
+}
+
+func TestTaskSubmitReqAcceptsDocumentedOfficialAliases(t *testing.T) {
+	var req relaycommon.TaskSubmitReq
+	require.NoError(t, common.Unmarshal([]byte(`{
+		"model_id":"官转稳定-sd2-720p(933满血不卡脸)",
+		"text":"alias prompt",
+		"seconds":"10",
+		"aspect_ratio":"16:9"
+	}`), &req))
+	require.Equal(t, "官转稳定-sd2-720p(933满血不卡脸)", req.Model)
+	require.Equal(t, "alias prompt", req.Prompt)
+	require.Equal(t, "10", req.Seconds)
+	require.Equal(t, "16:9", req.Ratio)
+}
+
+func TestFetchTaskUsesPersistedVideoGenerationsEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/video/generations/task_123", r.URL.Path)
+		require.Equal(t, "Bearer sk-test", r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	resp, err := (&TaskAdaptor{}).FetchTask(server.URL, "sk-test", map[string]any{
+		"task_id":           "task_123",
+		"upstream_endpoint": "/v1/video/generations",
+	}, "")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 }

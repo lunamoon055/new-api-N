@@ -29,6 +29,10 @@ func SetVideoRouter(router *gin.Engine) {
 	// openai compatible API video routes
 	// docs: https://platform.openai.com/docs/api-reference/videos/create
 	{
+		// Compatibility alias documented by the unified video gateway. It is
+		// normalized by the adaptor to the canonical upstream /v1/videos path.
+		videoV1Router.POST("/videos/generations", controller.RelayTask)
+		videoV1Router.GET("/videos/generations/:task_id", controller.RelayTaskFetch)
 		videoV1Router.POST("/videos", controller.RelayTask)
 		videoV1Router.GET("/videos/:task_id", controller.RelayTaskFetch)
 	}

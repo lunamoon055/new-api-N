@@ -683,6 +683,8 @@ type TaskRelayInfo struct {
 type TaskReference struct {
 	URL        string `json:"url,omitempty"`
 	PreviewURL string `json:"previewUrl,omitempty"`
+	Role       string `json:"role,omitempty"`
+	Duration   *int   `json:"duration,omitempty"`
 }
 
 func (r *TaskReference) UnmarshalJSON(data []byte) error {
@@ -702,31 +704,46 @@ func (r *TaskReference) UnmarshalJSON(data []byte) error {
 }
 
 type TaskSubmitReq struct {
-	Prompt          string                 `json:"prompt"`
-	Model           string                 `json:"model,omitempty"`
-	Mode            string                 `json:"mode,omitempty"`
-	Image           string                 `json:"image,omitempty"`
-	Images          []string               `json:"images,omitempty"`
-	ImageURL        string                 `json:"image_url,omitempty"`
-	ImageURLs       []string               `json:"image_urls,omitempty"`
-	StartImageURL   string                 `json:"start_image_url,omitempty"`
-	EndImageURL     string                 `json:"end_image_url,omitempty"`
-	VideoURL        string                 `json:"video_url,omitempty"`
-	Videos          []string               `json:"videos,omitempty"`
-	VideoReference  []TaskReference        `json:"video_reference,omitempty"`
-	AudioURL        string                 `json:"audio_url,omitempty"`
-	AudioReference  []TaskReference        `json:"audio_reference,omitempty"`
-	Audios          []string               `json:"audios,omitempty"`
-	Size            string                 `json:"size,omitempty"`
-	Ratio           string                 `json:"ratio,omitempty"`
-	Resolution      string                 `json:"resolution,omitempty"`
-	Duration        int                    `json:"duration,omitempty"`
-	Seconds         string                 `json:"seconds,omitempty"`
-	InputReference  string                 `json:"input_reference,omitempty"`
-	ReferenceImages []string               `json:"referenceImages,omitempty"`
-	ReferenceVideos []string               `json:"referenceVideos,omitempty"`
-	ReferenceAudios []string               `json:"referenceAudios,omitempty"`
-	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+	Prompt          string          `json:"prompt"`
+	Model           string          `json:"model,omitempty"`
+	Mode            string          `json:"mode,omitempty"`
+	Image           string          `json:"image,omitempty"`
+	Images          []string        `json:"images,omitempty"`
+	ImageURL        string          `json:"image_url,omitempty"`
+	ImageURLs       []string        `json:"image_urls,omitempty"`
+	StartImageURL   string          `json:"start_image_url,omitempty"`
+	EndImageURL     string          `json:"end_image_url,omitempty"`
+	VideoURL        string          `json:"video_url,omitempty"`
+	Videos          []string        `json:"videos,omitempty"`
+	VideoReference  []TaskReference `json:"video_reference,omitempty"`
+	AudioURL        string          `json:"audio_url,omitempty"`
+	AudioReference  []TaskReference `json:"audio_reference,omitempty"`
+	Audios          []string        `json:"audios,omitempty"`
+	Size            string          `json:"size,omitempty"`
+	Ratio           string          `json:"ratio,omitempty"`
+	Resolution      string          `json:"resolution,omitempty"`
+	Duration        int             `json:"duration,omitempty"`
+	Seconds         string          `json:"seconds,omitempty"`
+	InputReference  string          `json:"input_reference,omitempty"`
+	ReferenceImages []string        `json:"referenceImages,omitempty"`
+	ReferenceVideos []string        `json:"referenceVideos,omitempty"`
+	ReferenceAudios []string        `json:"referenceAudios,omitempty"`
+	// The public video APIs have shipped both camelCase URL arrays and
+	// snake_case reference objects. Keep both shapes at the boundary so the
+	// adaptor can forward the documented contract without losing roles or
+	// per-reference metadata.
+	ReferenceImageObjects []TaskReference        `json:"reference_images,omitempty"`
+	ReferenceVideoObjects []TaskReference        `json:"reference_videos,omitempty"`
+	ReferenceAudioObjects []TaskReference        `json:"reference_audios,omitempty"`
+	StartFrame            json.RawMessage        `json:"start_frame,omitempty"`
+	EndFrame              json.RawMessage        `json:"end_frame,omitempty"`
+	FirstFrameImage       string                 `json:"first_frame_image,omitempty"`
+	LastFrameImage        string                 `json:"last_frame_image,omitempty"`
+	Quality               string                 `json:"quality,omitempty"`
+	NegativePrompt        string                 `json:"negative_prompt,omitempty"`
+	GenerateAudio         *bool                  `json:"generate_audio,omitempty"`
+	N                     *int                   `json:"n,omitempty"`
+	Metadata              map[string]interface{} `json:"metadata,omitempty"`
 }
 
 func (t *TaskSubmitReq) GetPrompt() string {
@@ -749,7 +766,14 @@ func (t *TaskSubmitReq) HasImage() bool {
 		t.InputReference != "" ||
 		len(t.ReferenceImages) > 0 ||
 		len(t.ReferenceVideos) > 0 ||
-		len(t.ReferenceAudios) > 0
+		len(t.ReferenceAudios) > 0 ||
+		len(t.ReferenceImageObjects) > 0 ||
+		len(t.ReferenceVideoObjects) > 0 ||
+		len(t.ReferenceAudioObjects) > 0 ||
+		len(t.StartFrame) > 0 ||
+		len(t.EndFrame) > 0 ||
+		t.FirstFrameImage != "" ||
+		t.LastFrameImage != ""
 }
 
 // InputMaterialURLs returns user-supplied reference links grouped by media
@@ -757,11 +781,15 @@ func (t *TaskSubmitReq) HasImage() bool {
 // base64 payloads in task history.
 func (t TaskSubmitReq) InputMaterialURLs() (images, videos, audios []string) {
 	images = normalizeTaskMaterialURLs(
-		[]string{t.Image, t.ImageURL, t.InputReference, t.StartImageURL, t.EndImageURL},
+		[]string{t.Image, t.ImageURL, t.InputReference, t.StartImageURL, t.EndImageURL, t.FirstFrameImage, t.LastFrameImage},
 		t.Images,
 		t.ImageURLs,
 		t.ReferenceImages,
 	)
+	images = appendRawTaskMaterialURLs(images, t.StartFrame, t.EndFrame)
+	for _, reference := range t.ReferenceImageObjects {
+		images = normalizeTaskMaterialURLs(images, []string{reference.URL, reference.PreviewURL})
+	}
 
 	videoReferences := make([]string, 0, len(t.VideoReference))
 	for _, reference := range t.VideoReference {
@@ -773,6 +801,9 @@ func (t TaskSubmitReq) InputMaterialURLs() (images, videos, audios []string) {
 		videoReferences,
 		t.ReferenceVideos,
 	)
+	for _, reference := range t.ReferenceVideoObjects {
+		videos = normalizeTaskMaterialURLs(videos, []string{reference.URL, reference.PreviewURL})
+	}
 	audioReferences := make([]string, 0, len(t.AudioReference))
 	for _, reference := range t.AudioReference {
 		audioReferences = append(audioReferences, reference.URL, reference.PreviewURL)
@@ -783,6 +814,9 @@ func (t TaskSubmitReq) InputMaterialURLs() (images, videos, audios []string) {
 		audioReferences,
 		t.ReferenceAudios,
 	)
+	for _, reference := range t.ReferenceAudioObjects {
+		audios = normalizeTaskMaterialURLs(audios, []string{reference.URL, reference.PreviewURL})
+	}
 	return
 }
 
@@ -808,12 +842,35 @@ func normalizeTaskMaterialURLs(groups ...[]string) []string {
 	return result
 }
 
+func appendRawTaskMaterialURLs(values []string, rawValues ...json.RawMessage) []string {
+	groups := make([][]string, 0, len(rawValues)+1)
+	groups = append(groups, values)
+	for _, raw := range rawValues {
+		if len(raw) == 0 || string(raw) == "null" {
+			continue
+		}
+		var single string
+		if err := common.Unmarshal(raw, &single); err == nil {
+			groups = append(groups, []string{single})
+			continue
+		}
+		var multiple []string
+		if err := common.Unmarshal(raw, &multiple); err == nil {
+			groups = append(groups, multiple)
+		}
+	}
+	return normalizeTaskMaterialURLs(groups...)
+}
+
 func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 	type Alias TaskSubmitReq
 	aux := &struct {
-		Metadata json.RawMessage `json:"metadata,omitempty"`
-		Duration json.RawMessage `json:"duration,omitempty"`
-		Seconds  json.RawMessage `json:"seconds,omitempty"`
+		Metadata    json.RawMessage `json:"metadata,omitempty"`
+		Duration    json.RawMessage `json:"duration,omitempty"`
+		Seconds     json.RawMessage `json:"seconds,omitempty"`
+		ModelID     string          `json:"model_id,omitempty"`
+		Text        string          `json:"text,omitempty"`
+		AspectRatio string          `json:"aspect_ratio,omitempty"`
 		*Alias
 	}{
 		Alias: (*Alias)(t),
@@ -821,6 +878,15 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 
 	if err := common.Unmarshal(data, &aux); err != nil {
 		return err
+	}
+	if strings.TrimSpace(t.Model) == "" {
+		t.Model = strings.TrimSpace(aux.ModelID)
+	}
+	if strings.TrimSpace(t.Prompt) == "" {
+		t.Prompt = aux.Text
+	}
+	if strings.TrimSpace(t.Ratio) == "" {
+		t.Ratio = strings.TrimSpace(aux.AspectRatio)
 	}
 
 	if len(aux.Duration) > 0 {

@@ -39,6 +39,24 @@ export type UpdateOptionResponse = {
   message: string
 }
 
+export type MediaStorageProvider = {
+  id: string
+  name: string
+  enabled: boolean
+  upload_url: string
+  auth_header: string
+  auth_prefix: string
+  token: string
+  field_name: string
+  priority: number
+}
+
+export type MediaStorageSettingsResponse = {
+  success: boolean
+  message: string
+  data: { providers: MediaStorageProvider[] }
+}
+
 export type ConfirmPaymentComplianceResponse = {
   success: boolean
   message: string

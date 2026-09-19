@@ -24,6 +24,8 @@ import type {
   SystemOptionsResponse,
   UpdateOptionRequest,
   UpdateOptionResponse,
+  MediaStorageProvider,
+  MediaStorageSettingsResponse,
   UpstreamChannelsResponse,
   UpstreamRatiosResponse,
 } from './types'
@@ -37,6 +39,25 @@ export async function updateSystemOption(request: UpdateOptionRequest) {
   const res = await api.put<UpdateOptionResponse>('/api/option/', request)
   if (!res.data.success) {
     throw new Error(res.data.message || 'Failed to update setting')
+  }
+  return res.data
+}
+
+export async function getMediaStorageSettings() {
+  const res = await api.get<MediaStorageSettingsResponse>(
+    '/api/option/media_storage'
+  )
+  return res.data
+}
+
+export async function updateMediaStorageSettings(
+  providers: MediaStorageProvider[]
+) {
+  const res = await api.put<UpdateOptionResponse>('/api/option/media_storage', {
+    providers,
+  })
+  if (!res.data.success) {
+    throw new Error(res.data.message || 'Failed to update media storage')
   }
   return res.data
 }

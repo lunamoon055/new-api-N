@@ -43,6 +43,23 @@ func isSuanliaiModelPair(originModelName, upstreamModelName string) bool {
 	return isSuanliaiModelName(originModelName) || isSuanliaiModelName(upstreamModelName)
 }
 
+// These public IDs are documented as using the unified /v1/videos contract.
+// Keep them separate from the legacy Linksky async-generation model family,
+// which still uses /v1/video/async-generations in this adaptor.
+func isSuanliaiUnifiedVideosModelName(modelName string) bool {
+	normalized := normalizeSuanliaiModelName(modelName)
+	return normalized == "sd2.0" ||
+		normalized == "sd-mini" ||
+		normalized == "sd-2.5" ||
+		normalized == "grok-imagine-video-1.5" ||
+		strings.HasPrefix(normalized, "wan3.0-video") ||
+		strings.HasPrefix(normalized, "wan3.0-image")
+}
+
+func isSuanliaiOfficialTransferModelName(modelName string) bool {
+	return strings.HasPrefix(normalizeSuanliaiModelName(modelName), "官转")
+}
+
 type suanliaiOmniRequest struct {
 	Prompt      string `json:"prompt"`
 	ImageURL    string `json:"image_url,omitempty"`

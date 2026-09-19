@@ -95,10 +95,26 @@ func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string
 		Resolution: formData.Get("resolution"),
 		Metadata:   make(map[string]interface{}),
 	}
+	if req.Model == "" {
+		req.Model = formData.Get("model_id")
+	}
+	if req.Prompt == "" {
+		req.Prompt = formData.Get("text")
+	}
+	if req.Ratio == "" {
+		req.Ratio = formData.Get("aspect_ratio")
+	}
 
 	if durationStr := formData.Get("seconds"); durationStr != "" {
 		if duration, err := strconv.Atoi(durationStr); err == nil {
 			req.Duration = duration
+		}
+	}
+	if req.Duration == 0 {
+		if durationStr := formData.Get("duration"); durationStr != "" {
+			if duration, err := strconv.Atoi(durationStr); err == nil {
+				req.Duration = duration
+			}
 		}
 	}
 
@@ -113,6 +129,34 @@ func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string
 	}
 	if referenceAudios := formData["referenceAudios"]; len(referenceAudios) > 0 {
 		req.ReferenceAudios = referenceAudios
+	}
+	if referenceImages := formData["reference_images"]; len(referenceImages) > 0 {
+		for _, value := range referenceImages {
+			req.ReferenceImageObjects = append(req.ReferenceImageObjects, TaskReference{URL: value})
+		}
+	}
+	if referenceVideos := formData["reference_videos"]; len(referenceVideos) > 0 {
+		for _, value := range referenceVideos {
+			req.ReferenceVideoObjects = append(req.ReferenceVideoObjects, TaskReference{URL: value})
+		}
+	}
+	if referenceAudios := formData["reference_audios"]; len(referenceAudios) > 0 {
+		for _, value := range referenceAudios {
+			req.ReferenceAudioObjects = append(req.ReferenceAudioObjects, TaskReference{URL: value})
+		}
+	}
+	if quality := formData.Get("quality"); quality != "" {
+		req.Quality = quality
+	}
+	if negativePrompt := formData.Get("negative_prompt"); negativePrompt != "" {
+		req.NegativePrompt = negativePrompt
+	}
+	if generateAudio := formData.Get("generate_audio"); generateAudio != "" {
+		value, err := strconv.ParseBool(generateAudio)
+		if err != nil {
+			return req, fmt.Errorf("generate_audio must be a boolean")
+		}
+		req.GenerateAudio = &value
 	}
 
 	for key, values := range formData {
@@ -194,29 +238,47 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 
 func isKnownTaskField(field string) bool {
 	knownFields := map[string]bool{
-		"prompt":          true,
-		"model":           true,
-		"mode":            true,
-		"image":           true,
-		"images":          true,
-		"image_url":       true,
-		"image_urls":      true,
-		"size":            true,
-		"ratio":           true,
-		"resolution":      true,
-		"duration":        true,
-		"seconds":         true,
-		"aspect_ratio":    true,
-		"video_url":       true,
-		"videos":          true,
-		"audio_url":       true,
-		"audios":          true,
-		"seed":            true,
-		"callback_url":    true,
-		"input_reference": true, // Sora 特有字段
-		"referenceImages": true,
-		"referenceVideos": true,
-		"referenceAudios": true,
+		"prompt":             true,
+		"text":               true,
+		"model":              true,
+		"model_id":           true,
+		"mode":               true,
+		"image":              true,
+		"images":             true,
+		"image_url":          true,
+		"image_urls":         true,
+		"size":               true,
+		"ratio":              true,
+		"resolution":         true,
+		"duration":           true,
+		"seconds":            true,
+		"aspect_ratio":       true,
+		"video_url":          true,
+		"videos":             true,
+		"audio_url":          true,
+		"audios":             true,
+		"seed":               true,
+		"callback_url":       true,
+		"input_reference":    true, // Sora 特有字段
+		"referenceImages":    true,
+		"referenceVideos":    true,
+		"referenceAudios":    true,
+		"reference_images":   true,
+		"reference_videos":   true,
+		"reference_audios":   true,
+		"start_frame":        true,
+		"end_frame":          true,
+		"first_frame_image":  true,
+		"last_frame_image":   true,
+		"quality":            true,
+		"negative_prompt":    true,
+		"generate_audio":     true,
+		"n":                  true,
+		"image_refs":         true,
+		"video_refs":         true,
+		"audio_refs":         true,
+		"compliance_enabled": true,
+		"compliance_mode":    true,
 	}
 	return knownFields[field]
 }

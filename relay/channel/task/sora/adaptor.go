@@ -122,6 +122,10 @@ func isAsyncGenerationsPath(path string) bool {
 	return strings.HasPrefix(strings.Split(path, "?")[0], "/v1/video/async-generations")
 }
 
+func isVideoGenerationsPath(path string) bool {
+	return strings.HasPrefix(strings.Split(path, "?")[0], "/v1/video/generations")
+}
+
 func setUpstreamEndpoint(info *relaycommon.RelayInfo, endpoint string) {
 	if info != nil && info.TaskRelayInfo != nil {
 		info.UpstreamEndpoint = endpoint
@@ -229,10 +233,21 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 	if info.ChannelMeta != nil {
 		upstreamModelName = info.UpstreamModelName
 	}
+	if isSuanliaiOfficialTransferModelName(info.OriginModelName) ||
+		isSuanliaiOfficialTransferModelName(upstreamModelName) {
+		setUpstreamEndpoint(info, "/v1/video/generations")
+		return fmt.Sprintf("%s/v1/video/generations", baseURL), nil
+	}
 	if isSuanliaiModelPair(info.OriginModelName, upstreamModelName) ||
+		isSuanliaiUnifiedVideosModelName(info.OriginModelName) ||
+		isSuanliaiUnifiedVideosModelName(upstreamModelName) ||
 		isVideosModelName(info.OriginModelName) || isVideosModelName(upstreamModelName) {
 		setUpstreamEndpoint(info, "/v1/videos")
 		return fmt.Sprintf("%s/v1/videos", baseURL), nil
+	}
+	if isVideoGenerationsPath(info.RequestURLPath) {
+		setUpstreamEndpoint(info, "/v1/video/generations")
+		return fmt.Sprintf("%s/v1/video/generations", baseURL), nil
 	}
 	if isAsyncGenerationsPath(info.RequestURLPath) ||
 		isAsyncGenerationsModel(info.OriginModelName) ||
@@ -270,6 +285,11 @@ func getOriginTaskID(info *relaycommon.RelayInfo) string {
 func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
 	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
+	// The 003 contract documents this as an optional submission safeguard.
+	// Forward only a caller-provided value; do not invent provider semantics.
+	if idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key")); idempotencyKey != "" {
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
 	return nil
 }
 
@@ -437,7 +457,13 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	case "/v1/videos":
 		useAsyncGenerations = false
 	}
-	if isSuanliaiModelPair(modelName, originModelName) {
+	if strings.TrimSuffix(strings.TrimSpace(upstreamEndpoint), "/") == "/v1/video/generations" {
+		uri = fmt.Sprintf("%s/v1/video/generations/%s", baseURL, taskID)
+		useAsyncGenerations = false
+	}
+	if isSuanliaiModelPair(modelName, originModelName) ||
+		isSuanliaiUnifiedVideosModelName(modelName) ||
+		isSuanliaiUnifiedVideosModelName(originModelName) {
 		useAsyncGenerations = false
 	}
 	if useAsyncGenerations {

@@ -332,11 +332,11 @@ func aliImageHandler(a *Adaptor, c *gin.Context, resp *http.Response, info *rela
 	} else if len(imageResponses.Data) != 0 {
 		info.PriceData.AddOtherRatio("n", float64(len(imageResponses.Data)))
 	}
+	service.CaptureImageGenerationData(c, imageResponses.Data)
 	jsonResponse, err := common.Marshal(imageResponses)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
-	service.CaptureImageGenerationData(c, imageResponses.Data)
 	service.IOCopyBytesGracefully(c, resp, jsonResponse)
 
 	return nil, &dto.Usage{}

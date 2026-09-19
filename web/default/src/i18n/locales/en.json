@@ -4855,6 +4855,25 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Media storage": "Media storage",
+    "Configure media result storage providers": "Configure media result storage providers",
+    "Copy generated images, videos and audio to one of the configured hosts. If every upload fails, the upstream URL or binary response is kept.": "Copy generated images, videos and audio to one of the configured hosts. If every upload fails, the upstream URL or binary response is kept.",
+    "No media storage providers configured": "No media storage providers configured",
+    "Provider ID": "Provider ID",
+    "Upload URL": "Upload URL",
+    "Auth header": "Auth header",
+    "Auth prefix": "Auth prefix",
+    "Leave empty for a raw token": "Leave empty for a raw token",
+    "Leave ******** unchanged to keep the token": "Leave ******** unchanged to keep the token",
+    "File field": "File field",
+    "Enable media storage provider": "Enable media storage provider",
+    "Delete media storage provider": "Delete media storage provider",
+    "Add media storage provider": "Add media storage provider",
+    "Save media storage settings": "Save media storage settings",
+    "Media storage settings saved": "Media storage settings saved",
+    "Each media storage provider needs an ID and upload URL": "Each media storage provider needs an ID and upload URL",
+    "Provide a valid media storage upload URL": "Provide a valid media storage upload URL",
+    "GHLINK ImgHub": "GHLINK ImgHub"
   }
 }

@@ -571,7 +571,13 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	if strings.HasPrefix(ti.Url, "data:") {
 		// data: URI — kept in Data, not ResultURL
 	} else if ti.Url != "" {
-		task.PrivateData.ResultURL = ti.Url
+		resultURL := ti.Url
+		if service.HasEnabledMediaStorage() {
+			if storedURL, uploadErr := service.UploadMediaURL(context.Background(), resultURL, "video/mp4"); uploadErr == nil && storedURL != "" {
+				resultURL = storedURL
+			}
+		}
+		task.PrivateData.ResultURL = resultURL
 	} else if task.Status == model.TaskStatusSuccess {
 		// No URL from adaptor — construct proxy URL using public task ID
 		task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)

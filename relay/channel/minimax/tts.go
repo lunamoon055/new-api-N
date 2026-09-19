@@ -145,7 +145,13 @@ func handleTTSResponse(c *gin.Context, resp *http.Response, info *relaycommon.Re
 	}
 
 	if strings.HasPrefix(minimaxResp.Data.Audio, "http") {
-		c.Redirect(http.StatusFound, minimaxResp.Data.Audio)
+		redirectURL := minimaxResp.Data.Audio
+		if service.HasEnabledMediaStorage() {
+			if storedURL, uploadErr := service.UploadMediaURL(c.Request.Context(), redirectURL, "audio/mpeg"); uploadErr == nil && storedURL != "" {
+				redirectURL = storedURL
+			}
+		}
+		c.Redirect(http.StatusFound, redirectURL)
 	} else {
 		// Handle hex-encoded audio data
 		audioData, decodeErr := hex.DecodeString(minimaxResp.Data.Audio)
@@ -160,6 +166,7 @@ func handleTTSResponse(c *gin.Context, resp *http.Response, info *relaycommon.Re
 		// Determine content type - default to mp3
 		contentType := "audio/mpeg"
 
+		service.AttachAudioStorageURL(c, audioData, "generated.mp3", contentType)
 		c.Data(http.StatusOK, contentType, audioData)
 	}
 

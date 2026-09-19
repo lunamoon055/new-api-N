@@ -117,6 +117,12 @@ func VideoProxy(c *gin.Context) {
 			videoURL = dataURL
 		} else if isAsyncGenerationsVideoTask(task) {
 			videoURL = fmt.Sprintf("%s/v1/video/async-generations/%s/content", baseURL, task.GetUpstreamTaskID())
+		} else if isVideoGenerationsTask(task) {
+			// 官转's documented response carries a signed result_url; it does
+			// not document a content endpoint. Never guess the /v1/videos
+			// content path for this task family.
+			videoProxyError(c, http.StatusBadGateway, "server_error", "Upstream task did not return a video result URL")
+			return
 		} else {
 			videoURL = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.GetUpstreamTaskID())
 		}
@@ -223,6 +229,13 @@ func isAsyncGenerationsVideoTask(task *model.Task) bool {
 		}
 	}
 	return false
+}
+
+func isVideoGenerationsTask(task *model.Task) bool {
+	if task == nil {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(task.PrivateData.UpstreamEndpoint), "/v1/video/generations")
 }
 
 func writeVideoDataURL(c *gin.Context, taskID string, dataURL string) error {

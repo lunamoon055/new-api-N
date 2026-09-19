@@ -93,6 +93,7 @@ export function OperationsSettings() {
     | 'monitoring'
     | 'email'
     | 'worker'
+    | 'media-storage'
     | 'logs'
     | 'performance'
     | 'update-checker'

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -54,6 +55,50 @@ func CaptureImageGenerationResponse(c *gin.Context, responseBody []byte) []strin
 	return CaptureImageGenerationData(c, response.Data)
 }
 
+// RewriteImageGenerationResponse uploads image results before the response is
+// sent downstream and replaces each successful result URL with the configured
+// media-storage URL. If storage is unavailable, the original URL/base64
+// result is retained by design.
+func RewriteImageGenerationResponse(c *gin.Context, responseBody []byte) []byte {
+	var response dto.ImageResponse
+	if err := common.Unmarshal(responseBody, &response); err != nil {
+		return responseBody
+	}
+	if len(response.Data) == 0 {
+		return responseBody
+	}
+	changed := false
+	resultURLs := make([]string, 0, len(response.Data))
+	seen := make(map[string]struct{}, len(response.Data))
+	for index := range response.Data {
+		urls := captureImageDataItem(c, &response.Data[index])
+		if len(urls) == 0 {
+			continue
+		}
+		for _, resultURL := range urls {
+			if _, exists := seen[resultURL]; !exists && len(resultURLs) < maxImageGenerationResultCount {
+				seen[resultURL] = struct{}{}
+				resultURLs = append(resultURLs, resultURL)
+			}
+		}
+		if response.Data[index].Url != urls[0] {
+			changed = true
+		}
+		response.Data[index].Url = urls[0]
+	}
+	if len(resultURLs) > 0 {
+		common.SetContextKey(c, constant.ContextKeyImageResultURLs, resultURLs)
+	}
+	if !changed {
+		return responseBody
+	}
+	result, err := common.Marshal(response)
+	if err != nil {
+		return responseBody
+	}
+	return result
+}
+
 // CaptureImageGenerationData keeps remote URLs and persists base64 images as
 // local preview files. Raw base64 data is deliberately never stored in the DB.
 func CaptureImageGenerationData(c *gin.Context, data []dto.ImageData) []string {
@@ -75,21 +120,16 @@ func CaptureImageGenerationData(c *gin.Context, data []dto.ImageData) []string {
 		resultURLs = append(resultURLs, candidate)
 	}
 
-	for _, image := range data {
+	for index := range data {
 		if len(resultURLs) >= maxImageGenerationResultCount {
 			break
 		}
-		if normalizedURL, ok := normalizeImageGenerationResultURL(image.Url); ok {
-			appendURL(normalizedURL)
-		} else if strings.HasPrefix(strings.TrimSpace(image.Url), "data:image/") {
-			if storedURL, err := persistBase64ImageGenerationResult(image.Url); err == nil {
-				appendURL(storedURL)
-			}
+		itemURLs := captureImageDataItem(c, &data[index])
+		if len(itemURLs) > 0 {
+			data[index].Url = itemURLs[0]
 		}
-		if strings.TrimSpace(image.B64Json) != "" {
-			if storedURL, err := persistBase64ImageGenerationResult(image.B64Json); err == nil {
-				appendURL(storedURL)
-			}
+		for _, itemURL := range itemURLs {
+			appendURL(itemURL)
 		}
 	}
 
@@ -97,6 +137,90 @@ func CaptureImageGenerationData(c *gin.Context, data []dto.ImageData) []string {
 		common.SetContextKey(c, constant.ContextKeyImageResultURLs, resultURLs)
 	}
 	return resultURLs
+}
+
+func captureImageDataItem(c *gin.Context, image *dto.ImageData) []string {
+	if image == nil {
+		return nil
+	}
+	ctx := context.Background()
+	if c != nil && c.Request != nil {
+		ctx = c.Request.Context()
+	}
+	appendURL := func(raw string) []string {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return nil
+		}
+		if HasEnabledMediaStorage() {
+			if uploadedURL, err := UploadMediaURL(ctx, raw, "image/jpeg"); err == nil && uploadedURL != "" {
+				return []string{uploadedURL}
+			}
+		}
+		if normalizedURL, ok := normalizeImageGenerationResultURL(raw); ok {
+			return []string{normalizedURL}
+		}
+		return nil
+	}
+	storeBytes := func(data []byte, filename, contentType string) []string {
+		if HasEnabledMediaStorage() {
+			if uploadedURL, err := UploadMediaBytes(ctx, data, filename, contentType); err == nil && uploadedURL != "" {
+				return []string{uploadedURL}
+			}
+		}
+		return nil
+	}
+
+	if imageURL := strings.TrimSpace(image.Url); imageURL != "" {
+		if strings.HasPrefix(imageURL, "data:image/") {
+			if data, filename, contentType, err := decodeDataURL(imageURL, "image/jpeg"); err == nil {
+				if uploaded := storeBytes(data, filename, contentType); len(uploaded) > 0 {
+					return uploaded
+				}
+			}
+			if storedURL, err := persistBase64ImageGenerationResult(imageURL); err == nil {
+				return []string{storedURL}
+			}
+			return nil
+		}
+		return appendURL(imageURL)
+	}
+	if encoded := strings.TrimSpace(image.B64Json); encoded != "" {
+		if data, filename, contentType, err := decodeBase64Image(encoded); err == nil {
+			if uploaded := storeBytes(data, filename, contentType); len(uploaded) > 0 {
+				return uploaded
+			}
+		}
+		if storedURL, err := persistBase64ImageGenerationResult(encoded); err == nil {
+			return []string{storedURL}
+		}
+	}
+	return nil
+}
+
+func decodeBase64Image(encoded string) ([]byte, string, string, error) {
+	encoded = strings.TrimSpace(encoded)
+	var (
+		data        []byte
+		filename    string
+		contentType string
+		err         error
+	)
+	if strings.HasPrefix(encoded, "data:") {
+		data, filename, contentType, err = decodeDataURL(encoded, "image/jpeg")
+	} else {
+		data, filename, contentType, err = decodeDataURL("data:image/jpeg;base64,"+encoded, "image/jpeg")
+	}
+	if err != nil {
+		return nil, "", "", err
+	}
+	if detected := detectImageGenerationResultMIME(data); detected != "" {
+		contentType = detected
+		if extension, ok := imageGenerationResultExtensions[detected]; ok {
+			filename = "generated" + extension
+		}
+	}
+	return data, filename, contentType, nil
 }
 
 func GetCapturedImageGenerationResultURLs(c *gin.Context) []string {
