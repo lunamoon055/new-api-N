@@ -194,19 +194,29 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 
 func isKnownTaskField(field string) bool {
 	knownFields := map[string]bool{
-		"prompt":           true,
-		"model":            true,
-		"mode":             true,
-		"image":            true,
-		"images":           true,
-		"size":             true,
-		"ratio":            true,
-		"resolution":       true,
-		"duration":         true,
-		"input_reference":  true, // Sora 特有字段
-		"referenceImages":  true,
-		"referenceVideos":  true,
-		"referenceAudios":  true,
+		"prompt":          true,
+		"model":           true,
+		"mode":            true,
+		"image":           true,
+		"images":          true,
+		"image_url":       true,
+		"image_urls":      true,
+		"size":            true,
+		"ratio":           true,
+		"resolution":      true,
+		"duration":        true,
+		"seconds":         true,
+		"aspect_ratio":    true,
+		"video_url":       true,
+		"videos":          true,
+		"audio_url":       true,
+		"audios":          true,
+		"seed":            true,
+		"callback_url":    true,
+		"input_reference": true, // Sora 特有字段
+		"referenceImages": true,
+		"referenceVideos": true,
+		"referenceAudios": true,
 	}
 	return knownFields[field]
 }

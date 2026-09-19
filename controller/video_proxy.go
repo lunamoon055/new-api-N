@@ -64,6 +64,7 @@ func VideoProxy(c *gin.Context) {
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
 	}
+	baseURL = normalizeVideoProxyBaseURL(baseURL)
 
 	var videoURL string
 	proxy := channel.GetSetting().Proxy
@@ -193,6 +194,14 @@ func isTaskProxyURL(rawURL string, taskID string) bool {
 		return false
 	}
 	return strings.Contains(rawURL, fmt.Sprintf("/v1/videos/%s/content", taskID))
+}
+
+func normalizeVideoProxyBaseURL(value string) string {
+	baseURL := strings.TrimRight(strings.TrimSpace(value), "/")
+	if strings.HasSuffix(strings.ToLower(baseURL), "/v1") {
+		return strings.TrimRight(baseURL[:len(baseURL)-len("/v1")], "/")
+	}
+	return baseURL
 }
 
 func isAsyncGenerationsVideoTask(task *model.Task) bool {

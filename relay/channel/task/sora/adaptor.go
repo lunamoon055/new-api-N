@@ -158,6 +158,19 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
+	upstreamModelName := ""
+	if info != nil && info.ChannelMeta != nil {
+		upstreamModelName = info.UpstreamModelName
+	}
+	if isSuanliaiModelPair(req.Model, upstreamModelName) {
+		modelName := upstreamModelName
+		if !isSuanliaiModelName(modelName) {
+			modelName = req.Model
+		}
+		if taskErr := validateSuanliaiJSONRequest(c, modelName); taskErr != nil {
+			return taskErr
+		}
+	}
 	if isSeedance2ModelName(req.Model) {
 		return validateSeedance2JSONRequest(c)
 	}
@@ -207,26 +220,36 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
+	baseURL := normalizeVideoAPIBaseURL(a.baseURL)
 	if getTaskAction(info) == constant.TaskActionRemix {
 		setUpstreamEndpoint(info, "/v1/videos")
-		return fmt.Sprintf("%s/v1/videos/%s/remix", a.baseURL, getOriginTaskID(info)), nil
+		return fmt.Sprintf("%s/v1/videos/%s/remix", baseURL, getOriginTaskID(info)), nil
 	}
 	upstreamModelName := ""
 	if info.ChannelMeta != nil {
 		upstreamModelName = info.UpstreamModelName
 	}
-	if isVideosModelName(info.OriginModelName) || isVideosModelName(upstreamModelName) {
+	if isSuanliaiModelPair(info.OriginModelName, upstreamModelName) ||
+		isVideosModelName(info.OriginModelName) || isVideosModelName(upstreamModelName) {
 		setUpstreamEndpoint(info, "/v1/videos")
-		return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
+		return fmt.Sprintf("%s/v1/videos", baseURL), nil
 	}
 	if isAsyncGenerationsPath(info.RequestURLPath) ||
 		isAsyncGenerationsModel(info.OriginModelName) ||
 		isAsyncGenerationsModel(upstreamModelName) {
 		setUpstreamEndpoint(info, "/v1/video/async-generations")
-		return fmt.Sprintf("%s/v1/video/async-generations", a.baseURL), nil
+		return fmt.Sprintf("%s/v1/video/async-generations", baseURL), nil
 	}
 	setUpstreamEndpoint(info, "/v1/videos")
-	return fmt.Sprintf("%s/v1/videos", a.baseURL), nil
+	return fmt.Sprintf("%s/v1/videos", baseURL), nil
+}
+
+func normalizeVideoAPIBaseURL(value string) string {
+	baseURL := strings.TrimRight(strings.TrimSpace(value), "/")
+	if strings.HasSuffix(strings.ToLower(baseURL), "/v1") {
+		return strings.TrimRight(baseURL[:len(baseURL)-len("/v1")], "/")
+	}
+	return baseURL
 }
 
 func getTaskAction(info *relaycommon.RelayInfo) string {
@@ -405,7 +428,8 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	modelName, _ := body["model"].(string)
 	originModelName, _ := body["origin_model"].(string)
 	upstreamEndpoint, _ := body["upstream_endpoint"].(string)
-	uri := fmt.Sprintf("%s/v1/videos/%s", baseUrl, taskID)
+	baseURL := normalizeVideoAPIBaseURL(baseUrl)
+	uri := fmt.Sprintf("%s/v1/videos/%s", baseURL, taskID)
 	useAsyncGenerations := isAsyncGenerationsModel(modelName) || isAsyncGenerationsModel(originModelName)
 	switch strings.TrimSuffix(strings.TrimSpace(upstreamEndpoint), "/") {
 	case "/v1/video/async-generations":
@@ -413,8 +437,11 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	case "/v1/videos":
 		useAsyncGenerations = false
 	}
+	if isSuanliaiModelPair(modelName, originModelName) {
+		useAsyncGenerations = false
+	}
 	if useAsyncGenerations {
-		uri = fmt.Sprintf("%s/v1/video/async-generations/%s", baseUrl, taskID)
+		uri = fmt.Sprintf("%s/v1/video/async-generations/%s", baseURL, taskID)
 	}
 
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
@@ -672,7 +699,8 @@ func hasTaskResponseFields(values map[string]any) bool {
 		"video_url",
 		"result_url",
 		"output_url",
-	) != "" || intValue(values, "progress", "percent") > 0 || mapValue(values, "error") != nil
+	) != "" || intValue(values, "progress", "percent") > 0 ||
+		mapValue(values, "error") != nil || mapValue(values, "video") != nil
 }
 
 func extractVideoURL(resTask responseTask) string {
@@ -709,6 +737,11 @@ func extractVideoURLFromPayload(resTask responseTask, raw map[string]any) string
 		}
 		if metadata := mapValue(values, "metadata"); metadata != nil {
 			if url := firstVideoURLValue(metadata, "video_url", "content_url", "url", "object", "result_url", "output_url", "download_url"); url != "" {
+				return url
+			}
+		}
+		if video := mapValue(values, "video"); video != nil {
+			if url := firstVideoURLValue(video, "url", "content_url", "video_url", "download_url"); url != "" {
 				return url
 			}
 		}

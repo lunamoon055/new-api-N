@@ -227,6 +227,8 @@ func isChannelTestVideoModel(channel *model.Channel, modelName string) bool {
 		}
 	}
 	return strings.HasPrefix(modelName, "sora") ||
+		strings.HasPrefix(modelName, "004系列/") ||
+		strings.HasPrefix(modelName, "omni-video-") ||
 		strings.HasPrefix(modelName, "veo") ||
 		strings.Contains(modelName, "kling") ||
 		strings.Contains(modelName, "video-") ||
@@ -267,7 +269,9 @@ func isOpenAIAsyncVideoModelName(modelName string) bool {
 func isChannelTestVideosApiModel(modelName string) bool {
 	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
 	return strings.HasPrefix(normalizedModelName, "videos-") ||
-		strings.HasPrefix(normalizedModelName, "sd2")
+		strings.HasPrefix(normalizedModelName, "sd2") ||
+		strings.HasPrefix(normalizedModelName, "004系列/") ||
+		strings.HasPrefix(normalizedModelName, "omni-video-")
 }
 
 func isVideo2ModelName(modelName string) bool {

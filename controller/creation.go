@@ -1204,6 +1204,8 @@ func getCreationModelMetadata(modelName string) creationModelMetadata {
 			Tags:        []string{"image", "generation"},
 		}
 	case strings.HasPrefix(modelName, "sora") ||
+		strings.HasPrefix(modelName, "004系列/") ||
+		strings.HasPrefix(modelName, "omni-video-") ||
 		strings.HasPrefix(modelName, "video-2.0") ||
 		strings.HasPrefix(modelName, "video-2.5") ||
 		strings.HasPrefix(modelName, "videos-") ||
