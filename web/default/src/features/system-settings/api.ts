@@ -26,6 +26,7 @@ import type {
   UpdateOptionResponse,
   MediaStorageProvider,
   MediaStorageSettingsResponse,
+  MediaStorageTestResponse,
   UpstreamChannelsResponse,
   UpstreamRatiosResponse,
 } from './types'
@@ -58,6 +59,17 @@ export async function updateMediaStorageSettings(
   })
   if (!res.data.success) {
     throw new Error(res.data.message || 'Failed to update media storage')
+  }
+  return res.data
+}
+
+export async function testMediaStorageProvider(providerId: string) {
+  const res = await api.post<MediaStorageTestResponse>(
+    '/api/option/media_storage/test',
+    { provider_id: providerId }
+  )
+  if (!res.data.success) {
+    throw new Error(res.data.message || 'Media storage test failed')
   }
   return res.data
 }

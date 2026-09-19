@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -40,11 +42,15 @@ type MediaStorageProvider struct {
 	Token      string `json:"token"`
 	FieldName  string `json:"field_name"`
 	Priority   int    `json:"priority"`
+	// ResponseURLPath is a dot-separated JSON path, for example "url" or
+	// "data.url". Keeping this explicit avoids guessing undocumented response
+	// shapes while allowing providers with a documented envelope.
+	ResponseURLPath string `json:"response_url_path"`
 }
 
-type mediaStorageUploadResponse struct {
-	URL string `json:"url"`
-}
+var ErrMediaStorageProviderNotFound = errors.New("media storage provider not found")
+
+const mediaStorageTestPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 
 // GetMediaStorageProviders reads the current provider list without caching it
 // separately from the existing option system, so administrator changes apply
@@ -89,11 +95,15 @@ func normalizeMediaStorageProvider(provider MediaStorageProvider) MediaStoragePr
 	provider.AuthHeader = strings.TrimSpace(provider.AuthHeader)
 	provider.AuthPrefix = strings.TrimSpace(provider.AuthPrefix)
 	provider.FieldName = strings.TrimSpace(provider.FieldName)
+	provider.ResponseURLPath = strings.TrimSpace(provider.ResponseURLPath)
 	if provider.AuthHeader == "" {
 		provider.AuthHeader = "Authorization"
 	}
 	if provider.FieldName == "" {
 		provider.FieldName = "file"
+	}
+	if provider.ResponseURLPath == "" {
+		provider.ResponseURLPath = "url"
 	}
 	if provider.Priority < 0 {
 		provider.Priority = 0
@@ -131,8 +141,30 @@ func ValidateMediaStorageProviders(providers []MediaStorageProvider) error {
 		if provider.FieldName == "" || strings.ContainsAny(provider.FieldName, "\r\n\"") {
 			return fmt.Errorf("provider %q: field_name contains invalid characters", provider.ID)
 		}
+		if !isValidMediaStorageResponseURLPath(provider.ResponseURLPath) {
+			return fmt.Errorf("provider %q: response_url_path must be a dot-separated JSON field path", provider.ID)
+		}
 	}
 	return nil
+}
+
+func isValidMediaStorageResponseURLPath(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, segment := range strings.Split(value, ".") {
+		if segment == "" {
+			return false
+		}
+		for _, char := range segment {
+			if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+				(char >= '0' && char <= '9') || char == '_' || char == '-' {
+				continue
+			}
+			return false
+		}
+	}
+	return true
 }
 
 func isValidMediaStorageHeaderName(value string) bool {
@@ -198,6 +230,25 @@ func UploadMediaBytes(ctx context.Context, data []byte, filename, contentType st
 		return "", fmt.Errorf("no enabled media storage provider")
 	}
 	return "", lastErr
+}
+
+// TestMediaStorageProvider uploads a tiny PNG to one configured provider. It
+// intentionally tests the persisted provider configuration even when the
+// provider is disabled, so administrators can validate a provider before
+// enabling it for generated media.
+func TestMediaStorageProvider(ctx context.Context, providerID string) (string, error) {
+	providerID = strings.TrimSpace(providerID)
+	for _, provider := range GetMediaStorageProviders() {
+		if provider.ID != providerID {
+			continue
+		}
+		data, err := base64.StdEncoding.DecodeString(mediaStorageTestPNGBase64)
+		if err != nil {
+			return "", fmt.Errorf("decode media storage test payload: %w", err)
+		}
+		return uploadToMediaStorage(ctx, provider, data, "new-api-media-storage-test.png", "image/png")
+	}
+	return "", ErrMediaStorageProviderNotFound
 }
 
 // AttachAudioStorageURL uploads a completed binary audio response and exposes
@@ -285,19 +336,48 @@ func uploadToMediaStorage(ctx context.Context, provider MediaStorageProvider, da
 		// credentials or HTML from a proxy and is not actionable to callers.
 		return "", fmt.Errorf("upload returned HTTP %d", resp.StatusCode)
 	}
-	var parsed mediaStorageUploadResponse
-	if err := common.Unmarshal(responseBody, &parsed); err != nil {
-		return "", fmt.Errorf("decode upload response: %w", err)
+	parsedURLString, err := extractMediaStorageResponseURL(responseBody, provider.ResponseURLPath)
+	if err != nil {
+		return "", err
 	}
-	parsed.URL = strings.TrimSpace(parsed.URL)
-	if parsed.URL == "" {
-		return "", fmt.Errorf("upload response does not contain url")
-	}
-	parsedURL, err := url.Parse(parsed.URL)
+	parsedURL, err := url.Parse(parsedURLString)
 	if err != nil || parsedURL.Host == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
 		return "", fmt.Errorf("upload response contains an invalid url")
 	}
-	return parsed.URL, nil
+	return parsedURLString, nil
+}
+
+func extractMediaStorageResponseURL(responseBody []byte, responseURLPath string) (string, error) {
+	responseURLPath = strings.TrimSpace(responseURLPath)
+	if responseURLPath == "" {
+		responseURLPath = "url"
+	}
+	if !isValidMediaStorageResponseURLPath(responseURLPath) {
+		return "", fmt.Errorf("upload response URL path is invalid")
+	}
+
+	current := json.RawMessage(responseBody)
+	for _, segment := range strings.Split(responseURLPath, ".") {
+		var object map[string]json.RawMessage
+		if err := common.Unmarshal(current, &object); err != nil {
+			return "", fmt.Errorf("decode upload response: %w", err)
+		}
+		next, ok := object[segment]
+		if !ok {
+			return "", fmt.Errorf("upload response does not contain %q", responseURLPath)
+		}
+		current = next
+	}
+
+	var value string
+	if err := common.Unmarshal(current, &value); err != nil {
+		return "", fmt.Errorf("upload response URL field is not a string: %w", err)
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fmt.Errorf("upload response URL field is empty")
+	}
+	return value, nil
 }
 
 func downloadMedia(ctx context.Context, sourceURL, mediaType string) ([]byte, string, string, error) {

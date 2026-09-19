@@ -8,14 +8,18 @@ the Free Software Foundation, either version 3 of the License, or
 */
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, TestTube, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { SettingsSection } from '../components/settings-section'
-import { getMediaStorageSettings, updateMediaStorageSettings } from '../api'
+import {
+  getMediaStorageSettings,
+  testMediaStorageProvider,
+  updateMediaStorageSettings,
+} from '../api'
 import type { MediaStorageProvider } from '../types'
 
 const createProvider = (): MediaStorageProvider => ({
@@ -28,6 +32,7 @@ const createProvider = (): MediaStorageProvider => ({
   token: '',
   field_name: 'file',
   priority: 0,
+  response_url_path: 'url',
 })
 
 function normalizeProvider(
@@ -42,6 +47,7 @@ function normalizeProvider(
     auth_prefix: provider.auth_prefix,
     field_name: provider.field_name.trim() || 'file',
     priority: Number.isFinite(provider.priority) ? provider.priority : 0,
+    response_url_path: provider.response_url_path.trim() || 'url',
   }
 }
 
@@ -55,6 +61,9 @@ export function MediaStorageSettingsSection() {
   const [draftProviders, setDraftProviders] = useState<
     MediaStorageProvider[] | null
   >(null)
+  const [testingProviderId, setTestingProviderId] = useState<string | null>(
+    null
+  )
   const providers =
     draftProviders ??
     settingsQuery.data?.data?.providers ??
@@ -82,6 +91,20 @@ export function MediaStorageSettingsSection() {
     onError: (error: Error) => toast.error(error.message),
   })
 
+  const testMutation = useMutation({
+    mutationFn: testMediaStorageProvider,
+    onSuccess: (response) => {
+      const url = response.data?.url
+      toast.success(
+        url
+          ? `${t('Test upload succeeded')}: ${url}`
+          : t('Test upload succeeded')
+      )
+    },
+    onError: (error: Error) => toast.error(error.message),
+    onSettled: () => setTestingProviderId(null),
+  })
+
   const updateProvider = (
     index: number,
     patch: Partial<MediaStorageProvider>
@@ -104,6 +127,15 @@ export function MediaStorageSettingsSection() {
         if (!['http:', 'https:'].includes(url.protocol)) throw new Error()
       } catch {
         toast.error(t('Provide a valid media storage upload URL'))
+        return
+      }
+      const responseURLPath = provider.response_url_path.trim() || 'url'
+      if (
+        !responseURLPath
+          .split('.')
+          .every((segment) => /^[A-Za-z0-9_-]+$/.test(segment))
+      ) {
+        toast.error(t('Provide a valid response URL path'))
         return
       }
     }
@@ -139,6 +171,32 @@ export function MediaStorageSettingsSection() {
                 </p>
               </div>
               <div className='flex items-center gap-3'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  disabled={
+                    testMutation.isPending ||
+                    saveMutation.isPending ||
+                    settingsQuery.isLoading ||
+                    draftProviders !== null
+                  }
+                  title={
+                    draftProviders !== null
+                      ? t('Save media storage settings before testing')
+                      : undefined
+                  }
+                  onClick={() => {
+                    setTestingProviderId(provider.id)
+                    testMutation.mutate(provider.id)
+                  }}
+                  aria-label={t('Test upload for this provider')}
+                >
+                  <TestTube />
+                  {testingProviderId === provider.id && testMutation.isPending
+                    ? t('Testing upload...')
+                    : t('Test upload')}
+                </Button>
                 <label className='text-muted-foreground flex items-center gap-2 text-sm'>
                   {t('Enabled')}
                   <Switch
@@ -190,6 +248,23 @@ export function MediaStorageSettingsSection() {
                 />
               </label>
             </div>
+
+            <label className='block space-y-2 text-sm'>
+              <span>{t('Response URL path')}</span>
+              <Input
+                value={provider.response_url_path}
+                onChange={(event) =>
+                  updateProvider(index, {
+                    response_url_path: event.target.value,
+                  })
+                }
+                placeholder='url'
+                autoComplete='off'
+              />
+              <span className='text-muted-foreground text-xs'>
+                {t('Dot-separated JSON path, for example data.url')}
+              </span>
+            </label>
 
             <label className='block space-y-2 text-sm'>
               <span>{t('Upload URL')}</span>

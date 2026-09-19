@@ -49,12 +49,22 @@ export type MediaStorageProvider = {
   token: string
   field_name: string
   priority: number
+  response_url_path: string
 }
 
 export type MediaStorageSettingsResponse = {
   success: boolean
   message: string
   data: { providers: MediaStorageProvider[] }
+}
+
+export type MediaStorageTestResponse = {
+  success: boolean
+  message: string
+  data?: {
+    provider_id: string
+    url: string
+  }
 }
 
 export type ConfirmPaymentComplianceResponse = {
