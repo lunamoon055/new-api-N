@@ -167,8 +167,20 @@ function isVideoApiContentUrl(url: string, taskId?: string) {
     return true
   }
   return (
-    isSameSiteVideoProxyUrl(url) || url.includes('/v1/video/async-generations/')
+    isSameSiteVideoProxyUrl(url) || isVideoApiContentPath(url)
   )
+}
+
+function isVideoApiContentPath(url: string) {
+  try {
+    const pathname = new URL(url, 'http://localhost').pathname
+    return (
+      /\/v1\/videos\/[^/]+\/content\/?$/.test(pathname) ||
+      /\/v1\/video\/async-generations\/[^/]+\/content\/?$/.test(pathname)
+    )
+  } catch {
+    return false
+  }
 }
 
 function isSameSiteVideoProxyUrl(url: string) {

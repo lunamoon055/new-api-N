@@ -568,9 +568,12 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	}
 
 	videoURL := extractVideoURLFromPayload(resTask, rawPayload)
-	if videoURL == "" && task.Status == model.TaskStatusSuccess {
-		videoURL = task.GetResultURL()
-		if videoURL == "" {
+	if task.Status == model.TaskStatusSuccess {
+		// The raw upstream response remains in task.Data for diagnostics. The
+		// persisted result URL is authoritative after media storage transfer.
+		if storedURL := strings.TrimSpace(task.GetResultURL()); storedURL != "" {
+			videoURL = storedURL
+		} else if videoURL == "" {
 			videoURL = taskcommon.BuildProxyURL(task.TaskID)
 		}
 	}

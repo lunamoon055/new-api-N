@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/stretchr/testify/require"
 )
@@ -156,4 +157,45 @@ func TestUploadToMediaStorageResolvesImgHubRelativeURLAndBearerToken(t *testing.
 func TestResolveMediaStorageResponseURLRejectsPlainText(t *testing.T) {
 	_, err := resolveMediaStorageResponseURL("https://media.example/upload", "Saved")
 	require.Error(t, err)
+}
+
+func TestDownloadMediaWithOptionsUsesSameOriginAuthorization(t *testing.T) {
+	sourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "Bearer upstream-secret", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "video/mp4")
+		_, err := io.WriteString(w, "video-bytes")
+		require.NoError(t, err)
+	}))
+	defer sourceServer.Close()
+
+	fetchSetting := system_setting.GetFetchSetting()
+	previous := *fetchSetting
+	fetchSetting.EnableSSRFProtection = false
+	t.Cleanup(func() { *fetchSetting = previous })
+
+	data, filename, contentType, err := downloadMediaWithOptions(
+		context.Background(),
+		sourceServer.URL+"/v1/videos/task_upstream/content",
+		"video/mp4",
+		MediaDownloadOptions{
+			CredentialOrigin: sourceServer.URL,
+			AuthHeader:       "Authorization",
+			AuthValue:        "Bearer upstream-secret",
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, []byte("video-bytes"), data)
+	require.Equal(t, "content.mp4", filename)
+	require.Equal(t, "video/mp4", contentType)
+}
+
+func TestTaskVideoMediaDownloadOptionsOnlyAddsBearerForProtectedVideoChannels(t *testing.T) {
+	options := taskVideoMediaDownloadOptions(constant.ChannelTypeSora, "https://suanliai.top", "sk-upstream", "")
+	require.Equal(t, "Authorization", options.AuthHeader)
+	require.Equal(t, "Bearer sk-upstream", options.AuthValue)
+	require.Equal(t, "https://suanliai.top", options.CredentialOrigin)
+
+	options = taskVideoMediaDownloadOptions(constant.ChannelTypeGemini, "https://generativelanguage.googleapis.com", "key", "")
+	require.Empty(t, options.AuthHeader)
+	require.Empty(t, options.AuthValue)
 }

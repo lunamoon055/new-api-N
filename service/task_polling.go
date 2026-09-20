@@ -517,7 +517,8 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		}
 		resultURL := strings.TrimSpace(taskResult.Url)
 		if resultURL != "" && HasEnabledMediaStorage() {
-			if storedURL, uploadErr := UploadMediaURL(ctx, resultURL, "video/mp4"); uploadErr == nil && storedURL != "" {
+			downloadOptions := taskVideoMediaDownloadOptions(ch.Type, baseURL, key, proxy)
+			if storedURL, uploadErr := UploadMediaURLWithOptions(ctx, resultURL, "video/mp4", downloadOptions); uploadErr == nil && storedURL != "" {
 				resultURL = storedURL
 			} else if uploadErr != nil {
 				logger.LogWarn(ctx, fmt.Sprintf("media storage upload failed for video task %s; keeping upstream URL: %v", task.TaskID, uploadErr))
@@ -573,6 +574,25 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	return nil
+}
+
+func taskVideoMediaDownloadOptions(channelType int, baseURL, key, proxy string) MediaDownloadOptions {
+	options := MediaDownloadOptions{Proxy: strings.TrimSpace(proxy)}
+	if channelType != constant.ChannelTypeOpenAI && channelType != constant.ChannelTypeSora {
+		return options
+	}
+
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return options
+	}
+	if !strings.HasPrefix(strings.ToLower(key), "bearer ") {
+		key = "Bearer " + key
+	}
+	options.CredentialOrigin = strings.TrimSpace(baseURL)
+	options.AuthHeader = "Authorization"
+	options.AuthValue = key
+	return options
 }
 
 func buildVideoTaskFetchBody(task *model.Task) map[string]any {

@@ -19,10 +19,55 @@ For commercial licensing, please contact support@quantumnous.com
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import {
+  getTaskLogVideoPreviewUrl,
   getTaskLogInputMaterials,
   getTaskLogModelName,
   getVisibleTaskLogInputMaterials,
 } from './task-preview'
+
+describe('task log video preview URL', () => {
+  test('prefers the transferred media URL', () => {
+    assert.equal(
+      getTaskLogVideoPreviewUrl({
+        action: 'generate',
+        status: 'SUCCESS',
+        task_id: 'task_public',
+        result_url: 'https://media.example/video.mp4',
+        data: JSON.stringify({
+          url: 'https://upstream.example/v1/videos/task_upstream/content',
+        }),
+      }),
+      'https://media.example/video.mp4'
+    )
+  })
+
+  test('uses the protected site proxy for an upstream content URL with a different task ID', () => {
+    assert.equal(
+      getTaskLogVideoPreviewUrl({
+        action: 'generate',
+        status: 'SUCCESS',
+        task_id: 'task_public',
+        result_url: 'https://upstream.example/v1/videos/task_upstream/content',
+        data: null,
+      }),
+      '/v1/videos/task_public/content'
+    )
+  })
+
+  test('recognizes async-generations content URLs as protected upstream URLs', () => {
+    assert.equal(
+      getTaskLogVideoPreviewUrl({
+        action: 'generate',
+        status: 'SUCCESS',
+        task_id: 'task_public',
+        result_url:
+          'https://upstream.example/v1/video/async-generations/task_upstream/content',
+        data: null,
+      }),
+      '/v1/videos/task_public/content'
+    )
+  })
+})
 
 describe('task log model name', () => {
   test('prefers the model name returned by the task DTO', () => {

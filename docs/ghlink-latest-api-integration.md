@@ -6,6 +6,8 @@
 
 示例 Base URL 使用 `https://ghlink.top`。私有部署请替换为你的网站域名。
 
+如果下游出现 `POST /v1/images/async-generations` 的 404，请先阅读[下游对接快速修复版](./ghlink-downstream-quick-fix.md)。当前图片接口是 `POST /v1/images/generations`；只有视频使用异步接口。
+
 ## 1. 通用规则
 
 所有 API 请求都使用 Bearer Token：
@@ -60,6 +62,8 @@ Content-Type: application/json
 | 流式音频 | 保持流式输出，不做转存 |
 
 图床上传失败不会让已经成功的生成任务变成失败。客户侧应始终以业务结果 URL 或原始二进制响应为准。
+
+部分视频上游会返回需要渠道 Token 才能访问的 `/v1/videos/{task_id}/content` 地址。网站服务端转存时会对同源的上游内容地址携带渠道 `Authorization: Bearer ...`，跨域重定向会自动移除该凭据；下游不要直接在浏览器中打开这类上游地址，应使用网站返回的图床 URL 或本站视频代理地址。
 
 ## 4. 图片生成
 

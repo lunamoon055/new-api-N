@@ -77,6 +77,41 @@ func TestEnsureAPIKeyForOriginOnlyAttachesToExactOrigin(t *testing.T) {
 	}
 }
 
+func TestVideoProxyAuthorizationHeaderOnlyUsesSameOriginCredentials(t *testing.T) {
+	require.Equal(t,
+		"Bearer secret",
+		videoProxyAuthorizationHeader(
+			"https://api.example.com/v1/videos/task/content",
+			"https://api.example.com/v1",
+			"secret",
+		),
+	)
+	require.Equal(t,
+		"Bearer secret",
+		videoProxyAuthorizationHeader(
+			"https://api.example.com/v1/videos/task/content",
+			"https://api.example.com/v1",
+			"Bearer secret",
+		),
+	)
+
+	for _, test := range []struct {
+		name string
+		url  string
+		base string
+		key  string
+	}{
+		{name: "transferred media URL", url: "https://media.example/video.mp4", base: "https://api.example.com", key: "secret"},
+		{name: "different scheme", url: "http://api.example.com/video", base: "https://api.example.com", key: "secret"},
+		{name: "different port", url: "https://api.example.com:444/video", base: "https://api.example.com", key: "secret"},
+		{name: "empty key", url: "https://api.example.com/video", base: "https://api.example.com", key: ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.Empty(t, videoProxyAuthorizationHeader(test.url, test.base, test.key))
+		})
+	}
+}
+
 func TestVideoProxyRedirectStripsCredentialsAcrossOrigins(t *testing.T) {
 	fetchSetting := system_setting.GetFetchSetting()
 	originalFetchSetting := *fetchSetting

@@ -841,3 +841,29 @@ func TestConvertToOpenAIVideoNormalizesCompletedAsyncTask(t *testing.T) {
 	require.Equal(t, "1920x1080", video.Size)
 	require.Equal(t, "https://cdn.example/video.mp4", video.Metadata["url"])
 }
+
+func TestConvertToOpenAIVideoPrefersTransferredResultURL(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+	task := &model.Task{
+		TaskID:     "task_public",
+		Status:     model.TaskStatusSuccess,
+		Progress:   "100%",
+		Properties: model.Properties{OriginModelName: "sora2"},
+		PrivateData: model.TaskPrivateData{
+			ResultURL: "https://media.example/video.mp4",
+		},
+		Data: []byte(`{
+			"id":"task_upstream",
+			"status":"completed",
+			"url":"https://upstream.example/v1/videos/task_upstream/content",
+			"model":"sora2"
+		}`),
+	}
+
+	body, err := adaptor.ConvertToOpenAIVideo(task)
+
+	require.NoError(t, err)
+	var video dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(body, &video))
+	require.Equal(t, "https://media.example/video.mp4", video.Metadata["url"])
+}

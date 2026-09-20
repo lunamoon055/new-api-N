@@ -126,7 +126,13 @@ func VideoProxy(c *gin.Context) {
 		} else {
 			videoURL = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.GetUpstreamTaskID())
 		}
-		req.Header.Set("Authorization", "Bearer "+channel.Key)
+		credential := strings.TrimSpace(task.PrivateData.Key)
+		if credential == "" {
+			credential = strings.TrimSpace(channel.Key)
+		}
+		if authorization := videoProxyAuthorizationHeader(videoURL, baseURL, credential); authorization != "" {
+			req.Header.Set("Authorization", authorization)
+		}
 	default:
 		// Video URL is stored in PrivateData.ResultURL (fallback to FailReason for old data)
 		videoURL = task.GetResultURL()
@@ -186,6 +192,17 @@ func VideoProxy(c *gin.Context) {
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
 	}
+}
+
+func videoProxyAuthorizationHeader(videoURL, credentialOrigin, key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" || !isSameURLOrigin(videoURL, credentialOrigin) {
+		return ""
+	}
+	if !strings.HasPrefix(strings.ToLower(key), "bearer ") {
+		key = "Bearer " + key
+	}
+	return key
 }
 
 func getVideoProxyTask(c *gin.Context, taskID string) (*model.Task, bool, error) {

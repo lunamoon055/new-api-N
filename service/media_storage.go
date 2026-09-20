@@ -50,6 +50,17 @@ type MediaStorageProvider struct {
 	ResponseURLPath string `json:"response_url_path"`
 }
 
+// MediaDownloadOptions controls how a generated upstream asset is fetched
+// before it is copied to media storage. Credentials are attached only when
+// the source URL has the same origin as CredentialOrigin, and are stripped by
+// the SSRF-protected client if a redirect crosses origins.
+type MediaDownloadOptions struct {
+	Proxy            string
+	CredentialOrigin string
+	AuthHeader       string
+	AuthValue        string
+}
+
 var ErrMediaStorageProviderNotFound = errors.New("media storage provider not found")
 
 const mediaStorageTestPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
@@ -193,6 +204,13 @@ func isValidMediaStorageHeaderName(value string) bool {
 // is deliberately non-fatal to generation callers: they can keep the original
 // upstream URL and report the upload failure separately.
 func UploadMediaURL(ctx context.Context, sourceURL, mediaType string) (string, error) {
+	return UploadMediaURLWithOptions(ctx, sourceURL, mediaType, MediaDownloadOptions{})
+}
+
+// UploadMediaURLWithOptions copies a remote media result while allowing a
+// protected same-origin upstream content endpoint to be downloaded with its
+// channel credential.
+func UploadMediaURLWithOptions(ctx context.Context, sourceURL, mediaType string, options MediaDownloadOptions) (string, error) {
 	sourceURL = strings.TrimSpace(sourceURL)
 	if sourceURL == "" {
 		return "", fmt.Errorf("media source URL is empty")
@@ -200,7 +218,7 @@ func UploadMediaURL(ctx context.Context, sourceURL, mediaType string) (string, e
 	if !HasEnabledMediaStorage() {
 		return sourceURL, fmt.Errorf("no enabled media storage provider")
 	}
-	data, filename, contentType, err := downloadMedia(ctx, sourceURL, mediaType)
+	data, filename, contentType, err := downloadMediaWithOptions(ctx, sourceURL, mediaType, options)
 	if err != nil {
 		return sourceURL, err
 	}
@@ -426,6 +444,10 @@ func extractMediaStorageResponseURL(responseBody []byte, responseURLPath string)
 }
 
 func downloadMedia(ctx context.Context, sourceURL, mediaType string) ([]byte, string, string, error) {
+	return downloadMediaWithOptions(ctx, sourceURL, mediaType, MediaDownloadOptions{})
+}
+
+func downloadMediaWithOptions(ctx context.Context, sourceURL, mediaType string, options MediaDownloadOptions) ([]byte, string, string, error) {
 	if strings.HasPrefix(sourceURL, "data:") {
 		return decodeDataURL(sourceURL, mediaType)
 	}
@@ -439,9 +461,22 @@ func downloadMedia(ctx context.Context, sourceURL, mediaType string) ([]byte, st
 	if err != nil {
 		return nil, "", "", err
 	}
-	client := GetHttpClient()
-	if client == nil {
-		client = http.DefaultClient
+	if options.AuthHeader != "" || options.AuthValue != "" || options.CredentialOrigin != "" {
+		if !isValidMediaStorageHeaderName(options.AuthHeader) || strings.ContainsAny(options.AuthValue, "\r\n") {
+			return nil, "", "", fmt.Errorf("invalid media download credential")
+		}
+		credentialOrigin, originErr := url.Parse(strings.TrimSpace(options.CredentialOrigin))
+		if originErr != nil || credentialOrigin.Host == "" ||
+			(credentialOrigin.Scheme != "http" && credentialOrigin.Scheme != "https") {
+			return nil, "", "", fmt.Errorf("invalid media download credential origin")
+		}
+		if sameHTTPOrigin(parsed, credentialOrigin) {
+			req.Header.Set(options.AuthHeader, options.AuthValue)
+		}
+	}
+	client, err := GetHttpClientWithProxy(strings.TrimSpace(options.Proxy))
+	if err != nil {
+		return nil, "", "", fmt.Errorf("create media download client: %w", err)
 	}
 	resp, err := DoSSRFProtectedRequest(client, req)
 	if err != nil {
@@ -466,7 +501,38 @@ func downloadMedia(ctx context.Context, sourceURL, mediaType string) ([]byte, st
 	if filename == "." || filename == "/" || filename == "" {
 		filename = "generated-" + time.Now().UTC().Format("20060102-150405")
 	}
+	if path.Ext(filename) == "" {
+		if extension := mediaStorageExtension(contentType, mediaType); extension != "" {
+			filename += extension
+		}
+	}
 	return data, filename, contentType, nil
+}
+
+func mediaStorageExtension(contentType, fallbackType string) string {
+	for _, rawType := range []string{contentType, fallbackType} {
+		parsedType, _, err := mime.ParseMediaType(strings.TrimSpace(rawType))
+		if err != nil {
+			continue
+		}
+		switch strings.ToLower(parsedType) {
+		case "video/mp4":
+			return ".mp4"
+		case "video/webm":
+			return ".webm"
+		case "audio/mpeg":
+			return ".mp3"
+		case "audio/wav", "audio/x-wav":
+			return ".wav"
+		case "image/jpeg":
+			return ".jpg"
+		case "image/png":
+			return ".png"
+		case "image/webp":
+			return ".webp"
+		}
+	}
+	return ""
 }
 
 func decodeDataURL(raw, mediaType string) ([]byte, string, string, error) {
