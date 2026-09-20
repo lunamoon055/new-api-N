@@ -467,28 +467,35 @@ POST /v1/audio/translations
 
 后台入口：系统设置 -> 运维 -> Media storage。
 
-当前默认新增项适配 GHLINK ImgHub：
+当前默认新增项适配 [Sanyue/CloudFlare-ImgBed](https://github.com/MarSeventh/CloudFlare-ImgBed) 的 ImgHub 上传接口（你的网站地址为 `media.ghlink.top`）：
 
 | 配置项 | 值 |
 | --- | --- |
-| Upload URL | `https://media.ghlink.top/upload` |
-| Auth header | `authCode` |
-| Auth prefix | 留空 |
+| Upload URL | `https://media.ghlink.top/upload?returnFormat=full` |
+| Auth header | `Authorization` |
+| Auth prefix | `Bearer `（末尾保留一个空格） |
 | File field | `file` |
-| Response URL path | `url` |
-| Token | 管理员填写图床 Token |
+| Response URL path | `0.src` |
+| Token | 管理员填写带 `upload` 权限的 ImgHub API Token |
+
+如果你使用的是图床的 `authCode` 认证而不是 API Token，请按图床实际配置改回对应请求头；不要把两种认证方式混用。
 
 支持多个图床配置。系统会按 `priority` 从小到大依次尝试，某个图床失败后继续尝试下一个；全部失败时保留上游 URL 或原音频响应。
 
-图床成功响应必须是 JSON，并且默认能解析出顶层 `url` 字段：
+该项目的成功响应是 JSON 数组，上传字段名为 `file`：
 
 ```json
-{
-  "url": "https://media.example.com/path/to/file.png"
-}
+[
+  {
+    "src": "/file/<id>",
+    "publicUrl": "https://media.ghlink.top/file/<id>"
+  }
+]
 ```
 
-如果图床使用文档化的 JSON 包装结构，例如 `{"data":{"url":"https://..."}}`，管理员可以把 `Response URL path` 设置为 `data.url`。系统只读取管理员明确配置的点号分隔字段路径，不会猜测未记录的字段。
+当请求带 `returnFormat=full` 时，`src` 为绝对 URL；不带该参数时，`src` 是相对路径，网站会以上传地址的站点 origin 解析它。网站支持数组下标路径，因此应使用 `0.src`；如果已在 ImgHub 中配置 URL 前缀并确认 `publicUrl` 是最终公网地址，也可以使用 `0.publicUrl`。
+
+网站仍兼容其他图床文档化的 JSON 包装结构，例如 `{"data":{"url":"https://..."}}`，此时把 `Response URL path` 设置为 `data.url`。系统只读取管理员明确配置的点号分隔字段路径，不会猜测未记录的字段。
 
 如果图床只返回纯文本 `Saved`、JSON 字符串 `"Saved"` 或只有 `{"status":"Saved"}`，但没有 URL 字段，当前网站无法知道最终文件地址，会按上传失败回退并保留上游 URL。
 
@@ -531,13 +538,13 @@ PUT /api/option/media_storage
       "id": "ghlink-imghub",
       "name": "GHLINK ImgHub",
       "enabled": true,
-      "upload_url": "https://media.ghlink.top/upload",
-      "auth_header": "authCode",
-      "auth_prefix": "",
+      "upload_url": "https://media.ghlink.top/upload?returnFormat=full",
+      "auth_header": "Authorization",
+      "auth_prefix": "Bearer ",
       "token": "你的图床 Token",
       "field_name": "file",
       "priority": 0,
-      "response_url_path": "url"
+      "response_url_path": "0.src"
     }
   ]
 }

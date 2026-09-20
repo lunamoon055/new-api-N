@@ -26,6 +26,10 @@ func TestValidateMediaStorageProviders(t *testing.T) {
 	nested.ResponseURLPath = "data.url"
 	require.NoError(t, ValidateMediaStorageProviders([]MediaStorageProvider{nested}))
 
+	arrayPath := valid
+	arrayPath.ResponseURLPath = "0.src"
+	require.NoError(t, ValidateMediaStorageProviders([]MediaStorageProvider{arrayPath}))
+
 	invalid := valid
 	invalid.UploadURL = "file:///tmp/uploads"
 	require.Error(t, ValidateMediaStorageProviders([]MediaStorageProvider{invalid}))
@@ -78,9 +82,18 @@ func TestMediaStorageUploadResponseURLPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://media.example/file.mp4", url)
 
+	url, err = extractMediaStorageResponseURL(
+		[]byte(`[{"src":"/file/test.mp4"}]`),
+		"0.src",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "/file/test.mp4", url)
+
 	_, err = extractMediaStorageResponseURL([]byte(`Saved`), "url")
 	require.Error(t, err)
 	_, err = extractMediaStorageResponseURL([]byte(`{"status":"Saved"}`), "url")
+	require.Error(t, err)
+	_, err = extractMediaStorageResponseURL([]byte(`[]`), "0.src")
 	require.Error(t, err)
 }
 
@@ -111,4 +124,36 @@ func TestUploadToMediaStorageUsesConfiguredResponseURLPath(t *testing.T) {
 	}, []byte("test"), "new-api-media-storage-test.png", "image/png")
 	require.NoError(t, err)
 	require.Equal(t, "https://media.example/file.png", url)
+}
+
+func TestUploadToMediaStorageResolvesImgHubRelativeURLAndBearerToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "Bearer secret", r.Header.Get("Authorization"))
+		require.Contains(t, r.Header.Get("Content-Type"), "multipart/form-data")
+		w.Header().Set("Content-Type", "application/json")
+		_, err := io.WriteString(w, `[{"src":"/file/test.png"}]`)
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	fetchSetting := system_setting.GetFetchSetting()
+	previous := *fetchSetting
+	fetchSetting.EnableSSRFProtection = false
+	t.Cleanup(func() { *fetchSetting = previous })
+
+	storedURL, err := uploadToMediaStorage(context.Background(), MediaStorageProvider{
+		UploadURL:       server.URL + "/upload?returnFormat=full",
+		AuthHeader:      "Authorization",
+		AuthPrefix:      "Bearer ",
+		Token:           "secret",
+		FieldName:       "file",
+		ResponseURLPath: "0.src",
+	}, []byte("test"), "test.png", "image/png")
+	require.NoError(t, err)
+	require.Equal(t, server.URL+"/file/test.png", storedURL)
+}
+
+func TestResolveMediaStorageResponseURLRejectsPlainText(t *testing.T) {
+	_, err := resolveMediaStorageResponseURL("https://media.example/upload", "Saved")
+	require.Error(t, err)
 }

@@ -26,14 +26,22 @@ const createProvider = (): MediaStorageProvider => ({
   id: `media-${Date.now()}`,
   name: 'GHLINK ImgHub',
   enabled: true,
-  upload_url: 'https://media.ghlink.top/upload',
-  auth_header: 'authCode',
-  auth_prefix: '',
+  upload_url: 'https://media.ghlink.top/upload?returnFormat=full',
+  auth_header: 'Authorization',
+  auth_prefix: 'Bearer ',
   token: '',
   field_name: 'file',
   priority: 0,
-  response_url_path: 'url',
+  response_url_path: '0.src',
 })
+
+const sanyueImgHubPreset = {
+  upload_url: 'https://media.ghlink.top/upload?returnFormat=full',
+  auth_header: 'Authorization',
+  auth_prefix: 'Bearer ',
+  field_name: 'file',
+  response_url_path: '0.src',
+} satisfies Partial<MediaStorageProvider>
 
 function normalizeProvider(
   provider: MediaStorageProvider
@@ -197,6 +205,15 @@ export function MediaStorageSettingsSection() {
                     ? t('Testing upload...')
                     : t('Test upload')}
                 </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  disabled={saveMutation.isPending}
+                  onClick={() => updateProvider(index, sanyueImgHubPreset)}
+                >
+                  {t('Apply Sanyue ImgHub preset')}
+                </Button>
                 <label className='text-muted-foreground flex items-center gap-2 text-sm'>
                   {t('Enabled')}
                   <Switch
@@ -258,11 +275,11 @@ export function MediaStorageSettingsSection() {
                     response_url_path: event.target.value,
                   })
                 }
-                placeholder='url'
+                placeholder='0.src'
                 autoComplete='off'
               />
               <span className='text-muted-foreground text-xs'>
-                {t('Dot-separated JSON path, for example data.url')}
+                {t('Dot-separated JSON path, for example 0.src or data.url')}
               </span>
             </label>
 
@@ -275,7 +292,7 @@ export function MediaStorageSettingsSection() {
                 onChange={(event) =>
                   updateProvider(index, { upload_url: event.target.value })
                 }
-                placeholder='https://media.ghlink.top/upload'
+                placeholder='https://media.ghlink.top/upload?returnFormat=full'
                 autoComplete='off'
               />
             </label>

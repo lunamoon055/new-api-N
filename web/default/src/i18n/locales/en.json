@@ -4878,10 +4878,11 @@
     "Test upload succeeded": "Test upload succeeded",
     "Save media storage settings before testing": "Save media storage settings before testing",
     "Response URL path": "Response URL path",
-    "Dot-separated JSON path, for example data.url": "Dot-separated JSON path, for example data.url",
+    "Dot-separated JSON path, for example 0.src or data.url": "Dot-separated JSON path, for example 0.src or data.url",
     "Provide a valid response URL path": "Provide a valid response URL path",
     "Each media storage provider needs an ID and upload URL": "Each media storage provider needs an ID and upload URL",
     "Provide a valid media storage upload URL": "Provide a valid media storage upload URL",
-    "GHLINK ImgHub": "GHLINK ImgHub"
+    "GHLINK ImgHub": "GHLINK ImgHub",
+    "Apply Sanyue ImgHub preset": "Apply Sanyue ImgHub preset"
   }
 }

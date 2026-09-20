@@ -64,14 +64,40 @@ export async function updateMediaStorageSettings(
 }
 
 export async function testMediaStorageProvider(providerId: string) {
-  const res = await api.post<MediaStorageTestResponse>(
-    '/api/option/media_storage/test',
-    { provider_id: providerId }
-  )
-  if (!res.data.success) {
-    throw new Error(res.data.message || 'Media storage test failed')
+  try {
+    const res = await api.post<MediaStorageTestResponse>(
+      '/api/option/media_storage/test',
+      { provider_id: providerId },
+      {
+        skipErrorHandler: true,
+        skipBusinessError: true,
+      } as Record<string, unknown>
+    )
+    if (!res.data.success) {
+      throw new Error(res.data.message || 'Media storage test failed')
+    }
+    return res.data
+  } catch (error) {
+    const requestError = error as {
+      message?: string
+      response?: {
+        status?: number
+        data?: { message?: string } | string
+      }
+    }
+    const responseMessage =
+      typeof requestError.response?.data === 'object'
+        ? requestError.response.data?.message
+        : undefined
+    const status = requestError.response?.status
+    throw new Error(
+      responseMessage ||
+        (status
+          ? `Media storage test failed (HTTP ${status})`
+          : requestError.message || 'Media storage test failed'),
+      { cause: error }
+    )
   }
-  return res.data
 }
 
 export async function confirmPaymentCompliance() {

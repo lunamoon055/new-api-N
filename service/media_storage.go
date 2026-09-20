@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,9 +43,10 @@ type MediaStorageProvider struct {
 	Token      string `json:"token"`
 	FieldName  string `json:"field_name"`
 	Priority   int    `json:"priority"`
-	// ResponseURLPath is a dot-separated JSON path, for example "url" or
-	// "data.url". Keeping this explicit avoids guessing undocumented response
-	// shapes while allowing providers with a documented envelope.
+	// ResponseURLPath is a dot-separated JSON path, for example "url",
+	// "data.url", or "0.src" for the first item in a JSON array. Keeping this
+	// explicit avoids guessing undocumented response shapes while allowing
+	// providers with a documented envelope.
 	ResponseURLPath string `json:"response_url_path"`
 }
 
@@ -93,7 +95,8 @@ func normalizeMediaStorageProvider(provider MediaStorageProvider) MediaStoragePr
 	provider.Name = strings.TrimSpace(provider.Name)
 	provider.UploadURL = strings.TrimSpace(provider.UploadURL)
 	provider.AuthHeader = strings.TrimSpace(provider.AuthHeader)
-	provider.AuthPrefix = strings.TrimSpace(provider.AuthPrefix)
+	// Preserve intentional whitespace in the prefix (for example, the
+	// trailing space in "Bearer "). Newlines are rejected during validation.
 	provider.FieldName = strings.TrimSpace(provider.FieldName)
 	provider.ResponseURLPath = strings.TrimSpace(provider.ResponseURLPath)
 	if provider.AuthHeader == "" {
@@ -340,11 +343,41 @@ func uploadToMediaStorage(ctx context.Context, provider MediaStorageProvider, da
 	if err != nil {
 		return "", err
 	}
-	parsedURL, err := url.Parse(parsedURLString)
-	if err != nil || parsedURL.Host == "" || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+	parsedURLString, err = resolveMediaStorageResponseURL(provider.UploadURL, parsedURLString)
+	if err != nil {
 		return "", fmt.Errorf("upload response contains an invalid url")
 	}
 	return parsedURLString, nil
+}
+
+func resolveMediaStorageResponseURL(uploadURL, responseURL string) (string, error) {
+	base, err := url.Parse(uploadURL)
+	if err != nil || base.Host == "" || (base.Scheme != "http" && base.Scheme != "https") {
+		return "", fmt.Errorf("upload URL is invalid")
+	}
+
+	responseURL = strings.TrimSpace(responseURL)
+	parsed, err := url.Parse(responseURL)
+	if err != nil {
+		return "", err
+	}
+	if parsed.IsAbs() {
+		if parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return "", fmt.Errorf("response URL is not http(s)")
+		}
+		return parsed.String(), nil
+	}
+	// A relative response is resolved against the configured upload origin.
+	// Reject protocol-relative URLs so an upstream response cannot silently
+	// redirect the stored result to another host.
+	if parsed.Host != "" || (!strings.HasPrefix(responseURL, "/") && !strings.Contains(parsed.Path, "/")) {
+		return "", fmt.Errorf("response URL is not an absolute or path URL")
+	}
+	resolved := base.ResolveReference(parsed)
+	if resolved.Host == "" || (resolved.Scheme != "http" && resolved.Scheme != "https") {
+		return "", fmt.Errorf("resolved response URL is not http(s)")
+	}
+	return resolved.String(), nil
 }
 
 func extractMediaStorageResponseURL(responseBody []byte, responseURLPath string) (string, error) {
@@ -358,9 +391,21 @@ func extractMediaStorageResponseURL(responseBody []byte, responseURLPath string)
 
 	current := json.RawMessage(responseBody)
 	for _, segment := range strings.Split(responseURLPath, ".") {
+		if index, err := strconv.Atoi(segment); err == nil {
+			var array []json.RawMessage
+			if err := common.Unmarshal(current, &array); err != nil {
+				return "", fmt.Errorf("decode upload response array: %w", err)
+			}
+			if index < 0 || index >= len(array) {
+				return "", fmt.Errorf("upload response does not contain %q", responseURLPath)
+			}
+			current = array[index]
+			continue
+		}
+
 		var object map[string]json.RawMessage
 		if err := common.Unmarshal(current, &object); err != nil {
-			return "", fmt.Errorf("decode upload response: %w", err)
+			return "", fmt.Errorf("decode upload response object: %w", err)
 		}
 		next, ok := object[segment]
 		if !ok {
