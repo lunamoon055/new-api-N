@@ -21,7 +21,7 @@ func TestValidateMediaStorageProviders(t *testing.T) {
 		FieldName:  "file",
 	}
 	require.NoError(t, ValidateMediaStorageProviders([]MediaStorageProvider{valid}))
-	require.Equal(t, "url", normalizeMediaStorageProvider(valid).ResponseURLPath)
+	require.Equal(t, "0.src", normalizeMediaStorageProvider(valid).ResponseURLPath)
 
 	nested := valid
 	nested.ResponseURLPath = "data.url"
@@ -77,6 +77,20 @@ func TestMediaStorageUploadResponseURLPath(t *testing.T) {
 	require.Equal(t, "https://media.example/file.mp4", url)
 
 	url, err = extractMediaStorageResponseURL(
+		[]byte(`[{"src":"/file/video.mp4"}]`),
+		"url",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "/file/video.mp4", url)
+
+	url, err = extractMediaStorageResponseURL(
+		[]byte(`[{"src":"/file/video.mp4"}]`),
+		"",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "/file/video.mp4", url)
+
+	url, err = extractMediaStorageResponseURL(
 		[]byte(`{"status":"Saved","data":{"url":"https://media.example/file.mp4"}}`),
 		"data.url",
 	)
@@ -125,6 +139,29 @@ func TestUploadToMediaStorageUsesConfiguredResponseURLPath(t *testing.T) {
 	}, []byte("test"), "new-api-media-storage-test.png", "image/png")
 	require.NoError(t, err)
 	require.Equal(t, "https://media.example/file.png", url)
+}
+
+func TestUploadToMediaStorageAcceptsImgHubSrcWithLegacyURLPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, err := io.WriteString(w, `[{"src":"/file/video.mp4"}]`)
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	fetchSetting := system_setting.GetFetchSetting()
+	previous := *fetchSetting
+	fetchSetting.EnableSSRFProtection = false
+	t.Cleanup(func() { *fetchSetting = previous })
+
+	storedURL, err := uploadToMediaStorage(context.Background(), MediaStorageProvider{
+		UploadURL:       server.URL + "/upload",
+		Token:           "secret",
+		FieldName:       "file",
+		ResponseURLPath: "url",
+	}, []byte("video"), "video.mp4", "video/mp4")
+	require.NoError(t, err)
+	require.Equal(t, server.URL+"/file/video.mp4", storedURL)
 }
 
 func TestUploadToMediaStorageResolvesImgHubRelativeURLAndBearerToken(t *testing.T) {

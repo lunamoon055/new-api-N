@@ -117,7 +117,7 @@ func normalizeMediaStorageProvider(provider MediaStorageProvider) MediaStoragePr
 		provider.FieldName = "file"
 	}
 	if provider.ResponseURLPath == "" {
-		provider.ResponseURLPath = "url"
+		provider.ResponseURLPath = "0.src"
 	}
 	if provider.Priority < 0 {
 		provider.Priority = 0
@@ -401,8 +401,29 @@ func resolveMediaStorageResponseURL(uploadURL, responseURL string) (string, erro
 func extractMediaStorageResponseURL(responseBody []byte, responseURLPath string) (string, error) {
 	responseURLPath = strings.TrimSpace(responseURLPath)
 	if responseURLPath == "" {
-		responseURLPath = "url"
+		responseURLPath = "0.src"
 	}
+
+	paths := []string{responseURLPath}
+	// CloudFlare-ImgBed/Sanyue ImgHub returns [{"src":"..."}]. Older
+	// configurations in this project used "url", so keep those installations
+	// working while the administrator updates the displayed path to 0.src.
+	if responseURLPath == "url" {
+		paths = append(paths, "0.src", "src")
+	}
+
+	var lastErr error
+	for _, path := range paths {
+		value, err := extractMediaStorageResponseURLAtPath(responseBody, path)
+		if err == nil {
+			return value, nil
+		}
+		lastErr = err
+	}
+	return "", lastErr
+}
+
+func extractMediaStorageResponseURLAtPath(responseBody []byte, responseURLPath string) (string, error) {
 	if !isValidMediaStorageResponseURLPath(responseURLPath) {
 		return "", fmt.Errorf("upload response URL path is invalid")
 	}

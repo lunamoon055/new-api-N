@@ -55,7 +55,7 @@ function normalizeProvider(
     auth_prefix: provider.auth_prefix,
     field_name: provider.field_name.trim() || 'file',
     priority: Number.isFinite(provider.priority) ? provider.priority : 0,
-    response_url_path: provider.response_url_path.trim() || 'url',
+    response_url_path: provider.response_url_path.trim() || '0.src',
   }
 }
 
@@ -137,7 +137,7 @@ export function MediaStorageSettingsSection() {
         toast.error(t('Provide a valid media storage upload URL'))
         return
       }
-      const responseURLPath = provider.response_url_path.trim() || 'url'
+      const responseURLPath = provider.response_url_path.trim() || '0.src'
       if (
         !responseURLPath
           .split('.')
