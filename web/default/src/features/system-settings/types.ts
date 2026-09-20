@@ -67,6 +67,56 @@ export type MediaStorageTestResponse = {
   }
 }
 
+export type MediaStorageProviderHealth = {
+  provider_id: string
+  available: boolean
+  consecutive_failures: number
+  open_until?: number
+  last_error?: string
+}
+
+export type MediaTransferJob = {
+  id: number
+  task_record_id: number
+  task_id: string
+  status: 'PENDING' | 'PROCESSING' | 'RETRY' | 'READY' | 'FAILED'
+  attempts: number
+  next_retry_at: number
+  stored_url?: string
+  candidate_provider?: string
+  byte_size: number
+  file_name?: string
+  content_type?: string
+  last_error?: string
+  created_at: number
+  updated_at: number
+  completed_at?: number
+}
+
+export type MediaTransferDashboardResponse = {
+  success: boolean
+  message: string
+  data: {
+    summary: {
+      total: number
+      pending: number
+      processing: number
+      retry: number
+      ready: number
+      failed: number
+      queue_depth: number
+      oldest_pending_at?: number
+      recent_failure_rate: number
+      average_transfer_seconds: number
+    }
+    items: MediaTransferJob[]
+    total: number
+    page: number
+    page_size: number
+    providers: MediaStorageProviderHealth[]
+  }
+}
+
 export type ConfirmPaymentComplianceResponse = {
   success: boolean
   message: string

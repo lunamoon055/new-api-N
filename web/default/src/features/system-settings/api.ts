@@ -27,6 +27,7 @@ import type {
   MediaStorageProvider,
   MediaStorageSettingsResponse,
   MediaStorageTestResponse,
+  MediaTransferDashboardResponse,
   UpstreamChannelsResponse,
   UpstreamRatiosResponse,
 } from './types'
@@ -98,6 +99,24 @@ export async function testMediaStorageProvider(providerId: string) {
       { cause: error }
     )
   }
+}
+
+export async function getMediaTransferDashboard(status?: string) {
+  const res = await api.get<MediaTransferDashboardResponse>(
+    '/api/option/media_storage/transfers',
+    { params: status ? { status } : undefined }
+  )
+  return res.data
+}
+
+export async function retryMediaTransferJob(id: number) {
+  const res = await api.post(
+    '/api/option/media_storage/transfers/' + id + '/retry'
+  )
+  if (!res.data.success) {
+    throw new Error(res.data.message || 'Failed to retry media transfer')
+  }
+  return res.data
 }
 
 export async function confirmPaymentCompliance() {

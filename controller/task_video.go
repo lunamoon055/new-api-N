@@ -152,6 +152,8 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 	shouldRefund := false
 	quota := task.Quota
 	preStatus := task.Status
+	snapshot := task.Snapshot()
+	mediaTransferPending := false
 
 	task.Status = model.TaskStatus(taskResult.Status)
 	switch taskResult.Status {
@@ -169,10 +171,16 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		if task.FinishTime == 0 {
 			task.FinishTime = now
 		}
-		applyVideoTaskResultURL(task, taskResult)
+		mediaTransferPending = applyVideoTaskResultURL(task, taskResult)
 
 		if taskResult.TotalTokens > 0 {
 			service.RecalculateTaskQuotaByTokens(ctx, task, taskResult.TotalTokens)
+		}
+		if mediaTransferPending {
+			// The upstream generation is complete, but the result is not yet
+			// deliverable. Keep this task unfinished so the next polling cycle
+			// retries media storage instead of returning the upstream URL.
+			task.Progress = "99%"
 		}
 	case model.TaskStatusFailure:
 		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", taskId), task)
@@ -194,11 +202,18 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 	default:
 		return fmt.Errorf("unknown task status %s for task %s", taskResult.Status, taskId)
 	}
-	if taskResult.Progress != "" {
+	if taskResult.Progress != "" && !mediaTransferPending {
 		task.Progress = taskResult.Progress
 	}
-	if err := task.Update(); err != nil {
+	updated, err := task.UpdateWithSnapshot(snapshot)
+	if err != nil {
 		common.SysLog("UpdateVideoTask task error: " + err.Error())
+		shouldRefund = false
+	} else if !updated {
+		// A durable media queue or another poller already won the lifecycle
+		// transition. Never let this stale polling response overwrite its URL
+		// or issue a duplicate refund.
+		logger.LogInfo(ctx, fmt.Sprintf("Task %s was updated concurrently, skip stale video update", task.TaskID))
 		shouldRefund = false
 	}
 

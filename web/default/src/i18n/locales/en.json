@@ -4883,6 +4883,27 @@
     "Each media storage provider needs an ID and upload URL": "Each media storage provider needs an ID and upload URL",
     "Provide a valid media storage upload URL": "Provide a valid media storage upload URL",
     "GHLINK ImgHub": "GHLINK ImgHub",
-    "Apply Sanyue ImgHub preset": "Apply Sanyue ImgHub preset"
+    "Apply Sanyue ImgHub preset": "Apply Sanyue ImgHub preset",
+    "Transfer monitoring": "Transfer monitoring",
+    "Transfers are retried without generating upstream content again. Failed jobs stay available for manual review and retry.": "Transfers are retried without generating upstream content again. Failed jobs stay available for manual review and retry.",
+    "Queue depth": "Queue depth",
+    "Recent failure rate": "Recent failure rate",
+    "Average transfer time": "Average transfer time",
+    "Refresh transfer monitoring": "Refresh transfer monitoring",
+    "No transfer jobs": "No transfer jobs",
+    "Attempts": "Attempts",
+    "File size": "File size",
+    "Last error": "Last error",
+    "Action": "Action",
+    "Retrying...": "Retrying...",
+    "Retry transfer": "Retry transfer",
+    "Media transfer retry scheduled": "Media transfer retry scheduled",
+    "Circuit closed": "Circuit closed",
+    "Circuit open": "Circuit open",
+    "PENDING": "Pending",
+    "PROCESSING": "Processing",
+    "RETRY": "Retrying",
+    "READY": "Ready",
+    "FAILED": "Failed"
   }
 }

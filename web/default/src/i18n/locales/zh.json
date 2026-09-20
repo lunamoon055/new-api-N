@@ -4883,6 +4883,27 @@
     "Each media storage provider needs an ID and upload URL": "每个图床都需要填写 ID 和上传地址",
     "Provide a valid media storage upload URL": "请输入有效的图床上传地址",
     "GHLINK ImgHub": "GHLINK 图床",
-    "Apply Sanyue ImgHub preset": "应用 Sanyue ImgHub 预设"
+    "Apply Sanyue ImgHub preset": "应用 Sanyue ImgHub 预设",
+    "Transfer monitoring": "转存监控",
+    "Transfers are retried without generating upstream content again. Failed jobs stay available for manual review and retry.": "转存失败时只重试下载/上传，不会重新生成上游内容；失败任务会保留，供管理员人工检查和重试。",
+    "Queue depth": "队列深度",
+    "Recent failure rate": "近期失败率",
+    "Average transfer time": "平均转存耗时",
+    "Refresh transfer monitoring": "刷新转存监控",
+    "No transfer jobs": "暂无转存任务",
+    "Attempts": "尝试次数",
+    "File size": "文件大小",
+    "Last error": "最近错误",
+    "Action": "操作",
+    "Retrying...": "正在重试…",
+    "Retry transfer": "重试转存",
+    "Media transfer retry scheduled": "已安排转存重试",
+    "Circuit closed": "熔断关闭",
+    "Circuit open": "熔断开启",
+    "PENDING": "等待中",
+    "PROCESSING": "处理中",
+    "RETRY": "等待重试",
+    "READY": "已完成",
+    "FAILED": "失败"
   }
 }

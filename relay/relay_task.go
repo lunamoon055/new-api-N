@@ -509,9 +509,12 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	if task == nil ||
 		task.Status == model.TaskStatusSuccess ||
-		task.Status == model.TaskStatusFailure {
+		task.Status == model.TaskStatusFailure ||
+		task.MediaTransferState != "" {
 		// Terminal task state is immutable. Re-querying an inconsistent
-		// upstream must never reopen billing or flip SETTLED/REFUNDED.
+		// upstream must never reopen billing or flip SETTLED/REFUNDED. A
+		// pending media transfer is also authoritative: polling upstream
+		// again could enqueue a duplicate transfer or expose an expiring URL.
 		return nil
 	}
 	channelModel, err := model.GetChannelById(task.ChannelId, true)
@@ -572,12 +575,26 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		// data: URI — kept in Data, not ResultURL
 	} else if ti.Url != "" {
 		resultURL := ti.Url
+		mediaTransferPending := false
 		if service.HasEnabledMediaStorage() {
-			if storedURL, uploadErr := service.UploadMediaURL(context.Background(), resultURL, "video/mp4"); uploadErr == nil && storedURL != "" {
-				resultURL = storedURL
+			if _, queueErr := service.EnqueueVideoTaskMediaTransfer(context.Background(), task, resultURL); queueErr == nil {
+				mediaTransferPending = true
+			} else {
+				logger.LogWarn(context.Background(), fmt.Sprintf("enqueue media transfer failed for realtime video task %s; using first-stage retry", task.TaskID))
+				if storedURL, uploadErr := service.UploadVideoTaskURL(context.Background(), task, resultURL); uploadErr == nil && storedURL != "" {
+					resultURL = storedURL
+					task.Status = model.TaskStatusSuccess
+					task.MediaTransferState = ""
+					task.Progress = taskcommon.ProgressComplete
+				} else {
+					service.MarkVideoMediaTransferPending(task)
+					mediaTransferPending = true
+				}
 			}
 		}
-		task.PrivateData.ResultURL = resultURL
+		if !mediaTransferPending {
+			task.PrivateData.ResultURL = resultURL
+		}
 	} else if task.Status == model.TaskStatusSuccess {
 		// No URL from adaptor — construct proxy URL using public task ID
 		task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)

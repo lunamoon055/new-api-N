@@ -195,6 +195,8 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.GET("/media_storage", controller.GetMediaStorageSettings)
 			optionRoute.PUT("/media_storage", controller.UpdateMediaStorageSettings)
 			optionRoute.POST("/media_storage/test", controller.TestMediaStorage)
+			optionRoute.GET("/media_storage/transfers", controller.GetMediaTransferDashboard)
+			optionRoute.POST("/media_storage/transfers/:id/retry", controller.RetryMediaTransfer)
 			optionRoute.POST("/payment_compliance", controller.ConfirmPaymentCompliance)
 			optionRoute.GET("/channel_affinity_cache", controller.GetChannelAffinityCacheStats)
 			optionRoute.DELETE("/channel_affinity_cache", controller.ClearChannelAffinityCache)

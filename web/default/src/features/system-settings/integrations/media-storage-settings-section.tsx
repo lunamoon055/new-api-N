@@ -8,15 +8,26 @@ the Free Software Foundation, either version 3 of the License, or
 */
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, TestTube, Trash2 } from 'lucide-react'
+import { Plus, RefreshCw, RotateCcw, TestTube, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { SettingsSection } from '../components/settings-section'
 import {
   getMediaStorageSettings,
+  getMediaTransferDashboard,
+  retryMediaTransferJob,
   testMediaStorageProvider,
   updateMediaStorageSettings,
 } from '../api'
@@ -66,6 +77,11 @@ export function MediaStorageSettingsSection() {
     queryKey: ['media-storage-settings'],
     queryFn: getMediaStorageSettings,
   })
+  const transferQuery = useQuery({
+    queryKey: ['media-transfer-dashboard'],
+    queryFn: () => getMediaTransferDashboard(),
+    refetchInterval: 15000,
+  })
   const [draftProviders, setDraftProviders] = useState<
     MediaStorageProvider[] | null
   >(null)
@@ -111,6 +127,14 @@ export function MediaStorageSettingsSection() {
     },
     onError: (error: Error) => toast.error(error.message),
     onSettled: () => setTestingProviderId(null),
+  })
+  const retryMutation = useMutation({
+    mutationFn: retryMediaTransferJob,
+    onSuccess: () => {
+      toast.success(t('Media transfer retry scheduled'))
+      queryClient.invalidateQueries({ queryKey: ['media-transfer-dashboard'] })
+    },
+    onError: (error: Error) => toast.error(error.message),
   })
 
   const updateProvider = (
@@ -386,6 +410,190 @@ export function MediaStorageSettingsSection() {
           </Button>
         </div>
       </div>
+
+      <MediaTransferMonitor
+        dashboard={transferQuery.data?.data}
+        isLoading={transferQuery.isLoading}
+        isRefreshing={transferQuery.isFetching}
+        onRefresh={() => transferQuery.refetch()}
+        onRetry={(id) => retryMutation.mutate(id)}
+        retryingId={
+          retryMutation.isPending ? (retryMutation.variables ?? null) : null
+        }
+      />
+    </SettingsSection>
+  )
+}
+
+type MediaTransferMonitorProps = {
+  dashboard?: Awaited<ReturnType<typeof getMediaTransferDashboard>>['data']
+  isLoading: boolean
+  isRefreshing: boolean
+  onRefresh: () => void
+  onRetry: (id: number) => void
+  retryingId: number | null
+}
+
+function formatTransferTime(timestamp?: number) {
+  if (!timestamp) return '-'
+  return new Date(timestamp * 1000).toLocaleString()
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function statusVariant(status: string) {
+  if (status === 'FAILED') return 'destructive' as const
+  if (status === 'READY') return 'secondary' as const
+  return 'outline' as const
+}
+
+function MediaTransferMonitor({
+  dashboard,
+  isLoading,
+  isRefreshing,
+  onRefresh,
+  onRetry,
+  retryingId,
+}: MediaTransferMonitorProps) {
+  const { t } = useTranslation()
+  const summary = dashboard?.summary
+  return (
+    <SettingsSection
+      title={t('Transfer monitoring')}
+      description={t(
+        'Transfers are retried without generating upstream content again. Failed jobs stay available for manual review and retry.'
+      )}
+    >
+      <div className='flex items-center justify-between gap-3'>
+        <div className='grid flex-1 gap-3 sm:grid-cols-4'>
+          <div className='rounded-md border p-3'>
+            <p className='text-muted-foreground text-xs'>{t('Queue depth')}</p>
+            <p className='text-lg font-semibold'>
+              {summary?.queue_depth ?? '-'}
+            </p>
+          </div>
+          <div className='rounded-md border p-3'>
+            <p className='text-muted-foreground text-xs'>{t('Failed')}</p>
+            <p className='text-lg font-semibold'>{summary?.failed ?? '-'}</p>
+          </div>
+          <div className='rounded-md border p-3'>
+            <p className='text-muted-foreground text-xs'>
+              {t('Recent failure rate')}
+            </p>
+            <p className='text-lg font-semibold'>
+              {summary
+                ? `${(summary.recent_failure_rate * 100).toFixed(1)}%`
+                : '-'}
+            </p>
+          </div>
+          <div className='rounded-md border p-3'>
+            <p className='text-muted-foreground text-xs'>
+              {t('Average transfer time')}
+            </p>
+            <p className='text-lg font-semibold'>
+              {summary
+                ? `${summary.average_transfer_seconds.toFixed(1)}s`
+                : '-'}
+            </p>
+          </div>
+        </div>
+        <Button
+          type='button'
+          variant='outline'
+          size='icon-sm'
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          aria-label={t('Refresh transfer monitoring')}
+        >
+          <RefreshCw className={isRefreshing ? 'animate-spin' : undefined} />
+        </Button>
+      </div>
+
+      {isLoading && (
+        <p className='text-muted-foreground text-sm'>{t('Loading...')}</p>
+      )}
+      {!isLoading && (!dashboard?.items || dashboard.items.length === 0) && (
+        <p className='text-muted-foreground rounded-lg border border-dashed p-4 text-sm'>
+          {t('No transfer jobs')}
+        </p>
+      )}
+      {!!dashboard?.items?.length && (
+        <div className='overflow-x-auto rounded-lg border'>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('Task ID')}</TableHead>
+                <TableHead>{t('Status')}</TableHead>
+                <TableHead>{t('Attempts')}</TableHead>
+                <TableHead>{t('File size')}</TableHead>
+                <TableHead>{t('Updated')}</TableHead>
+                <TableHead>{t('Last error')}</TableHead>
+                <TableHead className='text-right'>{t('Action')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {dashboard.items.map((job) => (
+                <TableRow key={job.id}>
+                  <TableCell className='font-mono text-xs'>
+                    {job.task_id || job.id}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={statusVariant(job.status)}>
+                      {t(job.status)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{job.attempts}</TableCell>
+                  <TableCell>
+                    {job.byte_size ? formatBytes(job.byte_size) : '-'}
+                  </TableCell>
+                  <TableCell className='whitespace-nowrap text-xs'>
+                    {formatTransferTime(job.updated_at)}
+                  </TableCell>
+                  <TableCell
+                    className='max-w-[260px] truncate text-xs'
+                    title={job.last_error}
+                  >
+                    {job.last_error || '-'}
+                  </TableCell>
+                  <TableCell className='text-right'>
+                    {(job.status === 'FAILED' || job.status === 'RETRY') && (
+                      <Button
+                        type='button'
+                        variant='outline'
+                        size='sm'
+                        onClick={() => onRetry(job.id)}
+                        disabled={retryingId === job.id}
+                      >
+                        <RotateCcw data-icon='inline-start' />
+                        {retryingId === job.id
+                          ? t('Retrying...')
+                          : t('Retry transfer')}
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {!!dashboard?.providers?.length && (
+        <div className='flex flex-wrap gap-2 text-xs'>
+          {dashboard.providers.map((provider) => (
+            <Badge
+              key={provider.provider_id}
+              variant={provider.available ? 'secondary' : 'destructive'}
+            >
+              {provider.provider_id}:{' '}
+              {provider.available ? t('Circuit closed') : t('Circuit open')}
+            </Badge>
+          ))}
+        </div>
+      )}
     </SettingsSection>
   )
 }

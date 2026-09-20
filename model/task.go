@@ -75,6 +75,10 @@ type Task struct {
 	// 禁止返回给用户，内部可能包含key等隐私信息
 	PrivateData TaskPrivateData `json:"-" gorm:"column:private_data;type:json"`
 	Data        json.RawMessage `json:"data" gorm:"type:json"`
+	// Empty for ordinary tasks. PENDING means upstream generation has already
+	// succeeded and a durable media transfer owns final delivery; such tasks
+	// must not be polled again or refunded by the generation timeout sweep.
+	MediaTransferState string `json:"-" gorm:"type:varchar(16);not null;default:'';index"`
 	// BillingStatus and BillingTargetQuota form a persistent, retryable billing
 	// state machine. LEGACY is deliberately inert so migrations never replay
 	// historical task charges or refunds.
@@ -368,6 +372,7 @@ func GetTimedOutUnfinishedTasks(cutoffUnix int64, limit int) []*Task {
 	var tasks []*Task
 	err := DB.Where("progress != ?", "100%").
 		Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).
+		Where("media_transfer_state = ?", "").
 		Where("submit_time < ?", cutoffUnix).
 		Order("submit_time").
 		Limit(limit).
@@ -386,6 +391,7 @@ func GetAllUnFinishSyncTasks(limit int) []*Task {
 		Where("progress != ?", "100%").
 		Where("status != ?", TaskStatusFailure).
 		Where("status != ?", TaskStatusSuccess).
+		Where("media_transfer_state = ?", "").
 		Where("billing_status != ?", TaskBillingStatusSubmitting).
 		Limit(limit).
 		Order("id").
@@ -535,6 +541,7 @@ type taskSnapshot struct {
 	FinishTime         int64
 	FailReason         string
 	ResultURL          string
+	MediaTransferState string
 	Data               json.RawMessage
 	Quota              int
 	BillingStatus      TaskBillingStatus
@@ -551,6 +558,7 @@ func (s taskSnapshot) Equal(other taskSnapshot) bool {
 		s.FinishTime == other.FinishTime &&
 		s.FailReason == other.FailReason &&
 		s.ResultURL == other.ResultURL &&
+		s.MediaTransferState == other.MediaTransferState &&
 		s.Quota == other.Quota &&
 		s.BillingStatus == other.BillingStatus &&
 		s.BillingTargetQuota == other.BillingTargetQuota &&
@@ -568,6 +576,7 @@ func (t *Task) Snapshot() taskSnapshot {
 		FinishTime:         t.FinishTime,
 		FailReason:         t.FailReason,
 		ResultURL:          t.PrivateData.ResultURL,
+		MediaTransferState: t.MediaTransferState,
 		Data:               t.Data,
 		Quota:              t.Quota,
 		BillingStatus:      t.BillingStatus,
@@ -605,13 +614,14 @@ func (t *Task) UpdateWithStatus(fromStatus TaskStatus) (bool, error) {
 func (t *Task) UpdateWithSnapshot(snapshot taskSnapshot) (bool, error) {
 	result := DB.Model(t).
 		Where(
-			"status = ? AND billing_status = ? AND quota = ? AND billing_target_quota = ? AND billing_retry_count = ? AND billing_next_retry_at = ?",
+			"status = ? AND billing_status = ? AND quota = ? AND billing_target_quota = ? AND billing_retry_count = ? AND billing_next_retry_at = ? AND media_transfer_state = ?",
 			snapshot.Status,
 			snapshot.BillingStatus,
 			snapshot.Quota,
 			snapshot.BillingTargetQuota,
 			snapshot.BillingRetryCount,
 			snapshot.BillingNextRetryAt,
+			snapshot.MediaTransferState,
 		).
 		Select("*").
 		Updates(t)

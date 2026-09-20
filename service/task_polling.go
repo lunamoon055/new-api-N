@@ -498,6 +498,8 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	billingReason := ""
+	mediaTransferPending := false
+	previousTask := *task
 
 	task.Status = model.TaskStatus(taskResult.Status)
 	switch taskResult.Status {
@@ -516,15 +518,41 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			task.FinishTime = now
 		}
 		resultURL := strings.TrimSpace(taskResult.Url)
+		if resultURL != "" && !strings.HasPrefix(resultURL, "data:") && HasEnabledMediaStorage() {
+			// The generated video is already chargeable. Commit a durable media
+			// job and the public processing state together before any download.
+			billingReason = PrepareTaskFinalBilling(adaptor, task, taskResult)
+			options := taskVideoMediaDownloadOptions(ch.Type, baseURL, key, proxy)
+			queued, queueErr := EnqueueVideoMediaTransfer(ctx, task, &previousTask, resultURL, options)
+			if queueErr == nil {
+				// Another poller may have won the CAS; in either case never
+				// create a second upstream generation or expose this URL.
+				if !queued {
+					logger.LogInfo(ctx, fmt.Sprintf("video task %s media transfer already queued", task.TaskID))
+				}
+				return nil
+			}
+			logger.LogError(ctx, fmt.Sprintf("enqueue video media transfer for task %s failed; using first-stage retry: %v", task.TaskID, queueErr))
+			*task = previousTask
+			task.Status = model.TaskStatusSuccess
+			task.Progress = taskcommon.ProgressComplete
+			task.FinishTime = now
+		}
 		if resultURL != "" && HasEnabledMediaStorage() {
 			downloadOptions := taskVideoMediaDownloadOptions(ch.Type, baseURL, key, proxy)
-			if storedURL, uploadErr := UploadMediaURLWithOptions(ctx, resultURL, "video/mp4", downloadOptions); uploadErr == nil && storedURL != "" {
+			if storedURL, uploadErr := UploadMediaURLWithOptionsRetry(ctx, resultURL, "video/mp4", downloadOptions); uploadErr == nil && storedURL != "" {
 				resultURL = storedURL
 			} else if uploadErr != nil {
-				logger.LogWarn(ctx, fmt.Sprintf("media storage upload failed for video task %s; keeping upstream URL: %v", task.TaskID, uploadErr))
+				logger.LogWarn(ctx, fmt.Sprintf("media storage upload failed for video task %s; keeping task processing", task.TaskID))
+				MarkVideoMediaTransferPending(task)
+				mediaTransferPending = true
 			}
 		}
-		if strings.HasPrefix(resultURL, "data:") {
+		if mediaTransferPending {
+			// Never expose an expiring upstream URL after a storage failure.
+			// The unfinished task will be polled again and the copy retried.
+			task.PrivateData.ResultURL = ""
+		} else if strings.HasPrefix(resultURL, "data:") {
 			// data: URI (e.g. Vertex base64 encoded video) — keep in Data, not in ResultURL
 			task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 		} else if resultURL != "" {
@@ -547,7 +575,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	default:
 		return fmt.Errorf("unknown task status %s for task %s", taskResult.Status, task.TaskID)
 	}
-	if taskResult.Progress != "" {
+	if taskResult.Progress != "" && !mediaTransferPending {
 		task.Progress = taskResult.Progress
 	}
 

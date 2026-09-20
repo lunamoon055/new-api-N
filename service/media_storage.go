@@ -29,6 +29,10 @@ const (
 	MediaStorageOptionKey     = "MediaStorageProviders"
 	mediaStorageMaxBytes      = 200 << 20
 	mediaStorageUploadTimeout = 2 * time.Minute
+	// Stage 1 deliberately retries the complete transfer a small number of
+	// times. The durable spool/queue in the next stage will avoid downloading
+	// the upstream asset again on every retry.
+	mediaStorageVideoRetryAttempts = 3
 )
 
 // MediaStorageProvider is an administrator-configured upload target. Token is
@@ -200,11 +204,53 @@ func isValidMediaStorageHeaderName(value string) bool {
 	return true
 }
 
-// UploadMediaURL tries enabled providers in priority order. A provider failure
-// is deliberately non-fatal to generation callers: they can keep the original
-// upstream URL and report the upload failure separately.
+// UploadMediaURL tries enabled providers in priority order.
 func UploadMediaURL(ctx context.Context, sourceURL, mediaType string) (string, error) {
 	return UploadMediaURLWithOptions(ctx, sourceURL, mediaType, MediaDownloadOptions{})
+}
+
+// UploadMediaURLWithRetry retries a complete remote-media transfer. This is a
+// short-term reliability guard for generated video results; the next-stage
+// persistent spool/queue will make retries cheaper by reusing the downloaded
+// file instead of fetching the upstream URL again.
+func UploadMediaURLWithRetry(ctx context.Context, sourceURL, mediaType string) (string, error) {
+	return UploadMediaURLWithOptionsRetry(ctx, sourceURL, mediaType, MediaDownloadOptions{})
+}
+
+// UploadMediaURLWithOptionsRetry is the credential-aware variant used for
+// protected upstream video content endpoints.
+func UploadMediaURLWithOptionsRetry(ctx context.Context, sourceURL, mediaType string, options MediaDownloadOptions) (string, error) {
+	var lastErr error
+	for attempt := 1; attempt <= mediaStorageVideoRetryAttempts; attempt++ {
+		storedURL, err := UploadMediaURLWithOptions(ctx, sourceURL, mediaType, options)
+		if err == nil && strings.TrimSpace(storedURL) != "" {
+			return storedURL, nil
+		}
+		if err == nil {
+			err = fmt.Errorf("media storage returned an empty URL")
+		}
+		lastErr = err
+		if attempt == mediaStorageVideoRetryAttempts {
+			break
+		}
+
+		// Do not log the raw error here: HTTP client errors can echo a signed
+		// upstream URL. The task ID is logged by the caller instead.
+		logger.LogWarn(ctx, fmt.Sprintf(
+			"media storage video transfer attempt %d/%d failed; retrying",
+			attempt, mediaStorageVideoRetryAttempts,
+		))
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(time.Duration(attempt) * 2 * time.Second):
+		}
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("media storage transfer failed")
+	}
+	return "", fmt.Errorf("media storage video transfer failed after %d attempts: %w", mediaStorageVideoRetryAttempts, lastErr)
 }
 
 // UploadMediaURLWithOptions copies a remote media result while allowing a
