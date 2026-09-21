@@ -147,6 +147,10 @@ export interface ChannelTestResponse {
   data?: {
     response_time?: number
     error?: string
+    upstream_url?: string
+    upstream_request?: string
+    upstream_headers?: Record<string, string>
+    upstream_response?: string
   }
 }
 

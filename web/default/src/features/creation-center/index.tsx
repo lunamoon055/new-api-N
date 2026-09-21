@@ -60,6 +60,7 @@ import {
   getCreationImageAspectRatioOptions,
   getCreationImageReferenceError,
   getCreationImageReferenceLimits,
+  getCreationImageResolutionOptions,
   getCreationReferenceURL,
   getCreationDurationOptions,
   getCreationHistoryStorageKey,
@@ -193,6 +194,10 @@ export function CreationCenter() {
     () => getCreationImageAspectRatioOptions(selectedModel),
     [selectedModel]
   )
+  const imageResolutionOptions = useMemo(
+    () => getCreationImageResolutionOptions(selectedModel),
+    [selectedModel]
+  )
   const imageReferenceLimits = useMemo(
     () => getCreationImageReferenceLimits(selectedModel),
     [selectedModel]
@@ -307,7 +312,8 @@ export function CreationCenter() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setImageOptions((current) => {
       const normalized = normalizeCreationImageOptions(current, selectedModel)
-      return normalized.aspectRatio === current.aspectRatio
+      return normalized.aspectRatio === current.aspectRatio &&
+        normalized.outputResolution === current.outputResolution
         ? current
         : normalized
     })
@@ -1097,7 +1103,9 @@ export function CreationCenter() {
         createdAt,
         duration: normalizedVideoOptions?.duration,
         estimateSeconds: videoRequestOptions?.estimateSeconds,
-        resolution: normalizedVideoOptions?.resolution,
+        resolution:
+          normalizedImageOptions?.outputResolution ??
+          normalizedVideoOptions?.resolution,
       }
       setResult(enrichedResult)
       persistHistoryItem({
@@ -1128,7 +1136,9 @@ export function CreationCenter() {
         createdAt,
         duration: normalizedVideoOptions?.duration,
         estimateSeconds: videoRequestOptions?.estimateSeconds,
-        resolution: normalizedVideoOptions?.resolution,
+        resolution:
+          normalizedImageOptions?.outputResolution ??
+          normalizedVideoOptions?.resolution,
         status: 'failed',
         error: message,
       }
@@ -1267,9 +1277,11 @@ export function CreationCenter() {
             models={models}
             selectedModel={selectedModel}
             selectedResolution={
-              mode === 'video' && videoCapabilities
-                ? videoOptions.resolution
-                : undefined
+              mode === 'image' && imageResolutionOptions.length
+                ? imageOptions.outputResolution
+                : mode === 'video' && videoCapabilities
+                  ? videoOptions.resolution
+                  : undefined
             }
             modeCounts={modeCounts}
             loading={catalogQuery.isLoading}
@@ -1299,9 +1311,11 @@ export function CreationCenter() {
                   mode={mode}
                   model={selectedModel}
                   selectedResolution={
-                    mode === 'video' && videoCapabilities
-                      ? videoOptions.resolution
-                      : undefined
+                    mode === 'image' && imageResolutionOptions.length
+                      ? imageOptions.outputResolution
+                      : mode === 'video' && videoCapabilities
+                        ? videoOptions.resolution
+                        : undefined
                   }
                 />
               </div>
@@ -1327,6 +1341,7 @@ export function CreationCenter() {
                   imageReferences={imageReferences}
                   imageReferencesSupported={imageReferencesSupported}
                   imageAspectRatioOptions={imageAspectRatioOptions}
+                  imageResolutionOptions={imageResolutionOptions}
                   imageReferenceLimits={imageReferenceLimits}
                   videoOptions={videoOptions}
                   videoReferences={videoReferences}

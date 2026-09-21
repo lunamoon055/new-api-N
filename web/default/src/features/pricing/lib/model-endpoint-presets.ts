@@ -111,12 +111,16 @@ export function getModelEndpointPreset(
     return VIDEO_VIDEOS
   }
 
+  // 异步视频模型 - 使用 /v1/video/async-generations
   if (
     startsWithAny(model, [
       'sora2',
       'sora-2',
+      'sora',
       'veo31',
+      'veo',
       'kling-v3',
+      'kling',
       'grok-imagine-video',
       'video-2.0',
       'video-2.5',
@@ -128,8 +132,16 @@ export function getModelEndpointPreset(
     return VIDEO_ASYNC
   }
 
-  // Linksky 文档中的异步图片模型。
-  if (model.startsWith('nano-banana') || model === 'gpt-image2') {
+  // The dedicated image-task contract only applies to these exact models.
+  if (
+    [
+      'gpt-image-2',
+      'gpt-image-2.5',
+      'nano-banana-pro',
+      'nano-banana2',
+      'seedream-5-0',
+    ].includes(model)
+  ) {
     return IMAGE_ASYNC
   }
 

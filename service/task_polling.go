@@ -518,7 +518,11 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			task.FinishTime = now
 		}
 		resultURL := strings.TrimSpace(taskResult.Url)
-		if resultURL != "" && !strings.HasPrefix(resultURL, "data:") && HasEnabledMediaStorage() {
+		isImageTask := task.Action == constant.TaskActionImageGenerate
+		if isImageTask && resultURL == "" {
+			return fmt.Errorf("completed image task %s has no result URL", task.TaskID)
+		}
+		if !isImageTask && resultURL != "" && !strings.HasPrefix(resultURL, "data:") && HasEnabledMediaStorage() {
 			// The generated video is already chargeable. Commit a durable media
 			// job and the public processing state together before any download.
 			billingReason = PrepareTaskFinalBilling(adaptor, task, taskResult)
@@ -538,7 +542,14 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			task.Progress = taskcommon.ProgressComplete
 			task.FinishTime = now
 		}
-		if resultURL != "" && HasEnabledMediaStorage() {
+		if isImageTask && resultURL != "" && HasEnabledMediaStorage() {
+			downloadOptions := taskVideoMediaDownloadOptions(ch.Type, baseURL, key, proxy)
+			if storedURL, uploadErr := UploadMediaURLWithOptionsRetry(ctx, resultURL, "image/jpeg", downloadOptions); uploadErr == nil && storedURL != "" {
+				resultURL = storedURL
+			} else if uploadErr != nil {
+				logger.LogWarn(ctx, fmt.Sprintf("media storage upload failed for image task %s; keeping upstream URL", task.TaskID))
+			}
+		} else if resultURL != "" && HasEnabledMediaStorage() {
 			downloadOptions := taskVideoMediaDownloadOptions(ch.Type, baseURL, key, proxy)
 			if storedURL, uploadErr := UploadMediaURLWithOptionsRetry(ctx, resultURL, "video/mp4", downloadOptions); uploadErr == nil && storedURL != "" {
 				resultURL = storedURL

@@ -74,6 +74,13 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.CreationTokenRelayImage,
 		)
 		creationV1Router.POST(
+			"/images/async-generations",
+			middleware.CreationIdempotency(),
+			rewriteCreationCompatibilityPath("/v1/images/async-generations"),
+			middleware.Distribute(),
+			controller.CreationTokenRelayImageTask,
+		)
+		creationV1Router.POST(
 			"/video/async-generations",
 			middleware.CreationIdempotency(),
 			rewriteCreationCompatibilityPath("/v1/video/async-generations"),

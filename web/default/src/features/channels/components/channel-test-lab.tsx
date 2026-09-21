@@ -601,6 +601,96 @@ export function ChannelTestLab() {
                 : t('Run a test to see the backend response here.')}
             </pre>
           </div>
+
+          {result?.response?.data?.upstream_url && (
+            <>
+              <div className='grid gap-2'>
+                <div className='flex items-center justify-between gap-2'>
+                  <Label>{t('Upstream API URL')}</Label>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='sm'
+                    onClick={() =>
+                      void copyToClipboard(result.response.data?.upstream_url ?? '')
+                    }
+                  >
+                    <Clipboard className='mr-2 size-4' />
+                    {t('Copy')}
+                  </Button>
+                </div>
+                <pre className='bg-muted/60 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap'>
+                  {result.response.data.upstream_url}
+                </pre>
+              </div>
+
+              <div className='grid gap-2'>
+                <div className='flex items-center justify-between gap-2'>
+                  <Label>{t('Upstream Request Body')}</Label>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='sm'
+                    onClick={() =>
+                      void copyToClipboard(result.response.data?.upstream_request ?? '')
+                    }
+                  >
+                    <Clipboard className='mr-2 size-4' />
+                    {t('Copy')}
+                  </Button>
+                </div>
+                <pre className='bg-muted/60 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap'>
+                  {result.response.data.upstream_request}
+                </pre>
+              </div>
+
+              {result.response.data.upstream_headers && (
+                <div className='grid gap-2'>
+                  <div className='flex items-center justify-between gap-2'>
+                    <Label>{t('Upstream Headers')}</Label>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      onClick={() =>
+                        void copyToClipboard(
+                          formatJson(result.response.data?.upstream_headers ?? {})
+                        )
+                      }
+                    >
+                      <Clipboard className='mr-2 size-4' />
+                      {t('Copy')}
+                    </Button>
+                  </div>
+                  <pre className='bg-muted/60 max-h-48 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap'>
+                    {formatJson(result.response.data.upstream_headers)}
+                  </pre>
+                </div>
+              )}
+
+              {result.response.data.upstream_response && (
+                <div className='grid gap-2'>
+                  <div className='flex items-center justify-between gap-2'>
+                    <Label>{t('Upstream Response (Preview)')}</Label>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      onClick={() =>
+                        void copyToClipboard(result.response.data?.upstream_response ?? '')
+                      }
+                    >
+                      <Clipboard className='mr-2 size-4' />
+                      {t('Copy')}
+                    </Button>
+                  </div>
+                  <pre className='bg-muted/60 max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap'>
+                    {result.response.data.upstream_response}
+                  </pre>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </TitledCard>
     </div>

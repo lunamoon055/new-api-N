@@ -107,6 +107,12 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 			if info.UserSetting.AcceptUnsetRatioModel {
 				acceptUnsetRatio = true
 			}
+			// 在渠道测试场景下，如果没有配置倍率，使用默认值以便测试通过
+			if info.IsChannelTest {
+				modelRatio = 1.0
+				success = true
+				acceptUnsetRatio = true
+			}
 			if !acceptUnsetRatio {
 				return types.PriceData{}, modelPriceNotConfiguredError(matchName, info.UserId)
 			}
@@ -195,6 +201,14 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 				modelRatio, ratioSuccess, matchName = ratio_setting.GetModelRatio(info.OriginModelName)
 				acceptUnsetRatio := false
 				if info.UserSetting.AcceptUnsetRatioModel {
+					acceptUnsetRatio = true
+				}
+				// 在渠道测试场景下，如果没有配置价格/倍率，使用默认值以便测试通过
+				if info.IsChannelTest {
+					if !ratioSuccess {
+						modelRatio = 1.0
+						ratioSuccess = true
+					}
 					acceptUnsetRatio = true
 				}
 				if !ratioSuccess && !acceptUnsetRatio {

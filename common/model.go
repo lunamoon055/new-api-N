@@ -15,6 +15,7 @@ var (
 		"gpt-image-",
 		"gpt-image2",
 		"nano-banana",
+		"seedream-5-0",
 		"gemini-2.0-flash-exp-image-generation",
 		"gemini-2.5-flash-image",
 		"gemini-3-pro-image",

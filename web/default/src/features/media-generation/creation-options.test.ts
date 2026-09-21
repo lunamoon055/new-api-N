@@ -21,6 +21,7 @@ import { describe, test } from 'node:test'
 import {
   getCreationImageAspectRatioOptions,
   getCreationImageReferenceLimits,
+  getCreationImageResolutionOptions,
   getCreationImageRequestOptions,
   normalizeCreationImageOptions,
 } from './image-options'
@@ -78,6 +79,7 @@ describe('Sanbao creation model options', () => {
       normalizeCreationImageOptions({ aspectRatio: '16:9' }, sanbaoImageModel),
       {
         aspectRatio: '16:9',
+        outputResolution: '1K',
       }
     )
     assert.equal(getCreationImageReferenceLimits(sanbaoImageModel).maxImages, 3)
@@ -95,6 +97,43 @@ describe('Sanbao creation model options', () => {
       quality: 'high',
       concurrency: 1,
     })
+  })
+
+  test('uses the async image contract for gpt-image-2 references and resolution', () => {
+    const model = { id: 'gpt-image-2' }
+    assert.deepEqual(getCreationImageResolutionOptions(model), [
+      '1K',
+      '2K',
+      '4K',
+    ])
+    assert.deepEqual(normalizeCreationImageOptions(undefined, model), {
+      aspectRatio: '1:1',
+      outputResolution: '2K',
+    })
+    assert.equal(getCreationImageReferenceLimits(model).maxImages, 17)
+
+    const request = getCreationImageRequestOptions(
+      'poster',
+      model,
+      { imageUrls: [{ url: 'https://example.com/ref.webp' }] },
+      { aspectRatio: '16:9', outputResolution: '4K' }
+    )
+
+    assert.deepEqual(request, {
+      output_resolution: '4K',
+      aspect_ratio: '16:9',
+      image_urls: ['https://example.com/ref.webp'],
+    })
+  })
+
+  test('uses the documented seedream defaults and limits', () => {
+    const model = { id: 'seedream-5-0' }
+    assert.deepEqual(normalizeCreationImageOptions(undefined, model), {
+      aspectRatio: '1:1',
+      outputResolution: '2K',
+    })
+    assert.deepEqual(getCreationImageResolutionOptions(model), ['2K', '3K'])
+    assert.equal(getCreationImageReferenceLimits(model).maxImages, 14)
   })
 
   test('uses Sanbao video metadata for controls, limits, and request fields', () => {

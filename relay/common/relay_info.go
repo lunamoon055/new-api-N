@@ -704,30 +704,32 @@ func (r *TaskReference) UnmarshalJSON(data []byte) error {
 }
 
 type TaskSubmitReq struct {
-	Prompt          string          `json:"prompt"`
-	Model           string          `json:"model,omitempty"`
-	Mode            string          `json:"mode,omitempty"`
-	Image           string          `json:"image,omitempty"`
-	Images          []string        `json:"images,omitempty"`
-	ImageURL        string          `json:"image_url,omitempty"`
-	ImageURLs       []string        `json:"image_urls,omitempty"`
-	StartImageURL   string          `json:"start_image_url,omitempty"`
-	EndImageURL     string          `json:"end_image_url,omitempty"`
-	VideoURL        string          `json:"video_url,omitempty"`
-	Videos          []string        `json:"videos,omitempty"`
-	VideoReference  []TaskReference `json:"video_reference,omitempty"`
-	AudioURL        string          `json:"audio_url,omitempty"`
-	AudioReference  []TaskReference `json:"audio_reference,omitempty"`
-	Audios          []string        `json:"audios,omitempty"`
-	Size            string          `json:"size,omitempty"`
-	Ratio           string          `json:"ratio,omitempty"`
-	Resolution      string          `json:"resolution,omitempty"`
-	Duration        int             `json:"duration,omitempty"`
-	Seconds         string          `json:"seconds,omitempty"`
-	InputReference  string          `json:"input_reference,omitempty"`
-	ReferenceImages []string        `json:"referenceImages,omitempty"`
-	ReferenceVideos []string        `json:"referenceVideos,omitempty"`
-	ReferenceAudios []string        `json:"referenceAudios,omitempty"`
+	Prompt           string          `json:"prompt"`
+	Model            string          `json:"model,omitempty"`
+	Mode             string          `json:"mode,omitempty"`
+	Image            string          `json:"image,omitempty"`
+	Images           []string        `json:"images,omitempty"`
+	ImageURL         string          `json:"image_url,omitempty"`
+	ImageURLs        []string        `json:"image_urls,omitempty"`
+	StartImageURL    string          `json:"start_image_url,omitempty"`
+	EndImageURL      string          `json:"end_image_url,omitempty"`
+	VideoURL         string          `json:"video_url,omitempty"`
+	Videos           []string        `json:"videos,omitempty"`
+	VideoReference   []TaskReference `json:"video_reference,omitempty"`
+	AudioURL         string          `json:"audio_url,omitempty"`
+	AudioReference   []TaskReference `json:"audio_reference,omitempty"`
+	Audios           []string        `json:"audios,omitempty"`
+	Size             string          `json:"size,omitempty"`
+	Ratio            string          `json:"ratio,omitempty"`
+	AspectRatio      string          `json:"aspect_ratio,omitempty"`
+	Resolution       string          `json:"resolution,omitempty"`
+	OutputResolution string          `json:"output_resolution,omitempty"`
+	Duration         int             `json:"duration,omitempty"`
+	Seconds          string          `json:"seconds,omitempty"`
+	InputReference   string          `json:"input_reference,omitempty"`
+	ReferenceImages  []string        `json:"referenceImages,omitempty"`
+	ReferenceVideos  []string        `json:"referenceVideos,omitempty"`
+	ReferenceAudios  []string        `json:"referenceAudios,omitempty"`
 	// The public video APIs have shipped both camelCase URL arrays and
 	// snake_case reference objects. Keep both shapes at the boundary so the
 	// adaptor can forward the documented contract without losing roles or

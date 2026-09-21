@@ -33,6 +33,7 @@ export type CreationImageAspectRatio = string
 
 export type CreationImageOptions = {
   aspectRatio: CreationImageAspectRatio
+  outputResolution: string
 }
 
 export type CreationImageReferenceLimits = {
@@ -47,6 +48,11 @@ type CreationImageMessageContent =
 
 export type CreationImageRequestOptions =
   | Record<string, never>
+  | {
+      output_resolution: string
+      aspect_ratio: CreationImageAspectRatio
+      image_urls?: string[]
+    }
   | {
       output_resolution: '1K'
       aspect_ratio: CreationImageAspectRatio
@@ -80,15 +86,90 @@ export const EMPTY_CREATION_IMAGE_REFERENCES: CreationImageReferences = {
 
 export const DEFAULT_CREATION_IMAGE_OPTIONS: CreationImageOptions = {
   aspectRatio: '1:1',
+  outputResolution: '1K',
 }
 
-const IMAGE_REFERENCE_EXTENSIONS = ['avif', 'gif', 'jpeg', 'jpg', 'png', 'webp']
-const IMAGE_REFERENCE_MIME_TYPES = [
+type AsyncImageCapability = {
+  aspectRatios: string[]
+  resolutions: string[]
+  defaultResolution: string
+  maxImages: number
+}
+
+const GPT_IMAGE_ASPECT_RATIOS = [
+  '3:1',
+  '21:9',
+  '2:1',
+  '16:9',
+  '3:2',
+  '4:3',
+  '5:4',
+  '1:1',
+  '4:5',
+  '3:4',
+  '2:3',
+  '9:16',
+  '1:2',
+  '1:3',
+]
+
+const NANO_BANANA_ASPECT_RATIOS = [
+  '21:9',
+  '16:9',
+  '3:2',
+  '4:3',
+  '5:4',
+  '1:1',
+  '4:5',
+  '3:4',
+  '2:3',
+  '9:16',
+]
+
+const ASYNC_IMAGE_CAPABILITIES: Record<string, AsyncImageCapability> = {
+  'gpt-image-2': {
+    aspectRatios: GPT_IMAGE_ASPECT_RATIOS,
+    resolutions: ['1K', '2K', '4K'],
+    defaultResolution: '2K',
+    maxImages: 17,
+  },
+  'gpt-image-2.5': {
+    aspectRatios: GPT_IMAGE_ASPECT_RATIOS,
+    resolutions: ['1K', '2K', '4K'],
+    defaultResolution: '2K',
+    maxImages: 17,
+  },
+  'nano-banana-pro': {
+    aspectRatios: NANO_BANANA_ASPECT_RATIOS,
+    resolutions: ['1K', '2K', '4K'],
+    defaultResolution: '1K',
+    maxImages: 10,
+  },
+  'nano-banana2': {
+    aspectRatios: NANO_BANANA_ASPECT_RATIOS,
+    resolutions: ['1K', '2K', '4K'],
+    defaultResolution: '1K',
+    maxImages: 14,
+  },
+  'seedream-5-0': {
+    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16'],
+    resolutions: ['2K', '3K'],
+    defaultResolution: '2K',
+    maxImages: 14,
+  },
+}
+
+const IMAGE_REFERENCE_EXTENSIONS = ['jpeg', 'jpg', 'png', 'webp']
+const IMAGE_REFERENCE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const LEGACY_IMAGE_REFERENCE_EXTENSIONS = [
+  'avif',
+  'gif',
+  ...IMAGE_REFERENCE_EXTENSIONS,
+]
+const LEGACY_IMAGE_REFERENCE_MIME_TYPES = [
   'image/avif',
   'image/gif',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
+  ...IMAGE_REFERENCE_MIME_TYPES,
 ]
 
 function getModelId(model?: CreationModelInput) {
@@ -102,6 +183,14 @@ function getModelMetadata(model?: CreationModelInput) {
 
 function normalizeModelId(model?: CreationModelInput) {
   return getModelId(model).trim().toLowerCase()
+}
+
+function getAsyncImageCapability(model?: CreationModelInput) {
+  return ASYNC_IMAGE_CAPABILITIES[normalizeModelId(model)]
+}
+
+export function usesAsyncCreationImageModel(model?: CreationModelInput) {
+  return !!getAsyncImageCapability(model)
 }
 
 function isSanbaoImageModel(model?: CreationModelInput) {
@@ -127,7 +216,11 @@ function cleanAspectRatioOptions(values?: string[]) {
 }
 
 export function supportsCreationImageReferences(model?: CreationModelInput) {
-  return normalizeModelId(model) === 'gpt-image2' || isSanbaoImageModel(model)
+  return (
+    usesAsyncCreationImageModel(model) ||
+    normalizeModelId(model) === 'gpt-image2' ||
+    isSanbaoImageModel(model)
+  )
 }
 
 export function getCreationImageReferenceLimits(
@@ -140,6 +233,14 @@ export function getCreationImageReferenceLimits(
       maxImages: metadata?.max_images ?? CREATION_IMAGE_REFERENCE_MAX_COUNT,
       maxImageSizeMB,
       maxImageSizeBytes: maxImageSizeMB * 1024 * 1024,
+    }
+  }
+  const asyncCapability = getAsyncImageCapability(model)
+  if (asyncCapability) {
+    return {
+      maxImages: asyncCapability.maxImages,
+      maxImageSizeMB: 20,
+      maxImageSizeBytes: CREATION_IMAGE_REFERENCE_MAX_BYTES,
     }
   }
   return {
@@ -161,7 +262,13 @@ export function getCreationImageAspectRatioOptions(
     )
     if (values.length) return values
   }
+  const asyncCapability = getAsyncImageCapability(model)
+  if (asyncCapability) return asyncCapability.aspectRatios
   return CREATION_IMAGE_ASPECT_RATIO_OPTIONS
+}
+
+export function getCreationImageResolutionOptions(model?: CreationModelInput) {
+  return getAsyncImageCapability(model)?.resolutions ?? []
 }
 
 export function normalizeCreationImageReferences(
@@ -184,13 +291,29 @@ export function normalizeCreationImageOptions(
     return { ...DEFAULT_CREATION_IMAGE_OPTIONS }
   }
   const aspectRatioOptions = getCreationImageAspectRatioOptions(model)
+  const defaultAspectRatio = aspectRatioOptions.includes(
+    DEFAULT_CREATION_IMAGE_OPTIONS.aspectRatio
+  )
+    ? DEFAULT_CREATION_IMAGE_OPTIONS.aspectRatio
+    : (aspectRatioOptions[0] ?? DEFAULT_CREATION_IMAGE_OPTIONS.aspectRatio)
   const aspectRatio = aspectRatioOptions.includes(
     options?.aspectRatio as CreationImageAspectRatio
   )
     ? (options?.aspectRatio as CreationImageAspectRatio)
-    : (aspectRatioOptions[0] ?? DEFAULT_CREATION_IMAGE_OPTIONS.aspectRatio)
+    : defaultAspectRatio
 
-  return { aspectRatio }
+  const asyncCapability = getAsyncImageCapability(model)
+  const outputResolutionOptions = getCreationImageResolutionOptions(model)
+  const defaultOutputResolution =
+    asyncCapability?.defaultResolution ??
+    DEFAULT_CREATION_IMAGE_OPTIONS.outputResolution
+  const outputResolution =
+    outputResolutionOptions.length > 0 &&
+    outputResolutionOptions.includes(options?.outputResolution ?? '')
+      ? (options?.outputResolution as string)
+      : defaultOutputResolution
+
+  return { aspectRatio, outputResolution }
 }
 
 export function getCreationImageReferenceError(
@@ -205,7 +328,10 @@ export function getCreationImageReferenceError(
     if (isSanbaoImageModel(model)) {
       return 'Sanbao accepts too many reference images.'
     }
-    return 'Gpt-image2 accepts at most 6 reference images.'
+    if (!usesAsyncCreationImageModel(model)) {
+      return 'Gpt-image2 accepts at most 6 reference images.'
+    }
+    return `This image model accepts at most ${limits.maxImages} reference images.`
   }
 
   const imageUrls = normalized.imageUrls
@@ -219,12 +345,18 @@ export function getCreationImageReferenceError(
       (url) =>
         !hasAllowedReferenceFormat(
           url,
-          IMAGE_REFERENCE_EXTENSIONS,
-          IMAGE_REFERENCE_MIME_TYPES
+          usesAsyncCreationImageModel(model)
+            ? IMAGE_REFERENCE_EXTENSIONS
+            : LEGACY_IMAGE_REFERENCE_EXTENSIONS,
+          usesAsyncCreationImageModel(model)
+            ? IMAGE_REFERENCE_MIME_TYPES
+            : LEGACY_IMAGE_REFERENCE_MIME_TYPES
         )
     )
   ) {
-    return 'Reference image format must be PNG, JPEG, WebP, GIF, or AVIF.'
+    return usesAsyncCreationImageModel(model)
+      ? 'Reference image format must be PNG, JPEG, or WebP.'
+      : 'Reference image format must be PNG, JPEG, WebP, GIF, or AVIF.'
   }
 
   return undefined
@@ -234,7 +366,7 @@ export function getCreationImageRequestOptions(
   prompt: string,
   model?: CreationModelInput,
   references: CreationImageReferences = EMPTY_CREATION_IMAGE_REFERENCES,
-  imageOptions: Partial<CreationImageOptions> = DEFAULT_CREATION_IMAGE_OPTIONS
+  imageOptions: Partial<CreationImageOptions> = {}
 ): CreationImageRequestOptions {
   if (!supportsCreationImageReferences(model)) return {}
 
@@ -251,27 +383,33 @@ export function getCreationImageRequestOptions(
       concurrency: 1,
     }
   }
-  const options: Exclude<CreationImageRequestOptions, Record<string, never>> = {
+  if (usesAsyncCreationImageModel(model)) {
+    return {
+      output_resolution: normalizedOptions.outputResolution,
+      aspect_ratio: normalizedOptions.aspectRatio,
+      ...(imageUrls.length ? { image_urls: imageUrls } : {}),
+    }
+  }
+  return {
     output_resolution: '1K',
     aspect_ratio: normalizedOptions.aspectRatio,
+    ...(imageUrls.length
+      ? {
+          messages: [
+            {
+              role: 'user' as const,
+              content: [
+                { type: 'text' as const, text: prompt },
+                ...imageUrls.map((url) => ({
+                  type: 'image_url' as const,
+                  image_url: { url },
+                })),
+              ],
+            },
+          ],
+        }
+      : {}),
   }
-
-  if (imageUrls.length) {
-    options.messages = [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          ...imageUrls.map((url) => ({
-            type: 'image_url' as const,
-            image_url: { url },
-          })),
-        ],
-      },
-    ]
-  }
-
-  return options
 }
 
 function cleanReferenceValues(
@@ -316,6 +454,7 @@ function hasAllowedReferenceFormat(
 ) {
   const mime = getDataURLMime(value)
   if (mime) return mimeTypes.includes(mime)
+  if (isHTTPURL(value)) return true
   const extension = getURLFileExtension(value)
   return !!extension && extensions.includes(extension)
 }

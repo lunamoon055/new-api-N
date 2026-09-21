@@ -16,6 +16,11 @@ import (
 )
 
 func TestModelListIncludesSupportedVideoModels(t *testing.T) {
+	require.Contains(t, ModelList, "gpt-image-2")
+	require.Contains(t, ModelList, "gpt-image-2.5")
+	require.Contains(t, ModelList, "nano-banana-pro")
+	require.Contains(t, ModelList, "nano-banana2")
+	require.Contains(t, ModelList, "seedream-5-0")
 	require.Contains(t, ModelList, "sora2")
 	require.Contains(t, ModelList, "minimax-h3")
 	require.Contains(t, ModelList, "minimax-h3-768p")
@@ -37,6 +42,101 @@ func TestModelListIncludesSupportedVideoModels(t *testing.T) {
 	require.Contains(t, ModelList, "veo31-ref")
 	require.Contains(t, ModelList, "grok-imagine-video")
 	require.Contains(t, ModelList, "seedance-2.5")
+}
+
+func TestAsyncImageRequestUsesDocumentedEndpointAndPayload(t *testing.T) {
+	c := newVideo2JSONContext(t, `{
+		"model":"gpt-image-2",
+		"prompt":"  a cinematic garden portrait  ",
+		"aspect_ratio":"16:9",
+		"output_resolution":"4k",
+		"image_urls":["https://cdn.example/reference"]
+	}`)
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-image-2",
+		RequestURLPath:  "/v1/images/async-generations",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "provider-image-model",
+		},
+	}
+	adaptor := &TaskAdaptor{baseURL: "https://linksky.top"}
+
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	require.Equal(t, "imageGenerate", info.Action)
+	requestURL, err := adaptor.BuildRequestURL(info)
+	require.NoError(t, err)
+	require.Equal(t, "https://linksky.top/v1/images/async-generations", requestURL)
+	require.Equal(t, "/v1/images/async-generations", info.UpstreamEndpoint)
+
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, common.Unmarshal(encoded, &payload))
+	require.Equal(t, "provider-image-model", payload["model"])
+	require.Equal(t, "a cinematic garden portrait", payload["prompt"])
+	require.Equal(t, "16:9", payload["aspect_ratio"])
+	require.Equal(t, "4K", payload["output_resolution"])
+	require.Equal(t, []any{"https://cdn.example/reference"}, payload["image_urls"])
+	require.NotContains(t, payload, "size")
+	require.NotContains(t, payload, "n")
+}
+
+func TestAsyncImageRequestAppliesDocumentedDefaults(t *testing.T) {
+	c := newVideo2JSONContext(t, `{
+		"model":"nano-banana2",
+		"prompt":"snowy portrait"
+	}`)
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "nano-banana2",
+		RequestURLPath:  "/v1/images/async-generations",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "nano-banana2",
+		},
+	}
+	adaptor := &TaskAdaptor{}
+
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, common.Unmarshal(encoded, &payload))
+	require.Equal(t, "1:1", payload["aspect_ratio"])
+	require.Equal(t, "1K", payload["output_resolution"])
+}
+
+func TestAsyncImageRequestRejectsUnsupportedPrivateFields(t *testing.T) {
+	c := newVideo2JSONContext(t, `{
+		"model":"seedream-5-0",
+		"prompt":"moonlit courtyard",
+		"seed":0
+	}`)
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "seedream-5-0",
+		RequestURLPath:  "/v1/images/async-generations",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+	}
+
+	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+	require.NotNil(t, taskErr)
+	require.Contains(t, taskErr.Message, "seed")
+}
+
+func TestParseAsyncImageTaskResultReadsResultURLAndDataFallback(t *testing.T) {
+	for _, body := range []string{
+		`{"task_id":"upstream-1","object":"image.task","status":"completed","result_url":"https://cdn.example/result.png"}`,
+		`{"task_id":"upstream-2","object":"image.task","status":"completed","data":[{"url":"https://cdn.example/fallback.webp"}]}`,
+	} {
+		result, err := (&TaskAdaptor{}).ParseTaskResult([]byte(body))
+		require.NoError(t, err)
+		require.Equal(t, string(model.TaskStatusSuccess), result.Status)
+		require.NotEmpty(t, result.Url)
+	}
 }
 
 func TestMiniMaxH3RequestBodyPassesDocumentedFieldsThrough(t *testing.T) {

@@ -368,12 +368,13 @@ var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp 
 	relayconstant.RelayModeSunoFetchByID:  sunoFetchByIDRespBodyBuilder,
 	relayconstant.RelayModeSunoFetch:      sunoFetchRespBodyBuilder,
 	relayconstant.RelayModeVideoFetchByID: videoFetchByIDRespBodyBuilder,
+	relayconstant.RelayModeImageFetchByID: imageFetchByIDRespBodyBuilder,
 }
 
 func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 	respBuilder, ok := fetchRespBuilders[relayMode]
 	if !ok {
-		taskResp = service.TaskErrorWrapperLocal(errors.New("invalid_relay_mode"), "invalid_relay_mode", http.StatusBadRequest)
+		return service.TaskErrorWrapperLocal(errors.New("invalid_relay_mode"), "invalid_relay_mode", http.StatusBadRequest)
 	}
 
 	respBody, taskErr := respBuilder(c)
@@ -391,6 +392,82 @@ func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 		return
 	}
 	return
+}
+
+func imageFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
+	taskID := c.Param("task_id")
+	if taskID == "" {
+		taskID = c.GetString("task_id")
+	}
+	task, exists, err := model.GetByTaskId(c.GetInt("id"), taskID)
+	if err != nil {
+		return nil, service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
+	}
+	if !exists {
+		return nil, service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusNotFound)
+	}
+	if task.Action != constant.TaskActionImageGenerate {
+		return nil, service.TaskErrorWrapperLocal(errors.New("task_type_mismatch"), "task_type_mismatch", http.StatusBadRequest)
+	}
+
+	status := "in_progress"
+	switch task.Status {
+	case model.TaskStatusNotStart, model.TaskStatusSubmitted, model.TaskStatusQueued:
+		status = "queued"
+	case model.TaskStatusSuccess:
+		status = "completed"
+	case model.TaskStatusFailure:
+		status = "failed"
+	}
+	progress := parseTaskProgressPercent(task.Progress)
+	if status == "completed" || status == "failed" {
+		progress = 100
+	}
+	payload := map[string]any{
+		"id":         task.TaskID,
+		"task_id":    task.TaskID,
+		"object":     "image.task",
+		"model":      task.Properties.OriginModelName,
+		"status":     status,
+		"progress":   progress,
+		"created_at": task.CreatedAt,
+	}
+	if task.FinishTime > 0 {
+		payload["completed_at"] = task.FinishTime
+	}
+	if status == "completed" {
+		if resultURL := strings.TrimSpace(task.GetResultURL()); resultURL != "" {
+			payload["result_url"] = resultURL
+			payload["data"] = []map[string]string{{"url": resultURL}}
+		}
+	}
+	if status == "failed" {
+		message, _ := service.VideoTaskFailureMessages(task)
+		if strings.TrimSpace(message) == "" {
+			message = "image generation failed"
+		}
+		payload["error"] = map[string]string{
+			"message": message,
+			"code":    "generation_failed",
+		}
+	}
+	respBody, err = common.Marshal(payload)
+	if err != nil {
+		return nil, service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+	}
+	return respBody, nil
+}
+
+func parseTaskProgressPercent(progress string) int {
+	value := strings.TrimSuffix(strings.TrimSpace(progress), "%")
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return 0
+	}
+	if parsed > 100 {
+		return 100
+	}
+	return parsed
 }
 
 func sunoFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {

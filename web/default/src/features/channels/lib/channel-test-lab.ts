@@ -26,6 +26,7 @@ export type ChannelTestEndpointType =
   | 'gemini'
   | 'jina-rerank'
   | 'image-generation'
+  | 'openai-image-async'
   | 'openai-video'
   | 'openai-video-async'
   | 'sanbao-image'
@@ -125,6 +126,19 @@ export const CHANNEL_TEST_TEMPLATES: ChannelTestTemplate[] = [
       prompt: 'a cute cat',
       output_resolution: '1K',
       aspect_ratio: '1:1',
+    },
+  },
+  {
+    endpointType: 'openai-image-async',
+    labelKey: 'Async Image Generation',
+    descriptionKey: 'Test /v1/images/async-generations compatibility',
+    defaultModel: 'gpt-image-2',
+    supportsStream: false,
+    payload: {
+      model: '{{model}}',
+      prompt: 'a minimal poster of a sunset over the sea',
+      aspect_ratio: '1:1',
+      output_resolution: '2K',
     },
   },
   {
@@ -284,6 +298,16 @@ export function isVideosApiTestModel(model: string) {
   return normalized.startsWith('videos-') || normalized.startsWith('sd2')
 }
 
+export function isAsyncImageTestModel(model: string) {
+  return [
+    'gpt-image-2',
+    'gpt-image-2.5',
+    'nano-banana-pro',
+    'nano-banana2',
+    'seedream-5-0',
+  ].includes(model.trim().toLowerCase())
+}
+
 export function resolveChannelTestEndpointType(
   endpointType: ChannelTestEndpointType,
   model: string,
@@ -308,6 +332,9 @@ export function resolveChannelTestEndpointType(
       endpointType === 'openai-video-async')
   ) {
     return 'openai-video'
+  }
+  if (endpointType === 'auto' && isAsyncImageTestModel(model)) {
+    return 'openai-image-async'
   }
   return endpointType
 }

@@ -75,6 +75,7 @@ type ComposerProps = {
   imageReferences: CreationImageReferences
   imageReferencesSupported: boolean
   imageAspectRatioOptions: CreationImageAspectRatio[]
+  imageResolutionOptions: string[]
   imageReferenceLimits: CreationImageReferenceLimits
   videoOptions: CreationVideoOptions
   videoReferences: CreationVideoReferences
@@ -307,7 +308,7 @@ export function Composer(props: ComposerProps) {
         {props.mode === 'image' && props.imageReferencesSupported && (
           <>
             <Separator className='my-3' />
-            <div className='grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 dark:border-white/10 dark:bg-white/[0.035]'>
+            <div className='grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 dark:border-white/10 dark:bg-white/[0.035]'>
               <ComposerSelectGroup
                 label={t('Aspect ratio')}
                 value={props.imageOptions.aspectRatio}
@@ -322,6 +323,22 @@ export function Composer(props: ComposerProps) {
                   })
                 }
               />
+              {!!props.imageResolutionOptions.length && (
+                <ComposerSelectGroup
+                  label={t('Resolution')}
+                  value={props.imageOptions.outputResolution}
+                  options={props.imageResolutionOptions.map((value) => ({
+                    value,
+                    label: value,
+                  }))}
+                  onChange={(value) =>
+                    props.onImageOptionsChange({
+                      ...props.imageOptions,
+                      outputResolution: value,
+                    })
+                  }
+                />
+              )}
             </div>
           </>
         )}

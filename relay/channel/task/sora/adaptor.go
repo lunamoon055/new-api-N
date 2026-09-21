@@ -122,6 +122,12 @@ func isAsyncGenerationsPath(path string) bool {
 	return strings.HasPrefix(strings.Split(path, "?")[0], "/v1/video/async-generations")
 }
 
+func isAsyncImageGenerationsPath(path string) bool {
+	cleanPath := strings.Split(path, "?")[0]
+	return strings.HasPrefix(cleanPath, "/v1/images/async-generations") ||
+		strings.HasPrefix(cleanPath, "/pg/images/async-generations")
+}
+
 func isVideoGenerationsPath(path string) bool {
 	return strings.HasPrefix(strings.Split(path, "?")[0], "/v1/video/generations")
 }
@@ -158,6 +164,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if taskErr := relaycommon.ValidateMultipartDirect(c, info); taskErr != nil {
 		return taskErr
 	}
+	if isAsyncImageGenerationsPath(info.RequestURLPath) {
+		return validateAsyncImageRequest(c, info)
+	}
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
@@ -188,6 +197,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	// remix 路径的 OtherRatios 已在 ResolveOriginTask 中设置
 	if getTaskAction(info) == constant.TaskActionRemix {
+		return nil
+	}
+	if getTaskAction(info) == constant.TaskActionImageGenerate {
 		return nil
 	}
 
@@ -225,6 +237,10 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	baseURL := normalizeVideoAPIBaseURL(a.baseURL)
+	if isAsyncImageGenerationsPath(info.RequestURLPath) || getTaskAction(info) == constant.TaskActionImageGenerate {
+		setUpstreamEndpoint(info, "/v1/images/async-generations")
+		return fmt.Sprintf("%s/v1/images/async-generations", baseURL), nil
+	}
 	if getTaskAction(info) == constant.TaskActionRemix {
 		setUpstreamEndpoint(info, "/v1/videos")
 		return fmt.Sprintf("%s/v1/videos/%s/remix", baseURL, getOriginTaskID(info)), nil
@@ -305,6 +321,13 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	contentType := c.GetHeader("Content-Type")
 
 	if strings.HasPrefix(contentType, "application/json") {
+		if isAsyncImageGenerationsPath(info.RequestURLPath) || getTaskAction(info) == constant.TaskActionImageGenerate {
+			newBody, err := buildAsyncImageRequestBody(cachedBody, info.OriginModelName, info.UpstreamModelName)
+			if err != nil {
+				return nil, errors.Wrap(err, "build_async_image_request_body_failed")
+			}
+			return bytes.NewReader(newBody), nil
+		}
 		if isSeedance25ModelName(info.OriginModelName) || isSeedance25ModelName(info.UpstreamModelName) {
 			newBody, err := buildSeedance25RequestBody(cachedBody, info.UpstreamModelName)
 			if err != nil {
@@ -434,6 +457,16 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	if dResp.Progress == 0 {
 		dResp.Progress = extractTaskProgress(dResp, rawPayload)
 	}
+	if getTaskAction(info) == constant.TaskActionImageGenerate {
+		dResp.Object = "image.task"
+		dResp.Model = info.OriginModelName
+		if strings.TrimSpace(dResp.Status) == "" {
+			dResp.Status = "queued"
+		}
+		if dResp.CreatedAt == 0 {
+			dResp.CreatedAt = common.GetTimestamp()
+		}
+	}
 	c.JSON(http.StatusOK, dResp)
 	return upstreamID, responseBody, nil
 }
@@ -450,6 +483,19 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	upstreamEndpoint, _ := body["upstream_endpoint"].(string)
 	baseURL := normalizeVideoAPIBaseURL(baseUrl)
 	uri := fmt.Sprintf("%s/v1/videos/%s", baseURL, taskID)
+	if strings.TrimSuffix(strings.TrimSpace(upstreamEndpoint), "/") == "/v1/images/async-generations" {
+		uri = fmt.Sprintf("%s/v1/images/async-generations/%s", baseURL, url.PathEscape(taskID))
+		req, err := http.NewRequest(http.MethodGet, uri, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+key)
+		client, err := service.GetHttpClientWithProxy(proxy)
+		if err != nil {
+			return nil, fmt.Errorf("new proxy http client failed: %w", err)
+		}
+		return client.Do(req)
+	}
 	useAsyncGenerations := isAsyncGenerationsModel(modelName) || isAsyncGenerationsModel(originModelName)
 	switch strings.TrimSuffix(strings.TrimSpace(upstreamEndpoint), "/") {
 	case "/v1/video/async-generations":

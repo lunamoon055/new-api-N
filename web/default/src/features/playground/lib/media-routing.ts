@@ -17,6 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import {
+  EMPTY_CREATION_IMAGE_REFERENCES,
+  getCreationImageRequestOptions,
+  usesAsyncCreationImageModel,
+} from '@/features/media-generation/image-options'
+import {
   extractMediaErrorMessage,
   parseImageGenerationResult,
   parseVideoGenerationResult,
@@ -34,8 +39,8 @@ export type PlaygroundMediaMode = 'chat' | 'image' | 'video'
 export type PlaygroundImageRequest = {
   model: string
   prompt: string
-  n: number
-}
+  n?: number
+} & Record<string, unknown>
 
 type WithoutEstimate<T> = T extends { estimateSeconds: number }
   ? Omit<T, 'estimateSeconds'>
@@ -47,8 +52,7 @@ export type PlaygroundVideoRequest = {
 } & WithoutEstimate<CreationVideoRequestOptions>
 
 export type PlaygroundMediaRequest =
-  | PlaygroundImageRequest
-  | PlaygroundVideoRequest
+  PlaygroundImageRequest | PlaygroundVideoRequest
 
 export type PlaygroundMediaResult = {
   mode: Exclude<PlaygroundMediaMode, 'chat'>
@@ -77,7 +81,7 @@ const VIDEO_MODEL_NAMES = new Set([
   'kling-v3',
 ])
 
-const IMAGE_MODEL_NAMES = new Set(['gpt-image2'])
+const IMAGE_MODEL_NAMES = new Set(['gpt-image2', 'seedream-5-0'])
 
 export function getPlaygroundModelMode(model: string): PlaygroundMediaMode {
   const normalizedModel = normalizeModelName(model)
@@ -112,7 +116,9 @@ export function getPlaygroundModelMode(model: string): PlaygroundMediaMode {
 export function getPlaygroundMediaEndpoint(model: string): string | null {
   switch (getPlaygroundModelMode(model)) {
     case 'image':
-      return API_ENDPOINTS.IMAGE_GENERATIONS
+      return usesAsyncCreationImageModel(model)
+        ? API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
+        : API_ENDPOINTS.IMAGE_GENERATIONS
     case 'video':
       return API_ENDPOINTS.VIDEO_ASYNC_GENERATIONS
     default:
@@ -129,6 +135,17 @@ export function buildPlaygroundMediaRequest(
 
   const prompt = getLatestUserPrompt(messages)
   if (mode === 'image') {
+    if (usesAsyncCreationImageModel(model)) {
+      return {
+        model,
+        prompt,
+        ...getCreationImageRequestOptions(
+          prompt,
+          model,
+          EMPTY_CREATION_IMAGE_REFERENCES
+        ),
+      }
+    }
     return {
       model,
       prompt,
@@ -202,7 +219,11 @@ function isVideoApiContentUrl(url: string | undefined) {
 function parseImageResult(raw: unknown, model: string): PlaygroundMediaResult {
   const result = parseImageGenerationResult(raw)
 
-  const lines = [`图片生成完成。`, `模型：${model}`]
+  const completed = !!result.imageUrl
+  const lines = [
+    completed ? `图片生成完成。` : `图片任务已提交。`,
+    `模型：${model}`,
+  ]
   if (result.id) lines.push(`结果 ID：${result.id}`)
   if (result.revisedPrompt) lines.push(`优化提示词：${result.revisedPrompt}`)
   if (result.imageUrl) {
@@ -214,7 +235,8 @@ function parseImageResult(raw: unknown, model: string): PlaygroundMediaResult {
   return {
     mode: 'image',
     content: lines.join('\n'),
-    taskId: result.id,
+    taskId: result.taskId,
+    status: result.status,
     mediaUrl: result.imageUrl,
   }
 }

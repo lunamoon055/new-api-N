@@ -92,3 +92,34 @@ describe('Videos API channel test templates', () => {
     )
   })
 })
+
+describe('Async image channel test templates', () => {
+  test('auto-detects the documented async image models', () => {
+    for (const model of [
+      'gpt-image-2',
+      'gpt-image-2.5',
+      'nano-banana-pro',
+      'nano-banana2',
+      'seedream-5-0',
+    ]) {
+      assert.equal(
+        resolveChannelTestEndpointType('auto', model),
+        'openai-image-async'
+      )
+    }
+  })
+
+  test('uses the async image request fields', () => {
+    const payload = getChannelTestPreviewPayload(
+      'openai-image-async',
+      'gpt-image-2'
+    )
+
+    assert.deepEqual(payload, {
+      model: 'gpt-image-2',
+      prompt: 'a minimal poster of a sunset over the sea',
+      aspect_ratio: '1:1',
+      output_resolution: '2K',
+    })
+  })
+})

@@ -64,17 +64,18 @@ export async function sendPlaygroundMediaGeneration(
   const initialResult = parsePlaygroundMediaResult(res.data, model)
 
   if (
-    getPlaygroundModelMode(model) !== 'video' ||
     !initialResult.taskId ||
-    initialResult.mediaUrl
+    initialResult.mediaUrl ||
+    (getPlaygroundModelMode(model) === 'image' &&
+      endpoint !== API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS)
   ) {
     return initialResult
   }
 
-  return pollPlaygroundVideoTask(model, initialResult)
+  return pollPlaygroundMediaTask(model, initialResult)
 }
 
-async function pollPlaygroundVideoTask(
+async function pollPlaygroundMediaTask(
   model: string,
   initialResult: PlaygroundMediaResult
 ): Promise<PlaygroundMediaResult> {
@@ -82,17 +83,19 @@ async function pollPlaygroundVideoTask(
   if (!taskId) return initialResult
 
   let latestResult = initialResult
+  const mode = getPlaygroundModelMode(model)
+  const path =
+    mode === 'image'
+      ? '/api/creation/images/async-generations'
+      : '/api/creation/video/async-generations'
   for (let attempt = 0; attempt < 45; attempt += 1) {
     await delay(4000)
-    const response = await api.get(
-      `/api/creation/video/async-generations/${encodeURIComponent(taskId)}`,
-      { skipErrorHandler: true, disableDuplicate: true } as Record<
-        string,
-        unknown
-      >
-    )
+    const response = await api.get(`${path}/${encodeURIComponent(taskId)}`, {
+      skipErrorHandler: true,
+      disableDuplicate: true,
+    } as Record<string, unknown>)
     latestResult = parsePlaygroundMediaResult(response.data, model)
-    if (latestResult.mediaUrl || isTerminalVideoStatus(latestResult.status)) {
+    if (latestResult.mediaUrl || isTerminalMediaStatus(latestResult.status)) {
       return latestResult
     }
   }
@@ -100,7 +103,7 @@ async function pollPlaygroundVideoTask(
   return latestResult
 }
 
-function isTerminalVideoStatus(status: string | undefined) {
+function isTerminalMediaStatus(status: string | undefined) {
   switch (status?.toLowerCase()) {
     case 'failed':
     case 'cancelled':

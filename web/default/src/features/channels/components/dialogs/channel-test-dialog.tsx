@@ -115,6 +115,10 @@ const endpointTypeOptions: Array<{ value: string; label: string }> = [
     label: 'Image Generation (/v1/images/generations)',
   },
   {
+    value: 'openai-image-async',
+    label: 'Async Image Generation (/v1/images/async-generations)',
+  },
+  {
     value: 'openai-video',
     label: 'Video Generation (/v1/video/async-generations)',
   },
@@ -124,6 +128,7 @@ const endpointTypeOptions: Array<{ value: string; label: string }> = [
 const STREAM_INCOMPATIBLE_ENDPOINTS = new Set([
   'embeddings',
   'image-generation',
+  'openai-image-async',
   'openai-video',
   'jina-rerank',
   'openai-response-compact',

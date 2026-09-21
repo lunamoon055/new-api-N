@@ -1,6 +1,11 @@
 package sora
 
 var ModelList = []string{
+	"gpt-image-2",
+	"gpt-image-2.5",
+	"nano-banana-pro",
+	"nano-banana2",
+	"seedream-5-0",
 	"sora2",
 	"sora-2",
 	"sora-2-pro",

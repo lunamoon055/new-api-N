@@ -253,6 +253,7 @@ func isKnownTaskField(field string) bool {
 		"duration":           true,
 		"seconds":            true,
 		"aspect_ratio":       true,
+		"output_resolution":  true,
 		"video_url":          true,
 		"videos":             true,
 		"audio_url":          true,

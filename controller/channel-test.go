@@ -38,9 +38,13 @@ import (
 )
 
 type testResult struct {
-	context     *gin.Context
-	localErr    error
-	newAPIError *types.NewAPIError
+	context         *gin.Context
+	localErr        error
+	newAPIError     *types.NewAPIError
+	upstreamURL     string
+	upstreamRequest json.RawMessage
+	upstreamHeaders map[string]string
+	upstreamResp    string
 }
 
 var unsupportedChannelConnectionTestTypes = []int{
@@ -69,6 +73,7 @@ type channelTestUserInfo struct {
 
 const (
 	channelTestEndpointOpenAIVideoAsync = "openai-video-async"
+	channelTestEndpointOpenAIImageAsync = "openai-image-async"
 	channelTestEndpointSanbaoImage      = "sanbao-image"
 	channelTestEndpointSanbaoVideo      = "sanbao-video"
 	channelTestEndpointSanbaoUpload     = "sanbao-upload"
@@ -111,6 +116,9 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 		}
 		return string(constant.EndpointTypeOpenAIVideo)
 	}
+	if isAsyncImageModelName(modelName) {
+		return channelTestEndpointOpenAIImageAsync
+	}
 	if strings.HasSuffix(modelName, ratio_setting.CompactModelSuffix) {
 		return string(constant.EndpointTypeOpenAIResponseCompact)
 	}
@@ -150,6 +158,22 @@ func isLikelySanbaoImageModel(modelName string) bool {
 	return strings.Contains(normalizeCreationModelMetadataKey(modelName), "gpt-image2")
 }
 
+func isAsyncImageModelName(modelName string) bool {
+	switch strings.ToLower(strings.TrimSpace(modelName)) {
+	case "gpt-image-2", "gpt-image-2.5", "nano-banana-pro", "nano-banana2", "seedream-5-0":
+		return true
+	default:
+		return false
+	}
+}
+
+func defaultAsyncImageTestResolution(modelName string) string {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(modelName)), "nano-banana") {
+		return "1K"
+	}
+	return "2K"
+}
+
 func resolveChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) (string, string, types.RelayFormat) {
 	endpointType = normalizeChannelTestEndpoint(channel, modelName, endpointType)
 	requestPath := "/v1/chat/completions"
@@ -186,6 +210,10 @@ func resolveChannelTestEndpoint(channel *model.Channel, modelName, endpointType 
 	}
 	if endpointType == channelTestEndpointOpenAIVideoAsync {
 		requestPath = "/v1/video/async-generations"
+		relayFormat = types.RelayFormatTask
+	}
+	if endpointType == channelTestEndpointOpenAIImageAsync {
+		requestPath = "/v1/images/async-generations"
 		relayFormat = types.RelayFormatTask
 	}
 	switch endpointType {
@@ -493,7 +521,7 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 			newAPIError: types.NewError(fmt.Errorf("unsupported api type: %d", apiType), types.ErrorCodeInvalidApiType),
 		}
 	}
-	if info.RelayMode == relayconstant.RelayModeVideoSubmit {
+	if info.RelayMode == relayconstant.RelayModeVideoSubmit || info.RelayMode == relayconstant.RelayModeImageSubmit {
 		return runTaskChannelTest(c, channel, endpointType, info, request, tik)
 	}
 	adaptor := relay.GetAdaptor(apiType)
@@ -657,14 +685,29 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 		}
 	}
 
+	// 收集上游请求信息用于调试
+	upstreamURL := channel.GetBaseURL() + c.Request.URL.Path
+	upstreamHeaders := make(map[string]string)
+	// 收集关键请求头（隐藏敏感信息）
+	for key := range c.Request.Header {
+		if strings.Contains(strings.ToLower(key), "content") || strings.Contains(strings.ToLower(key), "accept") {
+			upstreamHeaders[key] = c.Request.Header.Get(key)
+		}
+	}
+	upstreamHeaders["X-Request-Model"] = testModel
+	upstreamHeaders["X-Channel-Type"] = constant.GetChannelTypeName(channel.Type)
+
 	requestBody := bytes.NewBuffer(jsonData)
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return testResult{
-			context:     c,
-			localErr:    err,
-			newAPIError: types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
+			context:         c,
+			localErr:        err,
+			newAPIError:     types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
+			upstreamURL:     upstreamURL,
+			upstreamRequest: jsonData,
+			upstreamHeaders: upstreamHeaders,
 		}
 	}
 	var httpResp *http.Response
@@ -742,10 +785,21 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 		Other:            other,
 	})
 	common.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
+
+	// 截取响应体用于调试展示（最多1000字符）
+	upstreamRespPreview := string(respBody)
+	if len(upstreamRespPreview) > 1000 {
+		upstreamRespPreview = upstreamRespPreview[:1000] + "..."
+	}
+
 	return testResult{
-		context:     c,
-		localErr:    nil,
-		newAPIError: nil,
+		context:         c,
+		localErr:        nil,
+		newAPIError:     nil,
+		upstreamURL:     upstreamURL,
+		upstreamRequest: jsonData,
+		upstreamHeaders: upstreamHeaders,
+		upstreamResp:    upstreamRespPreview,
 	}
 }
 
@@ -866,7 +920,11 @@ func genChannelTestRelayInfo(c *gin.Context, relayFormat types.RelayFormat, requ
 		if err != nil {
 			return nil, err
 		}
-		info.RelayMode = relayconstant.RelayModeVideoSubmit
+		if strings.HasPrefix(c.Request.URL.Path, "/v1/images/async-generations") {
+			info.RelayMode = relayconstant.RelayModeImageSubmit
+		} else {
+			info.RelayMode = relayconstant.RelayModeVideoSubmit
+		}
 		if taskReq, ok := request.(relaycommon.TaskSubmitReq); ok {
 			c.Set("task_request", taskReq)
 		}
@@ -1388,6 +1446,14 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 
 	// 根据端点类型构建不同的测试请求
 	if endpointType != "" {
+		if endpointType == channelTestEndpointOpenAIImageAsync {
+			return relaycommon.TaskSubmitReq{
+				Model:            model,
+				Prompt:           "a minimal poster of a sunset over the sea",
+				AspectRatio:      "1:1",
+				OutputResolution: defaultAsyncImageTestResolution(model),
+			}
+		}
 		if endpointType == channelTestEndpointOpenAIVideoAsync {
 			if isMiniMaxH3ModelName(model) || isWan30ModelName(model) {
 				return relaycommon.TaskSubmitReq{
@@ -1666,6 +1732,12 @@ func TestChannel(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"time":    consumedTime,
+		"data": gin.H{
+			"upstream_url":      result.upstreamURL,
+			"upstream_request":  string(result.upstreamRequest),
+			"upstream_headers":  result.upstreamHeaders,
+			"upstream_response": result.upstreamResp,
+		},
 	})
 }
 
@@ -1733,6 +1805,12 @@ func TestChannelLab(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"time":    consumedTime,
+		"data": gin.H{
+			"upstream_url":      result.upstreamURL,
+			"upstream_request":  string(result.upstreamRequest),
+			"upstream_headers":  result.upstreamHeaders,
+			"upstream_response": result.upstreamResp,
+		},
 	})
 }
 

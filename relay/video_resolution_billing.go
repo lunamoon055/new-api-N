@@ -107,6 +107,9 @@ func lookupVideoResolutionPrice(prices map[string]float64, resolution string) (f
 
 func resolveTaskBillingResolution(c *gin.Context, info *relaycommon.RelayInfo) string {
 	if req, err := relaycommon.GetTaskRequest(c); err == nil {
+		if resolution := billing_setting.NormalizeVideoResolution(req.OutputResolution); resolution != "" {
+			return resolution
+		}
 		if resolution := billing_setting.NormalizeVideoResolution(req.Resolution); resolution != "" {
 			return resolution
 		}

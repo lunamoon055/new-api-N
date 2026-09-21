@@ -63,10 +63,22 @@ describe('playground media routing', () => {
   })
 
   it('routes image models to image generations', () => {
-    for (const model of ['gpt-image2', 'nano-banana', 'nano-banana-pro']) {
+    for (const model of ['gpt-image2', 'nano-banana']) {
       expect(getPlaygroundModelMode(model)).toBe('image')
       expect(getPlaygroundMediaEndpoint(model)).toBe(
         '/api/creation/images/generations'
+      )
+    }
+    for (const model of [
+      'gpt-image-2',
+      'gpt-image-2.5',
+      'nano-banana-pro',
+      'nano-banana2',
+      'seedream-5-0',
+    ]) {
+      expect(getPlaygroundModelMode(model)).toBe('image')
+      expect(getPlaygroundMediaEndpoint(model)).toBe(
+        '/api/creation/images/async-generations'
       )
     }
   })
@@ -139,6 +151,13 @@ describe('playground media routing', () => {
       model: 'gpt-image2',
       prompt: 'make a short API website video',
       n: 1,
+    })
+
+    expect(buildPlaygroundMediaRequest('gpt-image-2', messages)).toEqual({
+      model: 'gpt-image-2',
+      prompt: 'make a short API website video',
+      output_resolution: '2K',
+      aspect_ratio: '1:1',
     })
   })
 

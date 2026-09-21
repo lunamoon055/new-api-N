@@ -27,6 +27,7 @@ import {
 import {
   composeCreationPrompt,
   getCreationImageRequestOptions,
+  usesAsyncCreationImageModel,
   type CreationImageOptions,
   type CreationImageReferences,
   type CreationVideoReferences,
@@ -169,11 +170,13 @@ export async function submitCreationTask(params: {
       params.imageOptions
     )
     const response = await api.post(
-      '/api/creation/images/generations',
+      usesAsyncCreationImageModel(params.model)
+        ? '/api/creation/images/async-generations'
+        : '/api/creation/images/generations',
       {
         model: params.model.id,
         prompt: promptWithAssets,
-        n: 1,
+        ...(usesAsyncCreationImageModel(params.model) ? {} : { n: 1 }),
         ...imageOptions,
       },
       { skipErrorHandler: true } as Record<string, unknown>
@@ -227,8 +230,11 @@ export async function getCreationImageTask(params: {
   taskId: string
   model: string
 }): Promise<CreationResult> {
+  const path = usesAsyncCreationImageModel(params.model)
+    ? '/api/creation/images/async-generations'
+    : '/api/creation/images/generations'
   const response = await api.get(
-    `/api/creation/images/generations/${encodeURIComponent(params.taskId)}`,
+    `${path}/${encodeURIComponent(params.taskId)}`,
     { skipErrorHandler: true, disableDuplicate: true } as Record<
       string,
       unknown

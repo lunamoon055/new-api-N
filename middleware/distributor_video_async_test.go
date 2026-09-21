@@ -41,3 +41,38 @@ func TestGetModelRequestRecognizesAsyncVideoFetch(t *testing.T) {
 	require.False(t, shouldSelectChannel)
 	require.Equal(t, relayconstant.RelayModeVideoFetchByID, c.GetInt("relay_mode"))
 }
+
+func TestGetModelRequestRecognizesAsyncImageSubmit(t *testing.T) {
+	c := newDistributorTestContext(http.MethodPost, "/v1/images/async-generations", `{"model":"gpt-image-2","prompt":"sunset poster"}`)
+
+	modelRequest, shouldSelectChannel, err := getModelRequest(c)
+
+	require.NoError(t, err)
+	require.True(t, shouldSelectChannel)
+	require.Equal(t, "gpt-image-2", modelRequest.Model)
+	require.Equal(t, relayconstant.RelayModeImageSubmit, c.GetInt("relay_mode"))
+}
+
+func TestGetModelRequestRecognizesAsyncImageFetch(t *testing.T) {
+	c := newDistributorTestContext(http.MethodGet, "/v1/images/async-generations/task_abc", "")
+
+	_, shouldSelectChannel, err := getModelRequest(c)
+
+	require.NoError(t, err)
+	require.False(t, shouldSelectChannel)
+	require.Equal(t, relayconstant.RelayModeImageFetchByID, c.GetInt("relay_mode"))
+}
+
+func TestCreationImageFetchConvertersKeepLegacyAndAsyncPathsSeparate(t *testing.T) {
+	legacy := newDistributorTestContext(http.MethodGet, "/api/creation/images/generations/task_legacy", "")
+	legacy.Params = gin.Params{{Key: "task_id", Value: "task_legacy"}}
+	CreationImageAsyncFetchConvert()(legacy)
+	require.Equal(t, "/v1/images/generations/task_legacy", legacy.Request.URL.Path)
+	require.Equal(t, relayconstant.RelayModeVideoFetchByID, legacy.GetInt("relay_mode"))
+
+	async := newDistributorTestContext(http.MethodGet, "/api/creation/images/async-generations/task_async", "")
+	async.Params = gin.Params{{Key: "task_id", Value: "task_async"}}
+	CreationImageTaskFetchConvert()(async)
+	require.Equal(t, "/v1/images/async-generations/task_async", async.Request.URL.Path)
+	require.Equal(t, relayconstant.RelayModeImageFetchByID, async.GetInt("relay_mode"))
+}

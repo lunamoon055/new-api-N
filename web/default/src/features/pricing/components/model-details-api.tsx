@@ -443,9 +443,15 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
 
 function buildImageAsyncSample(lang: Lang, ctx: SampleContext): string {
   const url = `${ctx.baseUrl}${ctx.endpointPath}`
+  const normalizedModel = ctx.modelName.trim().toLowerCase()
+  const outputResolution = normalizedModel.startsWith('nano-banana')
+    ? '1K'
+    : '2K'
   const body = {
     model: ctx.modelName,
     prompt: 'A minimal poster of a sunset over the sea.',
+    aspect_ratio: '1:1',
+    output_resolution: outputResolution,
   }
 
   if (lang === 'curl') {
@@ -466,7 +472,8 @@ function buildImageAsyncSample(lang: Lang, ctx: SampleContext): string {
       `    headers={"Authorization": "Bearer <YOUR_API_KEY>"},`,
       `    json=${JSON.stringify(body, null, 2)},`,
       ')',
-      'print(response.json())',
+      'task = response.json()',
+      'print(task["task_id"])',
     ].join('\n')
   }
 
@@ -480,16 +487,37 @@ function buildImageAsyncSample(lang: Lang, ctx: SampleContext): string {
     `  body: JSON.stringify(${JSON.stringify(body, null, 2)}),`,
     `})`,
     '',
-    `console.log(await response.json())`,
+    `const task = await response.json()`,
+    `console.log(task.task_id)`,
   ].join('\n')
 }
 
 function buildVideoSample(lang: Lang, ctx: SampleContext): string {
   const url = `${ctx.baseUrl}${ctx.endpointPath}`
   const prompt = 'A cinematic shot of a cat walking through a sunlit garden.'
-  const body = {
+
+  // 根据模型名称智能选择参数
+  const modelLower = ctx.modelName.toLowerCase()
+  const isVideosApi =
+    modelLower.startsWith('videos-') ||
+    modelLower.startsWith('sd2') ||
+    modelLower.startsWith('004系列/')
+
+  // 构建请求体
+  const body: Record<string, any> = {
     model: ctx.modelName,
     prompt,
+  }
+
+  // 为 videos API 格式添加特定参数
+  if (isVideosApi) {
+    body.ratio = '16:9'
+    body.resolution = '720p'
+    body.duration = 5
+  } else {
+    // 为异步视频 API 添加参数
+    body.size = '1280x720'
+    body.duration = 4
   }
 
   if (lang === 'curl') {
@@ -502,21 +530,20 @@ function buildVideoSample(lang: Lang, ctx: SampleContext): string {
   }
 
   if (lang === 'python') {
-    const pythonBody = [
-      '{',
-      `    "model": ${JSON.stringify(ctx.modelName)},`,
-      `    "prompt": ${JSON.stringify(prompt)},`,
-      '}',
-    ].join('\n')
+    const pythonBody = Object.entries(body)
+      .map(([key, value]) => `    "${key}": ${JSON.stringify(value)},`)
+      .join('\n')
     return [
       'import requests',
       '',
       'response = requests.post(',
       `    "${url}",`,
       `    headers={"Authorization": "Bearer <YOUR_API_KEY>"},`,
-      `    json=${pythonBody},`,
-      `)`,
-      `print(response.json())`,
+      `    json={`,
+      pythonBody,
+      '    }',
+      ')',
+      'print(response.json())',
     ].join('\n')
   }
 
@@ -531,7 +558,8 @@ function buildVideoSample(lang: Lang, ctx: SampleContext): string {
     `  body: JSON.stringify(${bodyText}),`,
     `})`,
     '',
-    `console.log(await response.json())`,
+    `const data = await response.json()`,
+    `console.log(data.task_id) // 使用 task_id 查询任务状态`,
   ].join('\n')
 }
 
@@ -643,6 +671,13 @@ function CodeSamplesSection(props: {
         preset &&
         preset.kind === 'video' &&
         endpoint.type === 'openai-video'
+      ) {
+        return false
+      }
+      if (
+        preset &&
+        preset.kind === 'image' &&
+        endpoint.type === 'image-generation'
       ) {
         return false
       }

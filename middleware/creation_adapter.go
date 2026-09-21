@@ -15,6 +15,14 @@ func CreationImageRequestConvert() func(c *gin.Context) {
 	}
 }
 
+func CreationImageAsyncRequestConvert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		c.Request.URL.Path = "/pg/images/async-generations"
+		c.Set("relay_mode", relayconstant.RelayModeImageSubmit)
+		c.Next()
+	}
+}
+
 func CreationVideoAsyncRequestConvert() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		c.Request.URL.Path = "/pg/video/async-generations"
@@ -41,6 +49,17 @@ func CreationImageAsyncFetchConvert() func(c *gin.Context) {
 		c.Request.URL.Path = "/v1/images/generations/" + taskID
 		c.Set("task_id", taskID)
 		c.Set("relay_mode", relayconstant.RelayModeVideoFetchByID)
+		c.Next()
+	}
+}
+
+func CreationImageTaskFetchConvert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		taskID := c.Param("task_id")
+		c.Request.Method = http.MethodGet
+		c.Request.URL.Path = "/v1/images/async-generations/" + taskID
+		c.Set("task_id", taskID)
+		c.Set("relay_mode", relayconstant.RelayModeImageFetchByID)
 		c.Next()
 	}
 }

@@ -98,6 +98,22 @@ func TestResolveChannelTestEndpointUsesImageGenerationForGptImage2(t *testing.T)
 	require.Equal(t, types.RelayFormat(types.RelayFormatOpenAIImage), relayFormat)
 }
 
+func TestResolveChannelTestEndpointUsesAsyncImageForDocumentedModels(t *testing.T) {
+	for _, modelName := range []string{"gpt-image-2", "gpt-image-2.5", "nano-banana-pro", "nano-banana2", "seedream-5-0"} {
+		t.Run(modelName, func(t *testing.T) {
+			endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(
+				&model.Channel{Type: constant.ChannelTypeOpenAI, Models: modelName},
+				modelName,
+				"",
+			)
+
+			require.Equal(t, channelTestEndpointOpenAIImageAsync, endpointType)
+			require.Equal(t, "/v1/images/async-generations", requestPath)
+			require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
+		})
+	}
+}
+
 func TestResolveChannelTestEndpointUsesSanbaoImageTemplate(t *testing.T) {
 	channel := &model.Channel{
 		Type:   constant.ChannelTypeSanbao,

@@ -285,6 +285,14 @@ func CreationRelayTask(c *gin.Context) {
 	RelayTask(c)
 }
 
+func CreationRelayImageTask(c *gin.Context) {
+	if newAPIError := setupCreationRelayContext(c, "creation-image"); newAPIError != nil {
+		respondCreationRelayError(c, newAPIError)
+		return
+	}
+	RelayTask(c)
+}
+
 func CreationRelayTaskFetch(c *gin.Context) {
 	RelayTaskFetch(c)
 }
@@ -307,6 +315,10 @@ func CreationTokenRelayTask(c *gin.Context) {
 		applySanbaoCreationTaskRelayContext(c)
 		c.Request.URL.Path = "/pg/video/async-generations"
 	}
+	RelayTask(c)
+}
+
+func CreationTokenRelayImageTask(c *gin.Context) {
 	RelayTask(c)
 }
 
