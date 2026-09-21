@@ -3,16 +3,18 @@ package common
 import "github.com/QuantumNous/new-api/constant"
 
 // EndpointInfo 描述单个端点的默认请求信息
-// path: 上游路径
+// path: 对外请求路径
 // method: HTTP 请求方式，例如 POST/GET
-// 目前均为 POST，后续可扩展
+// query_path/query_method: 异步端点的任务查询路径与方法（可选）
 //
 // json 标签用于直接序列化到 API 输出
 // 例如：{"path":"/v1/chat/completions","method":"POST"}
 
 type EndpointInfo struct {
-	Path   string `json:"path"`
-	Method string `json:"method"`
+	Path        string `json:"path"`
+	Method      string `json:"method"`
+	QueryPath   string `json:"query_path,omitempty"`
+	QueryMethod string `json:"query_method,omitempty"`
 }
 
 // defaultEndpointInfoMap 保存内置端点的默认 Path 与 Method
@@ -25,7 +27,12 @@ var defaultEndpointInfoMap = map[constant.EndpointType]EndpointInfo{
 	constant.EndpointTypeJinaRerank:            {Path: "/v1/rerank", Method: "POST"},
 	constant.EndpointTypeImageGeneration:       {Path: "/v1/images/generations", Method: "POST"},
 	constant.EndpointTypeEmbeddings:            {Path: "/v1/embeddings", Method: "POST"},
-	constant.EndpointTypeOpenAIVideo:           {Path: "/v1/video/async-generations", Method: "POST"},
+	constant.EndpointTypeOpenAIVideo: {
+		Path:        "/v1/video/async-generations",
+		Method:      "POST",
+		QueryPath:   "/v1/video/async-generations/{task_id}",
+		QueryMethod: "GET",
+	},
 }
 
 // GetDefaultEndpointInfo 返回指定端点类型的默认信息以及是否存在

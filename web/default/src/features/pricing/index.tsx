@@ -33,6 +33,7 @@ import {
 import { EXCLUDED_GROUPS, VIEW_MODES } from './constants'
 import { useFilters } from './hooks/use-filters'
 import { usePricingData } from './hooks/use-pricing-data'
+import type { PricingEndpoint } from './types'
 
 export function Pricing() {
   const { t } = useTranslation()
@@ -269,10 +270,7 @@ export function Pricing() {
               groupRatio={groupRatio || {}}
               usableGroup={usableGroup || {}}
               endpointMap={
-                (endpointMap as Record<
-                  string,
-                  { path?: string; method?: string }
-                >) || {}
+                (endpointMap as Record<string, PricingEndpoint>) || {}
               }
               autoGroups={autoGroups || []}
               priceRate={priceRate ?? 1}

@@ -53,7 +53,8 @@ import {
 } from '../lib/mock-stats'
 import { replaceModelInPath } from '../lib/model-helpers'
 import { inferApiInfo } from '../lib/model-metadata'
-import type { PricingModel } from '../types'
+import { getModelEndpointPreset } from '../lib/model-endpoint-presets'
+import type { PricingEndpoint, PricingModel } from '../types'
 
 // ---------------------------------------------------------------------------
 // Code-sample registry
@@ -86,6 +87,17 @@ type SampleContext = {
   modelName: string
   endpointType: string
   endpointPath: string
+}
+
+type DisplayEndpoint = {
+  type: string
+  labelKey: string
+  kind?: 'video' | 'image'
+  isPreset?: boolean
+  path: string
+  method: string
+  queryPath?: string
+  queryMethod?: string
 }
 
 function buildChatSample(lang: Lang, ctx: SampleContext): string {
@@ -429,6 +441,100 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
   ].join('\n')
 }
 
+function buildImageAsyncSample(lang: Lang, ctx: SampleContext): string {
+  const url = `${ctx.baseUrl}${ctx.endpointPath}`
+  const body = {
+    model: ctx.modelName,
+    prompt: 'A minimal poster of a sunset over the sea.',
+  }
+
+  if (lang === 'curl') {
+    return [
+      `curl -X POST "${url}" \\`,
+      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
+      `  -H "Content-Type: application/json" \\`,
+      `  -d '${JSON.stringify(body, null, 2).replace(/\n/g, '\n     ')}'`,
+    ].join('\n')
+  }
+
+  if (lang === 'python') {
+    return [
+      'import requests',
+      '',
+      'response = requests.post(',
+      `    "${url}",`,
+      `    headers={"Authorization": "Bearer <YOUR_API_KEY>"},`,
+      `    json=${JSON.stringify(body, null, 2)},`,
+      ')',
+      'print(response.json())',
+    ].join('\n')
+  }
+
+  return [
+    `const response = await fetch('${url}', {`,
+    `  method: 'POST',`,
+    `  headers: {`,
+    `    Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
+    `    'Content-Type': 'application/json',`,
+    `  },`,
+    `  body: JSON.stringify(${JSON.stringify(body, null, 2)}),`,
+    `})`,
+    '',
+    `console.log(await response.json())`,
+  ].join('\n')
+}
+
+function buildVideoSample(lang: Lang, ctx: SampleContext): string {
+  const url = `${ctx.baseUrl}${ctx.endpointPath}`
+  const prompt = 'A cinematic shot of a cat walking through a sunlit garden.'
+  const body = {
+    model: ctx.modelName,
+    prompt,
+  }
+
+  if (lang === 'curl') {
+    return [
+      `curl -X POST "${url}" \\`,
+      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
+      `  -H "Content-Type: application/json" \\`,
+      `  -d '${JSON.stringify(body, null, 2).replace(/\n/g, '\n     ')}'`,
+    ].join('\n')
+  }
+
+  if (lang === 'python') {
+    const pythonBody = [
+      '{',
+      `    "model": ${JSON.stringify(ctx.modelName)},`,
+      `    "prompt": ${JSON.stringify(prompt)},`,
+      '}',
+    ].join('\n')
+    return [
+      'import requests',
+      '',
+      'response = requests.post(',
+      `    "${url}",`,
+      `    headers={"Authorization": "Bearer <YOUR_API_KEY>"},`,
+      `    json=${pythonBody},`,
+      `)`,
+      `print(response.json())`,
+    ].join('\n')
+  }
+
+  const bodyText = JSON.stringify(body, null, 2)
+  return [
+    `const response = await fetch('${url}', {`,
+    `  method: 'POST',`,
+    `  headers: {`,
+    `    Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
+    `    'Content-Type': 'application/json',`,
+    `  },`,
+    `  body: JSON.stringify(${bodyText}),`,
+    `})`,
+    '',
+    `console.log(await response.json())`,
+  ].join('\n')
+}
+
 function buildSample(
   lang: Lang,
   endpointType: string,
@@ -439,6 +545,14 @@ function buildSample(
   if (endpointType === 'embeddings' || endpointType === 'jina-rerank')
     return buildEmbeddingSample(lang, ctx)
   if (endpointType === 'image-generation') return buildImageSample(lang, ctx)
+  if (
+    endpointType === 'openai-video' ||
+    endpointType === 'video-async' ||
+    endpointType === 'video-generations' ||
+    endpointType === 'video-videos'
+  )
+    return buildVideoSample(lang, ctx)
+  if (endpointType === 'image-async') return buildImageAsyncSample(lang, ctx)
   return buildChatSample(lang, ctx)
 }
 
@@ -448,7 +562,7 @@ function buildSample(
 
 function CodeSamplesSection(props: {
   model: PricingModel
-  endpointMap: Record<string, { path?: string; method?: string }>
+  endpointMap: Record<string, PricingEndpoint>
 }) {
   const { t } = useTranslation()
   const { status } = useStatus()
@@ -463,21 +577,80 @@ function CodeSamplesSection(props: {
       return candidate.replace(/\/$/, '')
     }
     if (typeof window !== 'undefined') return window.location.origin
-    return 'https://api.example.com'
+    return ''
   }, [status])
 
   const endpoints = useMemo(() => {
     const types = props.model.supported_endpoint_types || []
-    return types
+    const preset = getModelEndpointPreset(props.model.model_name)
+    const configured: DisplayEndpoint[] = types
       .map((type) => {
         const info = props.endpointMap[type] || {}
         let path = info.path || ''
         if (path && path.includes('{model}')) {
           path = replaceModelInPath(path, props.model.model_name || '')
         }
-        return { type, path, method: info.method || 'POST' }
+        let queryPath = info.query_path || ''
+        if (queryPath && queryPath.includes('{model}')) {
+          queryPath = replaceModelInPath(
+            queryPath,
+            props.model.model_name || ''
+          )
+        }
+        return {
+          type,
+          labelKey: '',
+          path,
+          method: info.method || 'POST',
+          ...(queryPath ? { queryPath } : {}),
+          ...(info.query_method
+            ? { queryMethod: info.query_method }
+            : queryPath
+              ? { queryMethod: 'GET' }
+              : {}),
+        }
       })
       .filter((e) => Boolean(e.path))
+
+    const presetEndpoint: DisplayEndpoint | null = preset
+      ? {
+          type: preset.type,
+          labelKey: preset.labelKey,
+          kind: preset.kind,
+          isPreset: !configured.some(
+            (endpoint) =>
+              endpoint.path === preset.path &&
+              endpoint.method === preset.method &&
+              endpoint.queryPath === preset.query_path
+          ),
+          path: preset.path || '',
+          method: preset.method || 'POST',
+          queryPath: preset.query_path,
+          queryMethod: preset.query_method,
+        }
+      : null
+    const candidates: DisplayEndpoint[] = presetEndpoint
+      ? [presetEndpoint, ...configured]
+      : configured
+    const seen = new Set<string>()
+    return candidates.filter((endpoint) => {
+      // A documented video preset replaces generic Chat/video metadata for
+      // that model, while preserving other explicitly configured media APIs.
+      if (preset && preset.kind === 'video' && endpoint.type === 'openai') {
+        return false
+      }
+      if (
+        preset &&
+        preset.kind === 'video' &&
+        endpoint.type === 'openai-video'
+      ) {
+        return false
+      }
+      const key = `${endpoint.method}|${endpoint.path}|${endpoint.queryMethod}|${endpoint.queryPath}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
   }, [props.model, props.endpointMap])
 
   const [endpointType, setEndpointType] = useState<string>(
@@ -507,7 +680,7 @@ function CodeSamplesSection(props: {
 
       <div className='flex flex-wrap items-center gap-2'>
         {endpoints.length > 1 && (
-          <Tabs value={endpointType} onValueChange={setEndpointType}>
+          <Tabs value={activeEndpoint.type} onValueChange={setEndpointType}>
             <TabsList className='bg-muted/40 h-8 p-0.5'>
               {endpoints.map((ep) => (
                 <TabsTrigger
@@ -515,7 +688,7 @@ function CodeSamplesSection(props: {
                   value={ep.type}
                   className='h-7 px-2.5 text-xs'
                 >
-                  {ep.type}
+                  {ep.labelKey ? t(ep.labelKey) : ep.type}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -536,6 +709,56 @@ function CodeSamplesSection(props: {
           </TabsList>
         </Tabs>
       </div>
+
+      <div className='border-border/60 bg-muted/20 mb-3 divide-y overflow-hidden rounded-lg border text-xs'>
+        <div className='flex flex-wrap items-center gap-x-2 gap-y-1 p-3'>
+          <span className='text-muted-foreground'>{t('Request endpoint')}</span>
+          <Badge variant='outline' className='font-mono text-[10px]'>
+            {activeEndpoint.method}
+          </Badge>
+          <code className='break-all font-mono text-[11px]'>
+            {baseUrl}
+            {activeEndpoint.path}
+          </code>
+        </div>
+        {activeEndpoint.queryPath && (
+          <div className='space-y-2 p-3'>
+            <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+              <span className='text-muted-foreground'>
+                {t('Query endpoint')}
+              </span>
+              <Badge variant='outline' className='font-mono text-[10px]'>
+                {activeEndpoint.queryMethod}
+              </Badge>
+              <code className='break-all font-mono text-[11px]'>
+                {baseUrl}
+                {activeEndpoint.queryPath}
+              </code>
+            </div>
+            <CodeBlock
+              code={[
+                `curl -X ${activeEndpoint.queryMethod} "${baseUrl}${activeEndpoint.queryPath.replace(/\{task_id\}/g, '$TASK_ID')}" \\`,
+                `  -H "Authorization: Bearer $NEW_API_KEY"`,
+              ].join('\n')}
+              language='bash'
+            >
+              <CodeBlockCopyButton />
+            </CodeBlock>
+            <p className='text-muted-foreground text-[11px]'>
+              {t(
+                'Use the task_id returned by the creation request to query its status.'
+              )}
+            </p>
+          </div>
+        )}
+      </div>
+      {activeEndpoint.isPreset && (
+        <p className='text-muted-foreground -mt-1 mb-3 text-[11px]'>
+          {t(
+            'This endpoint is preconfigured from the supplied channel documentation; verify model availability with GET /v1/models.'
+          )}
+        </p>
+      )}
 
       <div className='mt-3'>
         <CodeBlock code={code} language={LANG_HIGHLIGHT[lang]}>
@@ -856,7 +1079,7 @@ function AuthSection() {
 
 export function ModelDetailsApi(props: {
   model: PricingModel
-  endpointMap: Record<string, { path?: string; method?: string }>
+  endpointMap: Record<string, PricingEndpoint>
 }) {
   return (
     <div className='space-y-6'>

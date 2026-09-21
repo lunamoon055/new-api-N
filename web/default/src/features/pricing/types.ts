@@ -75,6 +75,14 @@ export type PricingModel = {
   capabilities?: ModelCapability[]
 }
 
+/** Public API endpoint metadata returned by `/api/pricing`. */
+export type PricingEndpoint = {
+  path?: string
+  method?: string
+  query_path?: string
+  query_method?: string
+}
+
 /** Input/output modalities supported by a model. */
 export type Modality = 'text' | 'image' | 'audio' | 'video' | 'file'
 
@@ -100,7 +108,7 @@ export type PricingData = {
   vendors: PricingVendor[]
   group_ratio: Record<string, number>
   usable_group: Record<string, { desc: string; ratio: number }>
-  supported_endpoint: Record<string, string>
+  supported_endpoint: Record<string, PricingEndpoint>
   auto_groups: string[]
 }
 

@@ -279,6 +279,12 @@ func updatePricing() {
 					if m, ok := val["method"].(string); ok {
 						ep.Method = strings.ToUpper(m)
 					}
+					if p, ok := val["query_path"].(string); ok {
+						ep.QueryPath = p
+					}
+					if m, ok := val["query_method"].(string); ok {
+						ep.QueryMethod = strings.ToUpper(m)
+					}
 					supportedEndpointMap[k] = ep
 				default:
 					// ignore unsupported types
