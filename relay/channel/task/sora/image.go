@@ -84,6 +84,9 @@ func newAsyncImageCapability(resolutions []string, defaultResolution string, asp
 }
 
 func validateAsyncImageRequest(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
+	if info == nil || !common.IsBaseURLHost(info.ChannelBaseUrl, common.LinkskyProviderHost) {
+		return asyncImageRequestError("the async image endpoint is only supported by LinkSky channels")
+	}
 	if !strings.HasPrefix(strings.ToLower(c.GetHeader("Content-Type")), "application/json") {
 		return asyncImageRequestError("Content-Type must be application/json")
 	}

@@ -8,6 +8,21 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 )
 
+const LinkskyProviderHost = "linksky.top"
+
+// IsBaseURLHost reports whether rawURL is an HTTP(S) base URL whose hostname
+// exactly matches expectedHost. Exact matching keeps provider-specific routing
+// from leaking to lookalike or unrelated channels.
+func IsBaseURLHost(rawURL, expectedHost string) bool {
+	parsedURL, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		return false
+	}
+	hostname := strings.ToLower(strings.TrimSuffix(parsedURL.Hostname(), "."))
+	expected := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(expectedHost), "."))
+	return hostname != "" && expected != "" && hostname == expected
+}
+
 // ValidateRedirectURL validates that a redirect URL is safe to use.
 // It checks that:
 //   - The URL is properly formatted

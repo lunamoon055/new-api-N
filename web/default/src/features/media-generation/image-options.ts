@@ -186,7 +186,10 @@ function normalizeModelId(model?: CreationModelInput) {
 }
 
 function getAsyncImageCapability(model?: CreationModelInput) {
-  return ASYNC_IMAGE_CAPABILITIES[normalizeModelId(model)]
+  const capability = ASYNC_IMAGE_CAPABILITIES[normalizeModelId(model)]
+  if (!capability) return undefined
+  const provider = getModelMetadata(model)?.provider?.trim().toLowerCase()
+  return provider === 'linksky' ? capability : undefined
 }
 
 export function usesAsyncCreationImageModel(model?: CreationModelInput) {

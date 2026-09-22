@@ -19,6 +19,8 @@ var group2model2channels map[string]map[string][]int // enabled channel
 var channelsIDM map[int]*Channel                     // all channels include disabled
 var channelSyncLock sync.RWMutex
 
+type ChannelFilter func(*Channel) bool
+
 func InitChannelCache() {
 	if !common.MemoryCacheEnabled {
 		return
@@ -95,9 +97,13 @@ func SyncChannelCache(frequency int) {
 }
 
 func GetRandomSatisfiedChannel(group string, model string, retry int) (*Channel, error) {
+	return GetRandomSatisfiedChannelWithFilter(group, model, retry, nil)
+}
+
+func GetRandomSatisfiedChannelWithFilter(group string, model string, retry int, filter ChannelFilter) (*Channel, error) {
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
-		return GetChannel(group, model, retry)
+		return GetChannelWithFilter(group, model, retry, filter)
 	}
 
 	channelSyncLock.RLock()
@@ -114,6 +120,22 @@ func GetRandomSatisfiedChannel(group string, model string, retry int) (*Channel,
 
 	if len(channels) == 0 {
 		return nil, nil
+	}
+	if filter != nil {
+		filtered := make([]int, 0, len(channels))
+		for _, channelID := range channels {
+			channel, ok := channelsIDM[channelID]
+			if !ok {
+				return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelID)
+			}
+			if filter(channel) {
+				filtered = append(filtered, channelID)
+			}
+		}
+		channels = filtered
+		if len(channels) == 0 {
+			return nil, nil
+		}
 	}
 
 	if len(channels) == 1 {

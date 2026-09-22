@@ -54,16 +54,6 @@ const VIDEO_VIDEOS: ModelEndpointPreset = {
   query_method: 'GET',
 }
 
-const IMAGE_ASYNC: ModelEndpointPreset = {
-  type: 'image-async',
-  labelKey: 'Async image',
-  kind: 'image',
-  path: '/v1/images/async-generations',
-  method: 'POST',
-  query_path: '/v1/images/async-generations/{task_id}',
-  query_method: 'GET',
-}
-
 function startsWithAny(value: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => value.startsWith(prefix))
 }
@@ -130,19 +120,6 @@ export function getModelEndpointPreset(
     model === 'wan3.0'
   ) {
     return VIDEO_ASYNC
-  }
-
-  // The dedicated image-task contract only applies to these exact models.
-  if (
-    [
-      'gpt-image-2',
-      'gpt-image-2.5',
-      'nano-banana-pro',
-      'nano-banana2',
-      'seedream-5-0',
-    ].includes(model)
-  ) {
-    return IMAGE_ASYNC
   }
 
   return null

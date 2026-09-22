@@ -3,10 +3,12 @@ package model
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/samber/lo"
 	"gorm.io/gorm"
@@ -141,6 +143,88 @@ func GetChannel(group string, model string, retry int) (*Channel, error) {
 	}
 	err = DB.First(&channel, "id = ?", channel.Id).Error
 	return &channel, err
+}
+
+func GetChannelWithFilter(group string, modelName string, retry int, filter ChannelFilter) (*Channel, error) {
+	if filter == nil {
+		return GetChannel(group, modelName, retry)
+	}
+
+	var abilities []Ability
+	query := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, modelName, true)
+	if err := query.Find(&abilities).Error; err != nil {
+		return nil, err
+	}
+	if len(abilities) == 0 {
+		normalizedModel := ratio_setting.FormatMatchingModelName(modelName)
+		if normalizedModel != modelName {
+			if err := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, normalizedModel, true).
+				Find(&abilities).Error; err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	type filteredAbility struct {
+		ability Ability
+		channel *Channel
+	}
+	candidates := make([]filteredAbility, 0, len(abilities))
+	priorities := make(map[int64]struct{})
+	for _, ability := range abilities {
+		channel, err := GetChannelById(ability.ChannelId, true)
+		if err != nil {
+			return nil, err
+		}
+		if channel.Status != common.ChannelStatusEnabled || !filter(channel) {
+			continue
+		}
+		priority := int64(0)
+		if ability.Priority != nil {
+			priority = *ability.Priority
+		}
+		priorities[priority] = struct{}{}
+		candidates = append(candidates, filteredAbility{ability: ability, channel: channel})
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	sortedPriorities := make([]int64, 0, len(priorities))
+	for priority := range priorities {
+		sortedPriorities = append(sortedPriorities, priority)
+	}
+	sort.Slice(sortedPriorities, func(i, j int) bool { return sortedPriorities[i] > sortedPriorities[j] })
+	if retry >= len(sortedPriorities) {
+		retry = len(sortedPriorities) - 1
+	}
+	targetPriority := sortedPriorities[retry]
+
+	targets := make([]filteredAbility, 0, len(candidates))
+	weightSum := 0
+	for _, candidate := range candidates {
+		priority := int64(0)
+		if candidate.ability.Priority != nil {
+			priority = *candidate.ability.Priority
+		}
+		if priority != targetPriority {
+			continue
+		}
+		targets = append(targets, candidate)
+		weightSum += int(candidate.ability.Weight) + 10
+	}
+	if len(targets) == 0 || weightSum <= 0 {
+		return nil, nil
+	}
+
+	weight := common.GetRandomInt(weightSum)
+	for _, candidate := range targets {
+		weight -= int(candidate.ability.Weight) + 10
+		if weight <= 0 {
+			return candidate.channel, nil
+		}
+	}
+	return targets[len(targets)-1].channel, nil
 }
 
 func (channel *Channel) AddAbilities(tx *gorm.DB) error {

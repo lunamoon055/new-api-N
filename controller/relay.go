@@ -185,10 +185,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}()
 
 	retryParam := &service.RetryParam{
-		Ctx:        c,
-		TokenGroup: relayInfo.TokenGroup,
-		ModelName:  relayInfo.OriginModelName,
-		Retry:      common.GetPointer(0),
+		Ctx:           c,
+		TokenGroup:    relayInfo.TokenGroup,
+		ModelName:     relayInfo.OriginModelName,
+		ChannelFilter: relayTaskChannelFilter(relayInfo),
+		Retry:         common.GetPointer(0),
 	}
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
@@ -251,6 +252,25 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
 	}
+}
+
+func relayTaskChannelFilter(info *relaycommon.RelayInfo) model.ChannelFilter {
+	if info == nil {
+		return nil
+	}
+	switch info.RelayMode {
+	case relayconstant.RelayModeImageSubmit:
+		return func(channel *model.Channel) bool {
+			return channel != nil && common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
+		}
+	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:
+		if common.IsLinkskyAsyncImageModelName(info.OriginModelName) {
+			return func(channel *model.Channel) bool {
+				return channel != nil && !common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
+			}
+		}
+	}
+	return nil
 }
 
 var upgrader = websocket.Upgrader{
@@ -507,10 +527,11 @@ func RelayTask(c *gin.Context) {
 	}()
 
 	retryParam := &service.RetryParam{
-		Ctx:        c,
-		TokenGroup: relayInfo.TokenGroup,
-		ModelName:  relayInfo.OriginModelName,
-		Retry:      common.GetPointer(0),
+		Ctx:           c,
+		TokenGroup:    relayInfo.TokenGroup,
+		ModelName:     relayInfo.OriginModelName,
+		ChannelFilter: relayTaskChannelFilter(relayInfo),
+		Retry:         common.GetPointer(0),
 	}
 
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {

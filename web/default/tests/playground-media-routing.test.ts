@@ -78,7 +78,7 @@ describe('playground media routing', () => {
     ]) {
       expect(getPlaygroundModelMode(model)).toBe('image')
       expect(getPlaygroundMediaEndpoint(model)).toBe(
-        '/api/creation/images/async-generations'
+        '/api/creation/images/generations'
       )
     }
   })
@@ -156,8 +156,7 @@ describe('playground media routing', () => {
     expect(buildPlaygroundMediaRequest('gpt-image-2', messages)).toEqual({
       model: 'gpt-image-2',
       prompt: 'make a short API website video',
-      output_resolution: '2K',
-      aspect_ratio: '1:1',
+      n: 1,
     })
   })
 

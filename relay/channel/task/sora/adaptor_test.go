@@ -57,6 +57,7 @@ func TestAsyncImageRequestUsesDocumentedEndpointAndPayload(t *testing.T) {
 		RequestURLPath:  "/v1/images/async-generations",
 		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
 		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl:    "https://linksky.top/",
 			UpstreamModelName: "provider-image-model",
 		},
 	}
@@ -94,6 +95,7 @@ func TestAsyncImageRequestAppliesDocumentedDefaults(t *testing.T) {
 		RequestURLPath:  "/v1/images/async-generations",
 		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
 		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl:    "https://linksky.top/",
 			UpstreamModelName: "nano-banana2",
 		},
 	}
@@ -120,11 +122,33 @@ func TestAsyncImageRequestRejectsUnsupportedPrivateFields(t *testing.T) {
 		OriginModelName: "seedream-5-0",
 		RequestURLPath:  "/v1/images/async-generations",
 		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl: "https://linksky.top/",
+		},
 	}
 
 	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
 	require.NotNil(t, taskErr)
 	require.Contains(t, taskErr.Message, "seed")
+}
+
+func TestAsyncImageRequestRejectsSameModelOnOtherChannel(t *testing.T) {
+	c := newVideo2JSONContext(t, `{
+		"model":"gpt-image-2",
+		"prompt":"cinematic garden"
+	}`)
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-image-2",
+		RequestURLPath:  "/v1/images/async-generations",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelBaseUrl: "https://other-provider.example",
+		},
+	}
+
+	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(c, info)
+	require.NotNil(t, taskErr)
+	require.Contains(t, taskErr.Message, "LinkSky")
 }
 
 func TestParseAsyncImageTaskResultReadsResultURLAndDataFallback(t *testing.T) {

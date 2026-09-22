@@ -36,6 +36,7 @@ func Distribute() func(c *gin.Context) {
 			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
+		channelFilter := requestChannelFilter(c, modelRequest.Model)
 		if ok {
 			id, err := strconv.Atoi(channelId.(string))
 			if err != nil {
@@ -49,6 +50,10 @@ func Distribute() func(c *gin.Context) {
 			}
 			if channel.Status != common.ChannelStatusEnabled {
 				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
+				return
+			}
+			if channelFilter != nil && !channelFilter(channel) {
+				abortWithOpenAiMessage(c, http.StatusBadRequest, "the selected channel does not support this endpoint")
 				return
 			}
 		} else {
@@ -101,7 +106,7 @@ func Distribute() func(c *gin.Context) {
 
 				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
 					preferred, err := model.CacheGetChannel(preferredChannelID)
-					if err == nil && preferred != nil {
+					if err == nil && preferred != nil && (channelFilter == nil || channelFilter(preferred)) {
 						if preferred.Status != common.ChannelStatusEnabled {
 							if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 								abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorAffinityChannelDisabled))
@@ -129,10 +134,11 @@ func Distribute() func(c *gin.Context) {
 
 				if channel == nil {
 					channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
-						Ctx:        c,
-						ModelName:  modelRequest.Model,
-						TokenGroup: usingGroup,
-						Retry:      common.GetPointer(0),
+						Ctx:           c,
+						ModelName:     modelRequest.Model,
+						TokenGroup:    usingGroup,
+						ChannelFilter: channelFilter,
+						Retry:         common.GetPointer(0),
 					})
 					if err != nil {
 						showGroup := usingGroup
@@ -162,6 +168,25 @@ func Distribute() func(c *gin.Context) {
 			service.RecordChannelAffinity(c, channel.Id)
 		}
 	}
+}
+
+func requestChannelFilter(c *gin.Context, modelName string) model.ChannelFilter {
+	if c == nil || c.Request == nil || c.Request.Method != http.MethodPost {
+		return nil
+	}
+	if strings.HasPrefix(c.Request.URL.Path, "/v1/images/async-generations") {
+		return func(channel *model.Channel) bool {
+			return channel != nil && common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
+		}
+	}
+	if common.IsLinkskyAsyncImageModelName(modelName) &&
+		(strings.HasPrefix(c.Request.URL.Path, "/v1/images/generations") ||
+			strings.HasPrefix(c.Request.URL.Path, "/v1/images/edits")) {
+		return func(channel *model.Channel) bool {
+			return channel != nil && !common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
+		}
+	}
+	return nil
 }
 
 // getModelFromRequest 从请求中读取模型信息

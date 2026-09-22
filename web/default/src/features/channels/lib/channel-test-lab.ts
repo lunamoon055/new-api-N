@@ -289,6 +289,19 @@ function isSanbaoChannel(channel?: ChannelTestChannelLike) {
   }
 }
 
+function isLinkskyChannel(channel?: ChannelTestChannelLike) {
+  try {
+    const url = new URL(channel?.base_url?.trim() ?? '')
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, '')
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      hostname === 'linksky.top'
+    )
+  } catch {
+    return false
+  }
+}
+
 function isSanbaoEndpoint(endpointType: ChannelTestEndpointType) {
   return endpointType.startsWith('sanbao-')
 }
@@ -333,8 +346,15 @@ export function resolveChannelTestEndpointType(
   ) {
     return 'openai-video'
   }
-  if (endpointType === 'auto' && isAsyncImageTestModel(model)) {
+  if (
+    isLinkskyChannel(channel) &&
+    isAsyncImageTestModel(model) &&
+    (endpointType === 'auto' || endpointType === 'image-generation')
+  ) {
     return 'openai-image-async'
+  }
+  if (endpointType === 'auto' && isAsyncImageTestModel(model)) {
+    return 'image-generation'
   }
   return endpointType
 }

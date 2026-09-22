@@ -107,6 +107,10 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 			normalized == channelTestEndpointOpenAIVideoAsync) {
 		return string(constant.EndpointTypeOpenAIVideo)
 	}
+	if isLikelyLinkskyChannel(channel) && isAsyncImageModelName(modelName) &&
+		(normalized == "" || normalized == string(constant.EndpointTypeImageGeneration)) {
+		return channelTestEndpointOpenAIImageAsync
+	}
 	if normalized != "" {
 		return normalized
 	}
@@ -115,9 +119,6 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 			return channelTestEndpointOpenAIVideoAsync
 		}
 		return string(constant.EndpointTypeOpenAIVideo)
-	}
-	if isAsyncImageModelName(modelName) {
-		return channelTestEndpointOpenAIImageAsync
 	}
 	if strings.HasSuffix(modelName, ratio_setting.CompactModelSuffix) {
 		return string(constant.EndpointTypeOpenAIResponseCompact)
@@ -141,6 +142,10 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	return normalized
 }
 
+func isLikelyLinkskyChannel(channel *model.Channel) bool {
+	return channel != nil && common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
+}
+
 func isChannelTestSanbaoEndpoint(endpointType string) bool {
 	switch strings.TrimSpace(endpointType) {
 	case channelTestEndpointSanbaoImage,
@@ -159,12 +164,7 @@ func isLikelySanbaoImageModel(modelName string) bool {
 }
 
 func isAsyncImageModelName(modelName string) bool {
-	switch strings.ToLower(strings.TrimSpace(modelName)) {
-	case "gpt-image-2", "gpt-image-2.5", "nano-banana-pro", "nano-banana2", "seedream-5-0":
-		return true
-	default:
-		return false
-	}
+	return common.IsLinkskyAsyncImageModelName(modelName)
 }
 
 func defaultAsyncImageTestResolution(modelName string) string {

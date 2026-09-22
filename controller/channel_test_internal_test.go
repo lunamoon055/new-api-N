@@ -102,7 +102,7 @@ func TestResolveChannelTestEndpointUsesAsyncImageForDocumentedModels(t *testing.
 	for _, modelName := range []string{"gpt-image-2", "gpt-image-2.5", "nano-banana-pro", "nano-banana2", "seedream-5-0"} {
 		t.Run(modelName, func(t *testing.T) {
 			endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(
-				&model.Channel{Type: constant.ChannelTypeOpenAI, Models: modelName},
+				&model.Channel{Type: constant.ChannelTypeOpenAI, Models: modelName, BaseURL: common.GetPointer("https://linksky.top/")},
 				modelName,
 				"",
 			)
@@ -112,6 +112,32 @@ func TestResolveChannelTestEndpointUsesAsyncImageForDocumentedModels(t *testing.
 			require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
 		})
 	}
+}
+
+func TestResolveChannelTestEndpointDoesNotForceAsyncImageForOtherChannels(t *testing.T) {
+	modelName := "gpt-image-2"
+	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(
+		&model.Channel{Type: constant.ChannelTypeOpenAI, Models: modelName, BaseURL: common.GetPointer("https://other-provider.example")},
+		modelName,
+		"",
+	)
+
+	require.Equal(t, string(constant.EndpointTypeImageGeneration), endpointType)
+	require.Equal(t, "/v1/images/generations", requestPath)
+	require.Equal(t, types.RelayFormat(types.RelayFormatOpenAIImage), relayFormat)
+}
+
+func TestResolveChannelTestEndpointNormalizesManualImageEndpointForLinksky(t *testing.T) {
+	modelName := "gpt-image-2"
+	endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(
+		&model.Channel{Type: constant.ChannelTypeOpenAI, Models: modelName, BaseURL: common.GetPointer("https://linksky.top/v1")},
+		modelName,
+		string(constant.EndpointTypeImageGeneration),
+	)
+
+	require.Equal(t, channelTestEndpointOpenAIImageAsync, endpointType)
+	require.Equal(t, "/v1/images/async-generations", requestPath)
+	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
 }
 
 func TestResolveChannelTestEndpointUsesSanbaoImageTemplate(t *testing.T) {

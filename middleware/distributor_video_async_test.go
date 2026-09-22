@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -61,6 +63,29 @@ func TestGetModelRequestRecognizesAsyncImageFetch(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, shouldSelectChannel)
 	require.Equal(t, relayconstant.RelayModeImageFetchByID, c.GetInt("relay_mode"))
+}
+
+func TestAsyncImageRequestChannelFilterOnlyAcceptsLinksky(t *testing.T) {
+	c := newDistributorTestContext(http.MethodPost, "/v1/images/async-generations", `{"model":"gpt-image-2"}`)
+	filter := requestChannelFilter(c, "gpt-image-2")
+	require.NotNil(t, filter)
+
+	linkskyURL := "https://linksky.top/"
+	otherURL := "https://other-provider.example"
+	require.True(t, filter(&model.Channel{BaseURL: &linkskyURL}))
+	require.False(t, filter(&model.Channel{BaseURL: &otherURL}))
+	require.False(t, filter(&model.Channel{BaseURL: common.GetPointer("https://linksky.top.evil.example")}))
+}
+
+func TestSyncImageRequestChannelFilterExcludesLinkskyForDocumentedModels(t *testing.T) {
+	c := newDistributorTestContext(http.MethodPost, "/v1/images/generations", `{"model":"gpt-image-2"}`)
+	filter := requestChannelFilter(c, "gpt-image-2")
+	require.NotNil(t, filter)
+
+	linkskyURL := "https://linksky.top/"
+	otherURL := "https://other-provider.example"
+	require.False(t, filter(&model.Channel{BaseURL: &linkskyURL}))
+	require.True(t, filter(&model.Channel{BaseURL: &otherURL}))
 }
 
 func TestCreationImageFetchConvertersKeepLegacyAndAsyncPathsSeparate(t *testing.T) {

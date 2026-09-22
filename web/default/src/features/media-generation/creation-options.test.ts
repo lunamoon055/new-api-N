@@ -24,6 +24,7 @@ import {
   getCreationImageResolutionOptions,
   getCreationImageRequestOptions,
   normalizeCreationImageOptions,
+  supportsCreationImageReferences,
 } from './image-options'
 import {
   getCreationDurationOptions,
@@ -100,7 +101,7 @@ describe('Sanbao creation model options', () => {
   })
 
   test('uses the async image contract for gpt-image-2 references and resolution', () => {
-    const model = { id: 'gpt-image-2' }
+    const model = { id: 'gpt-image-2', metadata: { provider: 'linksky' } }
     assert.deepEqual(getCreationImageResolutionOptions(model), [
       '1K',
       '2K',
@@ -127,13 +128,26 @@ describe('Sanbao creation model options', () => {
   })
 
   test('uses the documented seedream defaults and limits', () => {
-    const model = { id: 'seedream-5-0' }
+    const model = {
+      id: 'seedream-5-0',
+      metadata: { provider: 'linksky' },
+    }
     assert.deepEqual(normalizeCreationImageOptions(undefined, model), {
       aspectRatio: '1:1',
       outputResolution: '2K',
     })
     assert.deepEqual(getCreationImageResolutionOptions(model), ['2K', '3K'])
     assert.equal(getCreationImageReferenceLimits(model).maxImages, 14)
+  })
+
+  test('does not force the LinkSky contract for the same model on another provider', () => {
+    const model = {
+      id: 'gpt-image-2',
+      metadata: { provider: 'other-provider' },
+    }
+    assert.deepEqual(getCreationImageResolutionOptions(model), [])
+    assert.equal(supportsCreationImageReferences(model), false)
+    assert.deepEqual(getCreationImageRequestOptions('poster', model), {})
   })
 
   test('uses Sanbao video metadata for controls, limits, and request fields', () => {

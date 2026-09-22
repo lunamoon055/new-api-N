@@ -119,6 +119,29 @@ func TestValidateRedirectURL(t *testing.T) {
 	}
 }
 
+func TestIsBaseURLHostUsesExactHostname(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{name: "exact host", url: "https://linksky.top/", want: true},
+		{name: "case and trailing dot", url: "https://LINKSKY.TOP./v1", want: true},
+		{name: "subdomain is distinct", url: "https://api.linksky.top", want: false},
+		{name: "suffix attack", url: "https://linksky.top.evil.example", want: false},
+		{name: "missing scheme", url: "linksky.top", want: false},
+		{name: "unsupported scheme", url: "ftp://linksky.top", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsBaseURLHost(tt.url, "linksky.top"); got != tt.want {
+				t.Fatalf("IsBaseURLHost(%q) = %v, want %v", tt.url, got, tt.want)
+			}
+		})
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))

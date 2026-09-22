@@ -103,10 +103,47 @@ describe('Async image channel test templates', () => {
       'seedream-5-0',
     ]) {
       assert.equal(
-        resolveChannelTestEndpointType('auto', model),
+        resolveChannelTestEndpointType('auto', model, {
+          type: 1,
+          base_url: 'https://linksky.top/',
+        }),
         'openai-image-async'
       )
     }
+  })
+
+  test('keeps the same model synchronous on other channels', () => {
+    assert.equal(
+      resolveChannelTestEndpointType('auto', 'gpt-image-2', {
+        type: 1,
+        base_url: 'https://other-provider.example',
+      }),
+      'image-generation'
+    )
+  })
+
+  test('normalizes a manual image test only for the exact LinkSky host', () => {
+    assert.equal(
+      resolveChannelTestEndpointType('image-generation', 'gpt-image-2', {
+        type: 1,
+        base_url: 'https://linksky.top/v1',
+      }),
+      'openai-image-async'
+    )
+    assert.equal(
+      resolveChannelTestEndpointType('image-generation', 'gpt-image-2', {
+        type: 1,
+        base_url: 'https://linksky.top.evil.example',
+      }),
+      'image-generation'
+    )
+    assert.equal(
+      resolveChannelTestEndpointType('image-generation', 'gpt-image-2', {
+        type: 1,
+        base_url: 'ftp://linksky.top',
+      }),
+      'image-generation'
+    )
   })
 
   test('uses the async image request fields', () => {
