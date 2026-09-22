@@ -62,6 +62,24 @@ func TestBuildVideoTaskFetchBodyIncludesPersistedEndpoint(t *testing.T) {
 	require.Equal(t, "/v1/video/async-generations", body["upstream_endpoint"])
 }
 
+func TestAsyncImagePollingKeepsSubmissionModelSnapshot(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-image-2.5-sunburst",
+		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-image-2.5"},
+	}
+	task := model.InitTask("openai", info)
+	task.PrivateData.UpstreamTaskID = "image_original_task"
+	task.PrivateData.UpstreamEndpoint = "/v1/images/async-generations"
+	// Later requests may map the same public name to a different upstream model.
+	info.UpstreamModelName = "nano-banana2"
+	info.OriginModelName = "new-public-alias"
+	body := buildVideoTaskFetchBody(task)
+	require.Equal(t, "image_original_task", body["task_id"])
+	require.Equal(t, "gpt-image-2.5", body["model"])
+	require.Equal(t, "gpt-image-2.5-sunburst", body["origin_model"])
+	require.Equal(t, "/v1/images/async-generations", body["upstream_endpoint"])
+}
+
 func TestUpdateVideoSingleTaskDoesNotFailTaskOnPollingHTTPError(t *testing.T) {
 	adaptor := &videoPollingHTTPErrorAdaptor{}
 	task := &model.Task{

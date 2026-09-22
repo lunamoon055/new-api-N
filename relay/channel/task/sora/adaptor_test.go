@@ -58,7 +58,7 @@ func TestAsyncImageRequestUsesDocumentedEndpointAndPayload(t *testing.T) {
 		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelBaseUrl:    "https://linksky.top/",
-			UpstreamModelName: "provider-image-model",
+			UpstreamModelName: "gpt-image-2.5",
 		},
 	}
 	adaptor := &TaskAdaptor{baseURL: "https://linksky.top"}
@@ -76,7 +76,7 @@ func TestAsyncImageRequestUsesDocumentedEndpointAndPayload(t *testing.T) {
 	require.NoError(t, err)
 	var payload map[string]any
 	require.NoError(t, common.Unmarshal(encoded, &payload))
-	require.Equal(t, "provider-image-model", payload["model"])
+	require.Equal(t, "gpt-image-2.5", payload["model"])
 	require.Equal(t, "a cinematic garden portrait", payload["prompt"])
 	require.Equal(t, "16:9", payload["aspect_ratio"])
 	require.Equal(t, "4K", payload["output_resolution"])

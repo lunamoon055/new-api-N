@@ -99,7 +99,7 @@ func TestResolveChannelTestEndpointUsesImageGenerationForGptImage2(t *testing.T)
 }
 
 func TestResolveChannelTestEndpointUsesAsyncImageForDocumentedModels(t *testing.T) {
-	for _, modelName := range []string{"gpt-image-2", "gpt-image-2.5", "nano-banana-pro", "nano-banana2", "seedream-5-0"} {
+	for _, modelName := range []string{"gpt-image-2", "gpt-image-2.5", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "nano-banana-pro", "nano-banana2", "seedream-5-0"} {
 		t.Run(modelName, func(t *testing.T) {
 			endpointType, requestPath, relayFormat := resolveChannelTestEndpoint(
 				&model.Channel{Type: constant.ChannelTypeOpenAI, Models: modelName, BaseURL: common.GetPointer("https://linksky.top/")},

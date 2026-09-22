@@ -83,6 +83,16 @@ func newAsyncImageCapability(resolutions []string, defaultResolution string, asp
 	}
 }
 
+func asyncImageCapabilityForModel(model string) (asyncImageCapability, bool) {
+	// These upstream variants use the GPT-Image 2 contract, but keep their own request IDs.
+	switch model {
+	case "gpt-image-2.5-flare", "gpt-image-2.5-sunburst":
+		model = "gpt-image-2"
+	}
+	capability, ok := asyncImageCapabilities[model]
+	return capability, ok
+}
+
 func validateAsyncImageRequest(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
 	if info == nil || !common.IsBaseURLHost(info.ChannelBaseUrl, common.LinkskyProviderHost) {
 		return asyncImageRequestError("the async image endpoint is only supported by LinkSky channels")
@@ -100,9 +110,13 @@ func validateAsyncImageRequest(c *gin.Context, info *relaycommon.RelayInfo) *dto
 	}
 
 	modelName := strings.TrimSpace(req.Model)
-	capability, ok := asyncImageCapabilities[modelName]
+	upstreamModelName := strings.TrimSpace(info.UpstreamModelName)
+	if upstreamModelName == "" {
+		upstreamModelName = modelName
+	}
+	capability, ok := asyncImageCapabilityForModel(upstreamModelName)
 	if !ok {
-		return asyncImageRequestError("unsupported async image model %q", modelName)
+		return asyncImageRequestError("unsupported async image model %q; configure channel model mapping to a supported upstream image model", modelName)
 	}
 	prompt := strings.TrimSpace(req.Prompt)
 	if utf8.RuneCountInString(prompt) < 3 {
@@ -234,13 +248,13 @@ func buildAsyncImageRequestBody(body []byte, originModelName, upstreamModelName 
 	if err := common.Unmarshal(body, &payload); err != nil {
 		return nil, err
 	}
-	capability, ok := asyncImageCapabilities[strings.TrimSpace(originModelName)]
-	if !ok {
-		return nil, fmt.Errorf("unsupported async image model %q", originModelName)
-	}
 	modelName := strings.TrimSpace(upstreamModelName)
 	if modelName == "" {
 		modelName = strings.TrimSpace(originModelName)
+	}
+	capability, ok := asyncImageCapabilityForModel(modelName)
+	if !ok {
+		return nil, fmt.Errorf("unsupported async image model %q", originModelName)
 	}
 	payload["model"] = modelName
 	payload["prompt"] = strings.TrimSpace(stringFromAny(payload["prompt"]))

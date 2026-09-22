@@ -88,6 +88,19 @@ func TestSyncImageRequestChannelFilterExcludesLinkskyForDocumentedModels(t *test
 	require.True(t, filter(&model.Channel{BaseURL: &otherURL}))
 }
 
+func TestAsyncImageVariantsKeepOtherProviderSyncRouting(t *testing.T) {
+	for _, name := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"} {
+		for _, path := range []string{"/v1/images/generations", "/v1/images/async-generations"} {
+			c := newDistributorTestContext(http.MethodPost, path, "")
+			filter := requestChannelFilter(c, name)
+			require.NotNil(t, filter)
+			async := path == "/v1/images/async-generations"
+			require.Equal(t, async, filter(&model.Channel{BaseURL: common.GetPointer("https://linksky.top")}))
+			require.Equal(t, !async, filter(&model.Channel{BaseURL: common.GetPointer("https://other-provider.example")}))
+		}
+	}
+}
+
 func TestCreationImageFetchConvertersKeepLegacyAndAsyncPathsSeparate(t *testing.T) {
 	legacy := newDistributorTestContext(http.MethodGet, "/api/creation/images/generations/task_legacy", "")
 	legacy.Params = gin.Params{{Key: "task_id", Value: "task_legacy"}}

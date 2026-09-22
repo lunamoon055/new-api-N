@@ -156,6 +156,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if adaptor == nil {
 		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("invalid api platform: %s", platform), "invalid_api_platform", http.StatusBadRequest)
 	}
+	// 异步图片可使用公开别名：先解析本次渠道映射，再按实际上游模型校验能力。
+	// 每次重试 InitChannelMeta 都重置快照，不能复用上一个渠道的映射结果。
+	imageModelMapped := strings.HasPrefix(info.RequestURLPath, "/v1/images/async-generations") &&
+		common.IsBaseURLHost(info.ChannelBaseUrl, common.LinkskyProviderHost)
+	if imageModelMapped {
+		info.UpstreamModelName = info.OriginModelName
+		if err := helper.ModelMappedHelper(c, info, nil); err != nil {
+			return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+		}
+	}
 	adaptor.Init(info)
 	if taskErr := adaptor.ValidateRequestAndSetAction(c, info); taskErr != nil {
 		return nil, taskErr
@@ -169,9 +179,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 
 	// 2.5 应用渠道的模型映射（与同步任务对齐）
 	info.OriginModelName = modelName
-	info.UpstreamModelName = modelName
-	if err := helper.ModelMappedHelper(c, info, nil); err != nil {
-		return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+	if !imageModelMapped {
+		info.UpstreamModelName = modelName
+		if err := helper.ModelMappedHelper(c, info, nil); err != nil {
+			return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+		}
 	}
 
 	// 3. 预生成公开 task ID（仅首次）
