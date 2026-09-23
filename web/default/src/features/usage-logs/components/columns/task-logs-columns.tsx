@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Link02Icon } from '@hugeicons/core-free-icons'
+import { Image02Icon, Link02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Film, MessageSquareText, Music } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -33,6 +33,7 @@ import { StatusBadge } from '@/components/status-badge'
 import { TASK_STATUS } from '../../constants'
 import { taskActionMapper, taskStatusMapper } from '../../lib/mappers'
 import {
+  getTaskLogImagePreviewUrls,
   getTaskLogModelName,
   getTaskLogPrompt,
   getTaskLogVideoPreviewUrl,
@@ -45,6 +46,7 @@ import {
   type AudioClip,
 } from '../dialogs/audio-preview-dialog'
 import { FailReasonDialog } from '../dialogs/fail-reason-dialog'
+import { ImageDialog } from '../dialogs/image-dialog'
 import { PromptDialog } from '../dialogs/prompt-dialog'
 import { VideoPreviewDialog } from '../dialogs/video-preview-dialog'
 import { useUsageLogsContext } from '../usage-logs-provider'
@@ -126,6 +128,43 @@ function VideoPreviewCell({ log }: { log: TaskLog }) {
         videoUrl={videoUrl}
         taskId={log.task_id}
       />
+    </>
+  )
+}
+
+function ImagePreviewCell({ log }: { log: TaskLog }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const imageUrls = getTaskLogImagePreviewUrls(log)
+
+  if (imageUrls.length === 0) return null
+
+  return (
+    <>
+      <button
+        type='button'
+        className='group flex items-center gap-1 text-left text-xs'
+        onClick={() => setOpen(true)}
+        title={t('Click to view image')}
+      >
+        <HugeiconsIcon
+          icon={Image02Icon}
+          strokeWidth={2}
+          className='text-muted-foreground size-3'
+        />
+        <span className='text-foreground leading-snug group-hover:underline'>
+          {t('View')}
+          {imageUrls.length > 1 ? ` (${imageUrls.length})` : ''}
+        </span>
+      </button>
+      {open && (
+        <ImageDialog
+          imageUrls={imageUrls}
+          taskId={log.task_id}
+          open={open}
+          onOpenChange={setOpen}
+        />
+      )}
     </>
   )
 }
@@ -432,6 +471,10 @@ export function useTaskLogsColumns(
           ) {
             return <AudioPreviewCell log={log} />
           }
+        }
+
+        if (getTaskLogImagePreviewUrls(log).length > 0) {
+          return <ImagePreviewCell log={log} />
         }
 
         if (getTaskLogVideoPreviewUrl(log)) {

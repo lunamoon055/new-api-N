@@ -164,6 +164,9 @@ export const TASK_ACTIONS = {
   MUSIC: 'MUSIC', // 生成音乐
   LYRICS: 'LYRICS', // 生成歌词
 
+  // Image generation (camelCase)
+  IMAGE_GENERATE: 'imageGenerate', // 图片生成
+
   // Video generation (camelCase)
   GENERATE: 'generate', // 图生视频
   TEXT_GENERATE: 'textGenerate', // 文生视频
@@ -275,6 +278,10 @@ export const MJ_SUBMIT_RESULT_MAPPINGS: Record<string, StatusMapping> = {
 export const TASK_ACTION_MAPPINGS: Record<string, StatusMapping> = {
   [TASK_ACTIONS.MUSIC]: { label: 'Generate Music', variant: 'neutral' },
   [TASK_ACTIONS.LYRICS]: { label: 'Generate Lyrics', variant: 'pink' },
+  [TASK_ACTIONS.IMAGE_GENERATE]: {
+    label: 'Image Generation',
+    variant: 'purple',
+  },
   [TASK_ACTIONS.GENERATE]: { label: 'Image to Video', variant: 'blue' },
   [TASK_ACTIONS.TEXT_GENERATE]: { label: 'Text to Video', variant: 'blue' },
   [TASK_ACTIONS.FIRST_TAIL_GENERATE]: {

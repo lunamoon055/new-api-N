@@ -60,6 +60,31 @@ export function isTaskLogVideoTask(log: Pick<TaskLog, 'action'>) {
   return VIDEO_ACTIONS.has(log.action)
 }
 
+export function getTaskLogImagePreviewUrls(
+  log: Pick<TaskLog, 'action' | 'status' | 'result_url' | 'data'>
+) {
+  if (
+    log.status !== TASK_STATUS.SUCCESS ||
+    log.action !== TASK_ACTIONS.IMAGE_GENERATE
+  ) {
+    return []
+  }
+
+  const urls: string[] = []
+  const seen = new Set<string>()
+  const append = (value: unknown) => {
+    if (typeof value !== 'string') return
+    const url = normalizePreviewUrl(value)
+    if (!url || seen.has(url)) return
+    seen.add(url)
+    urls.push(url)
+  }
+
+  append(log.result_url)
+  collectTaskImagePreviewUrls(log.data, append)
+  return urls
+}
+
 export function getTaskLogVideoPreviewUrl(
   log: Pick<TaskLog, 'action' | 'status' | 'task_id' | 'result_url' | 'data'>
 ) {
@@ -166,9 +191,7 @@ function isVideoApiContentUrl(url: string, taskId?: string) {
   if (taskId && url.includes(`/v1/videos/${taskId}/content`)) {
     return true
   }
-  return (
-    isSameSiteVideoProxyUrl(url) || isVideoApiContentPath(url)
-  )
+  return isSameSiteVideoProxyUrl(url) || isVideoApiContentPath(url)
 }
 
 function isVideoApiContentPath(url: string) {
@@ -272,6 +295,53 @@ function findFirstVideoUrl(value: unknown, taskId?: string): string | null {
   }
 
   return null
+}
+
+function collectTaskImagePreviewUrls(
+  value: unknown,
+  append: (value: unknown) => void
+) {
+  if (typeof value === 'string') {
+    const normalized = normalizePreviewUrl(value)
+    if (normalized) {
+      append(normalized)
+      return
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return
+    try {
+      collectTaskImagePreviewUrls(JSON.parse(trimmed), append)
+    } catch {
+      // Ignore legacy or provider-specific non-JSON task data.
+    }
+    return
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectTaskImagePreviewUrls(item, append))
+    return
+  }
+
+  if (!value || typeof value !== 'object') return
+  const record = value as Record<string, unknown>
+
+  for (const key of ['image_url', 'url', 'result_url', 'output_url']) {
+    collectTaskImagePreviewUrls(record[key], append)
+  }
+  for (const key of [
+    'image_urls',
+    'images',
+    'urls',
+    'data',
+    'result',
+    'response',
+    'output',
+    'outputs',
+    'results',
+  ]) {
+    collectTaskImagePreviewUrls(record[key], append)
+  }
 }
 
 function normalizePrompt(value: unknown) {

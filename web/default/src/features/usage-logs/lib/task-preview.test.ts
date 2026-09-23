@@ -19,11 +19,70 @@ For commercial licensing, please contact support@quantumnous.com
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import {
+  getTaskLogImagePreviewUrls,
   getTaskLogVideoPreviewUrl,
   getTaskLogInputMaterials,
   getTaskLogModelName,
   getVisibleTaskLogInputMaterials,
 } from './task-preview'
+
+describe('task log image preview URLs', () => {
+  test('uses and deduplicates the persisted result URL', () => {
+    assert.deepEqual(
+      getTaskLogImagePreviewUrls({
+        action: 'imageGenerate',
+        status: 'SUCCESS',
+        result_url: 'https://cdn.example.com/generated.png',
+        data: JSON.stringify({
+          result_url: 'https://cdn.example.com/generated.png',
+          data: [{ url: 'https://cdn.example.com/fallback.webp' }],
+        }),
+      }),
+      [
+        'https://cdn.example.com/generated.png',
+        'https://cdn.example.com/fallback.webp',
+      ]
+    )
+  })
+
+  test('reads LinkSky data-array results when result_url is absent', () => {
+    assert.deepEqual(
+      getTaskLogImagePreviewUrls({
+        action: 'imageGenerate',
+        status: 'SUCCESS',
+        data: {
+          task_id: 'upstream-task',
+          status: 'completed',
+          data: [{ url: '/api/image-results/generated.png' }],
+        },
+      }),
+      ['/api/image-results/generated.png']
+    )
+  })
+
+  test('does not expose unfinished or non-image task results as images', () => {
+    const result = {
+      result_url: 'https://cdn.example.com/generated.png',
+      data: null,
+    }
+    assert.deepEqual(
+      getTaskLogImagePreviewUrls({
+        ...result,
+        action: 'imageGenerate',
+        status: 'IN_PROGRESS',
+      }),
+      []
+    )
+    assert.deepEqual(
+      getTaskLogImagePreviewUrls({
+        ...result,
+        action: 'generate',
+        status: 'SUCCESS',
+      }),
+      []
+    )
+  })
+})
 
 describe('task log video preview URL', () => {
   test('prefers the transferred media URL', () => {
