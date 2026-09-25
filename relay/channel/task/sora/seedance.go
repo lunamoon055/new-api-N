@@ -93,6 +93,17 @@ func isSeedance25ModelName(modelName string) bool {
 	return normalizeVideosModelName(modelName) == "seedance-2.5"
 }
 
+// Meaicc uses nested input/parameters even for sd-2.5-c1. Select its
+// contract by the channel and mapped upstream ID, not the public alias:
+// other providers' seedance-2.5 requests must retain their flat payload.
+func isMeaiccNestedSeedanceModel(baseURL, upstreamModel string) bool {
+	if !common.IsBaseURLHost(baseURL, "api.meaicc.com") {
+		return false
+	}
+	normalized := normalizeVideosModelName(upstreamModel)
+	return normalized == "sd-2.5-c1" || isSeedance2CSeriesModelName(normalized)
+}
+
 func validateSeedance2JSONRequest(c *gin.Context) *dto.TaskError {
 	var req videosRequest
 	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
@@ -237,13 +248,11 @@ func buildSeedance2RequestBody(body []byte, upstreamModel string) ([]byte, error
 		Parameters: seedance2Parameters{
 			Resolution: strings.TrimSpace(req.Resolution),
 			Ratio:      strings.TrimSpace(req.Ratio),
+			Duration:   req.Duration,
 		},
 	}
 	if request.Model == "" {
 		request.Model = strings.TrimSpace(req.Model)
-	}
-	if req.Duration != nil && *req.Duration > 0 {
-		request.Parameters.Duration = req.Duration
 	}
 	if request.Parameters.Resolution == "" {
 		request.Parameters.Resolution = "720p"
