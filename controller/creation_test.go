@@ -74,6 +74,18 @@ func TestResolveCreationUsingGroupPrefersCurrentUserGroup(t *testing.T) {
 	require.Equal(t, "vip", common.GetContextKeyString(ctx, constant.ContextKeyUsingGroup))
 }
 
+func TestResolveCreationUsingGroupHonorsExplicitSelection(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	common.SetContextKey(ctx, constant.ContextKeyUsingGroup, "default")
+	common.SetContextKey(ctx, constant.ContextKeyUsingGroupExplicit, true)
+
+	got := resolveCreationUsingGroup(ctx, &model.UserBase{Group: "vip"})
+
+	require.Equal(t, "default", got)
+	require.Equal(t, "default", common.GetContextKeyString(ctx, constant.ContextKeyUsingGroup))
+}
+
 func TestCreationReferenceImageUploadAndFetch(t *testing.T) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)

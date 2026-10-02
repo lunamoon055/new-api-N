@@ -357,7 +357,10 @@ func setupCreationRelayContext(c *gin.Context, tokenPrefix string) *types.NewAPI
 }
 
 func resolveCreationUsingGroup(c *gin.Context, userCache *model.UserBase) string {
-	usingGroup := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
+	usingGroup := ""
+	if common.GetContextKeyBool(c, constant.ContextKeyUsingGroupExplicit) {
+		usingGroup = strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
+	}
 	if usingGroup == "" {
 		if userCache != nil {
 			usingGroup = strings.TrimSpace(userCache.Group)
@@ -365,6 +368,9 @@ func resolveCreationUsingGroup(c *gin.Context, userCache *model.UserBase) string
 	}
 	if usingGroup == "" {
 		usingGroup = strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUserGroup))
+	}
+	if usingGroup == "" {
+		usingGroup = strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
 	}
 	if usingGroup == "" {
 		usingGroup = "default"

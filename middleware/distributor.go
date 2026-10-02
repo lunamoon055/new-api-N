@@ -101,6 +101,7 @@ func Distribute() func(c *gin.Context) {
 						}
 						usingGroup = playgroundRequest.Group
 						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
+						common.SetContextKey(c, constant.ContextKeyUsingGroupExplicit, true)
 					}
 				}
 				if strings.HasPrefix(c.Request.URL.Path, "/pg/images/") || strings.HasPrefix(c.Request.URL.Path, "/pg/video/") || c.Request.URL.Path == "/pg/videos" {
@@ -112,6 +113,7 @@ func Distribute() func(c *gin.Context) {
 						}
 						usingGroup = playgroundGroup
 						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
+						common.SetContextKey(c, constant.ContextKeyUsingGroupExplicit, true)
 					}
 				}
 
