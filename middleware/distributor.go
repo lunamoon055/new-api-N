@@ -86,8 +86,8 @@ func Distribute() func(c *gin.Context) {
 				}
 				var selectGroup string
 				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
-				// check path is /pg/chat/completions
-				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
+				// Playground text requests may override the user's default group.
+				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") || strings.HasPrefix(c.Request.URL.Path, "/pg/responses") {
 					playgroundRequest := &dto.PlayGroundRequest{}
 					err = common.UnmarshalBodyReusable(c, playgroundRequest)
 					if err != nil {
@@ -100,6 +100,17 @@ func Distribute() func(c *gin.Context) {
 							return
 						}
 						usingGroup = playgroundRequest.Group
+						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
+					}
+				}
+				if strings.HasPrefix(c.Request.URL.Path, "/pg/images/") || strings.HasPrefix(c.Request.URL.Path, "/pg/video/") || c.Request.URL.Path == "/pg/videos" {
+					playgroundGroup := c.GetHeader("X-Playground-Group")
+					if playgroundGroup != "" {
+						if !service.GroupInUserUsableGroups(usingGroup, playgroundGroup) && playgroundGroup != usingGroup {
+							abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
+							return
+						}
+						usingGroup = playgroundGroup
 						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
 					}
 				}
@@ -382,8 +393,8 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		c.Set("relay_mode", relayMode)
 	}
-	if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
-		// playground chat completions
+	if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") || strings.HasPrefix(c.Request.URL.Path, "/pg/responses") {
+		// Playground text requests carry an optional group selection.
 		req, err := getModelFromRequest(c)
 		if err != nil {
 			return nil, false, err

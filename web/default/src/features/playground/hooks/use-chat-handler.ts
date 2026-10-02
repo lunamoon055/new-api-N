@@ -18,11 +18,16 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
-import { sendChatCompletion, sendPlaygroundMediaGeneration } from '../api'
+import {
+  sendChatCompletion,
+  sendPlaygroundMediaGeneration,
+  sendPlaygroundResponses,
+} from '../api'
 import { MESSAGE_STATUS, ERROR_MESSAGES } from '../constants'
 import {
   buildChatCompletionPayload,
   getPlaygroundMediaEndpoint,
+  parsePlaygroundExtraBody,
   updateAssistantMessageWithError,
   updateLastAssistantMessage,
   processStreamingContent,
@@ -48,6 +53,7 @@ export function useChatHandler({
 }: UseChatHandlerOptions) {
   const { sendStreamRequest, stopStream, isStreaming } = useStreamRequest()
   const [isMediaGenerating, setIsMediaGenerating] = useState(false)
+  const [isChatGenerating, setIsChatGenerating] = useState(false)
 
   // Handle stream update
   const handleStreamUpdate = useCallback(
@@ -106,11 +112,25 @@ export function useChatHandler({
   // Send streaming chat request
   const sendStreamingChat = useCallback(
     (messages: Message[]) => {
-      const payload = buildChatCompletionPayload(
+      const basePayload = buildChatCompletionPayload(
         messages,
         config,
         parameterEnabled
       )
+      let payload: typeof basePayload
+      try {
+        payload = {
+          ...basePayload,
+          ...parsePlaygroundExtraBody(config.extraBody),
+          model: config.model,
+          group: config.group,
+          messages: basePayload.messages,
+          stream: true,
+        }
+      } catch (error) {
+        handleStreamError((error as Error).message)
+        return
+      }
       sendStreamRequest(
         payload,
         handleStreamUpdate,
@@ -131,13 +151,22 @@ export function useChatHandler({
   // Send non-streaming chat request
   const sendNonStreamingChat = useCallback(
     async (messages: Message[]) => {
-      const payload = buildChatCompletionPayload(
+      setIsChatGenerating(true)
+      const basePayload = buildChatCompletionPayload(
         messages,
         config,
         parameterEnabled
       )
 
       try {
+        const payload = {
+          ...basePayload,
+          ...parsePlaygroundExtraBody(config.extraBody),
+          model: config.model,
+          group: config.group,
+          messages: basePayload.messages,
+          stream: false,
+        }
         const response = await sendChatCompletion(payload)
         const choice = response.choices?.[0]
         if (!choice) return
@@ -172,9 +201,46 @@ export function useChatHandler({
             ERROR_MESSAGES.API_REQUEST_ERROR,
           err?.response?.data?.error?.code || undefined
         )
+      } finally {
+        setIsChatGenerating(false)
       }
     },
     [config, parameterEnabled, onMessageUpdate, handleStreamError]
+  )
+
+  const sendResponsesChat = useCallback(
+    async (messages: Message[]) => {
+      setIsChatGenerating(true)
+      try {
+        const content = await sendPlaygroundResponses(config, messages)
+        onMessageUpdate((prev) =>
+          updateLastAssistantMessage(prev, (message) => ({
+            ...finalizeMessage(updateCurrentVersionContent(message, content)),
+            status: MESSAGE_STATUS.COMPLETE,
+          }))
+        )
+      } catch (error: unknown) {
+        const err = error as {
+          response?: {
+            data?: {
+              message?: string
+              error?: { message?: string; code?: string }
+            }
+          }
+          message?: string
+        }
+        handleStreamError(
+          err?.response?.data?.error?.message ||
+            err?.response?.data?.message ||
+            err?.message ||
+            ERROR_MESSAGES.API_REQUEST_ERROR,
+          err?.response?.data?.error?.code
+        )
+      } finally {
+        setIsChatGenerating(false)
+      }
+    },
+    [config, onMessageUpdate, handleStreamError]
   )
 
   // Send media request for image/video models exposed in the playground.
@@ -182,10 +248,7 @@ export function useChatHandler({
     async (messages: Message[]) => {
       setIsMediaGenerating(true)
       try {
-        const result = await sendPlaygroundMediaGeneration(
-          config.model,
-          messages
-        )
+        const result = await sendPlaygroundMediaGeneration(config, messages)
         onMessageUpdate((prev) =>
           updateLastAssistantMessage(prev, (message) => ({
             ...finalizeMessage(
@@ -224,14 +287,25 @@ export function useChatHandler({
         setIsMediaGenerating(false)
       }
     },
-    [config.model, onMessageUpdate, handleStreamError]
+    [config, onMessageUpdate, handleStreamError]
   )
 
   // Send chat request (stream or non-stream based on config)
   const sendChat = useCallback(
     (messages: Message[]) => {
-      if (getPlaygroundMediaEndpoint(config.model)) {
+      if (
+        getPlaygroundMediaEndpoint(
+          config.model,
+          config.mode,
+          config.imageEndpoint,
+          config.videoEndpoint
+        )
+      ) {
         sendMediaGeneration(messages)
+        return
+      }
+      if (config.chatEndpoint === 'responses') {
+        sendResponsesChat(messages)
         return
       }
       if (config.stream) {
@@ -242,8 +316,13 @@ export function useChatHandler({
     },
     [
       config.model,
+      config.mode,
+      config.imageEndpoint,
+      config.videoEndpoint,
       config.stream,
+      config.chatEndpoint,
       sendMediaGeneration,
+      sendResponsesChat,
       sendStreamingChat,
       sendNonStreamingChat,
     ]
@@ -265,6 +344,7 @@ export function useChatHandler({
   return {
     sendChat,
     stopGeneration,
-    isGenerating: isStreaming || isMediaGenerating,
+    isGenerating: isStreaming || isMediaGenerating || isChatGenerating,
+    canStop: isStreaming,
   }
 }

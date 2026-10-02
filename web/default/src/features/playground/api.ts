@@ -19,10 +19,15 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import { API_ENDPOINTS } from './constants'
 import {
+  buildPlaygroundResponsesPayload,
+  parsePlaygroundResponsesText,
+} from './lib/responses'
+import {
   buildPlaygroundMediaRequest,
   getPlaygroundMediaEndpoint,
-  getPlaygroundModelMode,
+  parsePlaygroundExtraBody,
   parsePlaygroundMediaResult,
+  resolvePlaygroundMode,
   type PlaygroundMediaResult,
 } from './lib/media-routing'
 import type {
@@ -31,6 +36,7 @@ import type {
   Message,
   ModelOption,
   GroupOption,
+  PlaygroundConfig,
 } from './types'
 
 /**
@@ -45,56 +51,97 @@ export async function sendChatCompletion(
   return res.data
 }
 
+export async function sendPlaygroundResponses(
+  config: PlaygroundConfig,
+  messages: Message[]
+): Promise<string> {
+  const payload = buildPlaygroundResponsesPayload(
+    config.model,
+    config.group,
+    messages,
+    parsePlaygroundExtraBody(config.extraBody)
+  )
+  const response = await api.post(API_ENDPOINTS.RESPONSES, payload, {
+    skipErrorHandler: true,
+  } as Record<string, unknown>)
+  return parsePlaygroundResponsesText(response.data)
+}
+
 /**
  * Send image/video generation request for media-only playground models.
  */
 export async function sendPlaygroundMediaGeneration(
-  model: string,
+  config: PlaygroundConfig,
   messages: Message[]
 ): Promise<PlaygroundMediaResult> {
-  const endpoint = getPlaygroundMediaEndpoint(model)
-  const payload = buildPlaygroundMediaRequest(model, messages)
+  const endpoint = getPlaygroundMediaEndpoint(
+    config.model,
+    config.mode,
+    config.imageEndpoint,
+    config.videoEndpoint
+  )
+  const extraBody = parsePlaygroundExtraBody(config.extraBody)
+  delete extraBody.group
+  const payload = buildPlaygroundMediaRequest(
+    config.model,
+    messages,
+    config.mode,
+    config.imageEndpoint,
+    extraBody
+  )
   if (!endpoint || !payload) {
     throw new Error('Current model does not support media generation')
   }
 
   const res = await api.post(endpoint, payload, {
     skipErrorHandler: true,
+    headers: { 'X-Playground-Group': config.group },
   } as Record<string, unknown>)
-  const initialResult = parsePlaygroundMediaResult(res.data, model)
+  const initialResult = parsePlaygroundMediaResult(
+    res.data,
+    config.model,
+    config.mode
+  )
 
   if (
     !initialResult.taskId ||
     initialResult.mediaUrl ||
-    (getPlaygroundModelMode(model) === 'image' &&
+    (resolvePlaygroundMode(config.model, config.mode) === 'image' &&
       endpoint !== API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS)
   ) {
     return initialResult
   }
 
-  return pollPlaygroundMediaTask(model, initialResult)
+  return pollPlaygroundMediaTask(
+    config.model,
+    config.mode,
+    endpoint,
+    initialResult
+  )
 }
 
 async function pollPlaygroundMediaTask(
   model: string,
+  selectedMode: PlaygroundConfig['mode'],
+  endpoint: string,
   initialResult: PlaygroundMediaResult
 ): Promise<PlaygroundMediaResult> {
   const taskId = initialResult.taskId
   if (!taskId) return initialResult
 
   let latestResult = initialResult
-  const mode = getPlaygroundModelMode(model)
-  const path =
-    mode === 'image'
-      ? '/api/creation/images/async-generations'
-      : '/api/creation/video/async-generations'
+  const path = endpoint
   for (let attempt = 0; attempt < 45; attempt += 1) {
     await delay(4000)
     const response = await api.get(`${path}/${encodeURIComponent(taskId)}`, {
       skipErrorHandler: true,
       disableDuplicate: true,
     } as Record<string, unknown>)
-    latestResult = parsePlaygroundMediaResult(response.data, model)
+    latestResult = parsePlaygroundMediaResult(
+      response.data,
+      model,
+      selectedMode
+    )
     if (latestResult.mediaUrl || isTerminalMediaStatus(latestResult.status)) {
       return latestResult
     }
@@ -105,6 +152,7 @@ async function pollPlaygroundMediaTask(
 
 function isTerminalMediaStatus(status: string | undefined) {
   switch (status?.toLowerCase()) {
+    case 'completed':
     case 'failed':
     case 'cancelled':
     case 'canceled':

@@ -31,10 +31,14 @@ import {
   getCreationVideoRequestOptions,
   type CreationVideoRequestOptions,
 } from '@/features/media-generation/video-options'
+import { t } from 'i18next'
 import { API_ENDPOINTS, MESSAGE_ROLES } from '../constants'
 import type { Message } from '../types'
 
 export type PlaygroundMediaMode = 'chat' | 'image' | 'video'
+export type PlaygroundModeSelection = PlaygroundMediaMode | 'auto'
+export type PlaygroundImageEndpoint = 'auto' | 'sync' | 'async'
+export type PlaygroundVideoEndpoint = 'auto' | 'standard' | 'async'
 
 export type PlaygroundImageRequest = {
   model: string
@@ -52,7 +56,8 @@ export type PlaygroundVideoRequest = {
 } & WithoutEstimate<CreationVideoRequestOptions>
 
 export type PlaygroundMediaRequest =
-  PlaygroundImageRequest | PlaygroundVideoRequest
+  | PlaygroundImageRequest
+  | PlaygroundVideoRequest
 
 export type PlaygroundMediaResult = {
   mode: Exclude<PlaygroundMediaMode, 'chat'>
@@ -113,14 +118,48 @@ export function getPlaygroundModelMode(model: string): PlaygroundMediaMode {
   return 'chat'
 }
 
-export function getPlaygroundMediaEndpoint(model: string): string | null {
-  switch (getPlaygroundModelMode(model)) {
+export function resolvePlaygroundMode(
+  model: string,
+  mode: PlaygroundModeSelection
+): PlaygroundMediaMode {
+  return mode === 'auto' ? getPlaygroundModelMode(model) : mode
+}
+
+export function parsePlaygroundExtraBody(
+  value: string
+): Record<string, unknown> {
+  if (!value.trim()) return {}
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value) as unknown
+  } catch {
+    throw new Error(t('Extra parameters must be valid JSON'))
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(t('Extra parameters must be a JSON object'))
+  }
+  return parsed as Record<string, unknown>
+}
+
+export function getPlaygroundMediaEndpoint(
+  model: string,
+  mode: PlaygroundModeSelection = 'auto',
+  imageEndpoint: PlaygroundImageEndpoint = 'auto',
+  videoEndpoint: PlaygroundVideoEndpoint = 'auto'
+): string | null {
+  switch (resolvePlaygroundMode(model, mode)) {
     case 'image':
-      return usesAsyncCreationImageModel(model)
+      return (
+        imageEndpoint === 'auto'
+          ? usesAsyncCreationImageModel(model)
+          : imageEndpoint === 'async'
+      )
         ? API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
         : API_ENDPOINTS.IMAGE_GENERATIONS
     case 'video':
-      return API_ENDPOINTS.VIDEO_ASYNC_GENERATIONS
+      return videoEndpoint === 'standard'
+        ? API_ENDPOINTS.VIDEO_GENERATIONS
+        : API_ENDPOINTS.VIDEO_ASYNC_GENERATIONS
     default:
       return null
   }
@@ -128,28 +167,36 @@ export function getPlaygroundMediaEndpoint(model: string): string | null {
 
 export function buildPlaygroundMediaRequest(
   model: string,
-  messages: Message[]
+  messages: Message[],
+  mode: PlaygroundModeSelection = 'auto',
+  imageEndpoint: PlaygroundImageEndpoint = 'auto',
+  extraBody: Record<string, unknown> = {}
 ): PlaygroundMediaRequest | null {
-  const mode = getPlaygroundModelMode(model)
-  if (mode === 'chat') return null
+  const resolvedMode = resolvePlaygroundMode(model, mode)
+  if (resolvedMode === 'chat') return null
 
   const prompt = getLatestUserPrompt(messages)
-  if (mode === 'image') {
-    if (usesAsyncCreationImageModel(model)) {
+  if (resolvedMode === 'image') {
+    const isAsync =
+      getPlaygroundMediaEndpoint(model, mode, imageEndpoint) ===
+      API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
+    if (isAsync) {
       return {
-        model,
-        prompt,
         ...getCreationImageRequestOptions(
           prompt,
           model,
           EMPTY_CREATION_IMAGE_REFERENCES
         ),
+        ...extraBody,
+        model,
+        prompt,
       }
     }
     return {
+      n: 1,
+      ...extraBody,
       model,
       prompt,
-      n: 1,
     }
   }
 
@@ -159,9 +206,10 @@ export function buildPlaygroundMediaRequest(
   )
   const { estimateSeconds: _estimateSeconds, ...videoPayload } = videoOptions
   return {
+    ...videoPayload,
+    ...extraBody,
     model,
     prompt,
-    ...videoPayload,
   }
 }
 
@@ -174,18 +222,19 @@ export function formatPlaygroundMediaResult(
 
 export function parsePlaygroundMediaResult(
   raw: unknown,
-  model: string
+  model: string,
+  mode: PlaygroundModeSelection = 'auto'
 ): PlaygroundMediaResult {
   const error = extractErrorMessage(raw)
   if (error) {
     throw new Error(error)
   }
 
-  const mode = getPlaygroundModelMode(model)
-  if (mode === 'image') {
+  const resolvedMode = resolvePlaygroundMode(model, mode)
+  if (resolvedMode === 'image') {
     return parseImageResult(raw, model)
   }
-  if (mode === 'video') {
+  if (resolvedMode === 'video') {
     return parseVideoResult(raw, model)
   }
   throw new Error('Current model does not support media generation')

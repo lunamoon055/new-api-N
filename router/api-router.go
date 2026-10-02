@@ -44,6 +44,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/creation/images/async-generations/:task_id", middleware.UserAuth(), middleware.CreationImageTaskFetchConvert(), controller.CreationRelayTaskFetch)
 		apiRouter.POST("/creation/video/async-generations", middleware.UserAuth(), middleware.CreationVideoAsyncRequestConvert(), middleware.Distribute(), controller.CreationRelayTask)
 		apiRouter.GET("/creation/video/async-generations/:task_id", middleware.UserAuth(), middleware.CreationVideoAsyncFetchConvert(), controller.CreationRelayTaskFetch)
+		apiRouter.POST("/creation/videos", middleware.UserAuth(), middleware.CreationVideoRequestConvert(), middleware.Distribute(), controller.CreationRelayVideo)
+		apiRouter.GET("/creation/videos/:task_id", middleware.UserAuth(), middleware.CreationVideoFetchConvert(), controller.CreationRelayTaskFetch)
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")
 		perfMetricsRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))
 		{

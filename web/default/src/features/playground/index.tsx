@@ -38,7 +38,7 @@ export function Playground() {
     updateConfig,
   } = usePlaygroundState()
 
-  const { sendChat, stopGeneration, isGenerating } = useChatHandler({
+  const { sendChat, stopGeneration, isGenerating, canStop } = useChatHandler({
     config,
     parameterEnabled,
     onMessageUpdate: updateMessages,
@@ -190,10 +190,24 @@ export function Playground() {
           isGenerating={isGenerating}
           isModelLoading={isLoadingModels}
           modelValue={config.model}
+          mode={config.mode}
+          imageEndpoint={config.imageEndpoint}
+          videoEndpoint={config.videoEndpoint}
+          chatEndpoint={config.chatEndpoint}
+          extraBody={config.extraBody}
           models={models}
           onGroupChange={(value) => updateConfig('group', value)}
           onModelChange={(value) => updateConfig('model', value)}
-          onStop={stopGeneration}
+          onModeChange={(value) => updateConfig('mode', value)}
+          onImageEndpointChange={(value) =>
+            updateConfig('imageEndpoint', value)
+          }
+          onVideoEndpointChange={(value) =>
+            updateConfig('videoEndpoint', value)
+          }
+          onChatEndpointChange={(value) => updateConfig('chatEndpoint', value)}
+          onExtraBodyChange={(value) => updateConfig('extraBody', value)}
+          onStop={canStop ? stopGeneration : undefined}
           onSubmit={handleSendMessage}
         />
       </div>

@@ -286,6 +286,10 @@ export interface GetLogsResponse {
     total: number
     page: number
     page_size: number
+    stats?: {
+      success: number
+      failure: number
+    }
   }
 }
 

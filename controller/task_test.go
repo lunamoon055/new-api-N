@@ -19,6 +19,43 @@ func TestCanViewTaskPrivateDetailsOnlyAllowsRoot(t *testing.T) {
 	require.True(t, canViewTaskPrivateDetails(common.RoleRootUser))
 }
 
+func TestTaskPageWithStatsUsesCurrentFilters(t *testing.T) {
+	page := &common.PageInfo{Page: 2, PageSize: 10, Total: 23, Items: []string{"current page"}}
+	params := model.SyncTaskQueryParams{ModelName: "video-model", ChannelID: "17", StartTimestamp: 100}
+	var statuses []string
+	count := func(filtered model.SyncTaskQueryParams) int64 {
+		require.Equal(t, params.ModelName, filtered.ModelName)
+		require.Equal(t, params.ChannelID, filtered.ChannelID)
+		require.Equal(t, params.StartTimestamp, filtered.StartTimestamp)
+		statuses = append(statuses, filtered.Status)
+		if filtered.Status == string(model.TaskStatusSuccess) {
+			return 12
+		}
+		return 3
+	}
+
+	result := taskPageWithStats(page, params, count)
+	require.Equal(t, 23, result["total"])
+	require.Equal(t, page.Items, result["items"])
+	require.Equal(t, []string{"SUCCESS", "FAILURE"}, statuses)
+	require.Equal(t, int64(12), result["stats"].(gin.H)["success"])
+	require.Equal(t, int64(3), result["stats"].(gin.H)["failure"])
+
+	statuses = nil
+	params.Status = string(model.TaskStatusFailure)
+	result = taskPageWithStats(page, params, count)
+	require.Equal(t, []string{"FAILURE"}, statuses)
+	require.Equal(t, int64(0), result["stats"].(gin.H)["success"])
+	require.Equal(t, int64(3), result["stats"].(gin.H)["failure"])
+
+	statuses = nil
+	params.Status = string(model.TaskStatusInProgress)
+	result = taskPageWithStats(page, params, count)
+	require.Empty(t, statuses)
+	require.Equal(t, int64(0), result["stats"].(gin.H)["success"])
+	require.Equal(t, int64(0), result["stats"].(gin.H)["failure"])
+}
+
 func TestTasksToDtoUsesRootOnlyMaterialVisibility(t *testing.T) {
 	task := &model.Task{
 		Properties: model.Properties{

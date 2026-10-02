@@ -171,6 +171,9 @@ export type DataTablePageProps<TData> = {
    */
   paginationInFooter?: boolean
 
+  /** Extra content beside the page size control in the pagination footer. */
+  paginationLeftContent?: React.ReactNode
+
   /**
    * Extra content rendered between the table/mobile list and the pagination.
    * E.g. summary stats, helper text.
@@ -239,11 +242,17 @@ export function DataTablePage<TData>(props: DataTablePageProps<TData>) {
       {props.showPagination !== false &&
         (props.paginationInFooter !== false ? (
           <PageFooterPortal>
-            <DataTablePagination table={props.table} />
+            <DataTablePagination
+              table={props.table}
+              leftContent={props.paginationLeftContent}
+            />
           </PageFooterPortal>
         ) : (
           <div className='pt-2'>
-            <DataTablePagination table={props.table} />
+            <DataTablePagination
+              table={props.table}
+              leftContent={props.paginationLeftContent}
+            />
           </div>
         ))}
     </>

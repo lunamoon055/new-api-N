@@ -199,6 +199,34 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       skeletonKeyPrefix='usage-log-skeleton'
       tableClassName='max-h-[calc(100dvh-13rem)] overflow-auto sm:max-h-[calc(100dvh-14rem)]'
       tableHeaderClassName='bg-muted/30 sticky top-0 z-10'
+      paginationLeftContent={
+        logCategory === 'task' ? (
+          <div className='flex items-center gap-3 text-xs whitespace-nowrap sm:gap-4 sm:text-sm'>
+            <span>
+              <span className='text-muted-foreground'>
+                {t('Total records')}
+              </span>{' '}
+              <span className='font-semibold tabular-nums'>
+                {data?.total ?? 0}
+              </span>
+            </span>
+            <span aria-hidden='true' className='bg-border h-4 w-px' />
+            <span>
+              <span className='text-muted-foreground'>{t('Success')}</span>{' '}
+              <span className='font-semibold text-emerald-600 tabular-nums dark:text-emerald-400'>
+                {data?.stats?.success ?? 0}
+              </span>
+            </span>
+            <span aria-hidden='true' className='bg-border h-4 w-px' />
+            <span>
+              <span className='text-muted-foreground'>{t('Failed')}</span>{' '}
+              <span className='font-semibold text-rose-600 tabular-nums dark:text-rose-400'>
+                {data?.stats?.failure ?? 0}
+              </span>
+            </span>
+          </div>
+        ) : undefined
+      }
       toolbar={
         isCommon ? (
           <CommonLogsFilterBar key={filterBarKey} table={table} />

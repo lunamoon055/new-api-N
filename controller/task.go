@@ -40,7 +40,7 @@ func GetAllTask(c *gin.Context) {
 	total := model.TaskCountAllTasks(queryParams)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(tasksToDto(items, true, canViewTaskPrivateDetails(c.GetInt("role"))))
-	common.ApiSuccess(c, pageInfo)
+	common.ApiSuccess(c, taskPageWithStats(pageInfo, queryParams, model.TaskCountAllTasks))
 }
 
 func GetUserTask(c *gin.Context) {
@@ -65,7 +65,31 @@ func GetUserTask(c *gin.Context) {
 	total := model.TaskCountAllUserTask(userId, queryParams)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(tasksToDto(items, false, canViewTaskPrivateDetails(c.GetInt("role"))))
-	common.ApiSuccess(c, pageInfo)
+	common.ApiSuccess(c, taskPageWithStats(pageInfo, queryParams, func(params model.SyncTaskQueryParams) int64 {
+		return model.TaskCountAllUserTask(userId, params)
+	}))
+}
+
+func taskPageWithStats(pageInfo *common.PageInfo, params model.SyncTaskQueryParams, count func(model.SyncTaskQueryParams) int64) gin.H {
+	countStatus := func(status model.TaskStatus) int64 {
+		if params.Status != "" && params.Status != string(status) {
+			return 0
+		}
+		statusParams := params
+		statusParams.Status = string(status)
+		return count(statusParams)
+	}
+
+	return gin.H{
+		"page":      pageInfo.Page,
+		"page_size": pageInfo.PageSize,
+		"total":     pageInfo.Total,
+		"items":     pageInfo.Items,
+		"stats": gin.H{
+			"success": countStatus(model.TaskStatusSuccess),
+			"failure": countStatus(model.TaskStatusFailure),
+		},
+	}
 }
 
 func GetAllFailedTaskCount(c *gin.Context) {

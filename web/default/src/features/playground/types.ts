@@ -119,6 +119,11 @@ export interface ChatCompletionResponse {
 export interface PlaygroundConfig {
   model: string
   group: string
+  mode: 'auto' | 'chat' | 'image' | 'video'
+  imageEndpoint: 'auto' | 'sync' | 'async'
+  videoEndpoint: 'auto' | 'standard' | 'async'
+  chatEndpoint: 'completions' | 'responses'
+  extraBody: string
   temperature: number
   top_p: number
   max_tokens: number

@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { ReactNode } from 'react'
 import { type Table } from '@tanstack/react-table'
 import {
   ChevronLeft as ChevronLeftIcon,
@@ -37,10 +38,12 @@ import {
 
 type DataTablePaginationProps<TData> = {
   table: Table<TData>
+  leftContent?: ReactNode
 }
 
 export function DataTablePagination<TData>({
   table,
+  leftContent,
 }: DataTablePaginationProps<TData>) {
   const { t } = useTranslation()
   const currentPage = table.getState().pagination.pageIndex + 1
@@ -55,42 +58,52 @@ export function DataTablePagination<TData>({
       )}
       style={{ overflowClipMargin: 1 }}
     >
-      <div className='flex w-full items-center justify-between gap-2'>
+      <div
+        className={cn(
+          'flex w-full items-center justify-between gap-2',
+          leftContent && 'flex-wrap gap-x-4 gap-y-2'
+        )}
+      >
         <div className='flex min-w-0 items-center text-xs font-medium whitespace-nowrap sm:min-w-[130px] sm:text-sm @2xl/content:hidden'>
           {t('Page {{current}} of {{total}}', {
             current: currentPage,
             total: totalPages,
           })}
         </div>
-        <div className='flex items-center gap-2 @max-2xl/content:flex-row-reverse'>
-          <Select
-            items={[
-              ...[10, 20, 30, 40, 50, 100].map((pageSize) => ({
-                value: `${pageSize}`,
-                label: pageSize,
-              })),
-            ]}
-            value={`${table.getState().pagination.pageSize}`}
-            onValueChange={(value) => {
-              table.setPageSize(Number(value))
-            }}
-          >
-            <SelectTrigger className='h-8 w-[64px] sm:w-[70px]'>
-              <SelectValue placeholder={table.getState().pagination.pageSize} />
-            </SelectTrigger>
-            <SelectContent side='top' alignItemWithTrigger={false}>
-              <SelectGroup>
-                {[10, 20, 30, 40, 50, 100].map((pageSize) => (
-                  <SelectItem key={pageSize} value={`${pageSize}`}>
-                    {pageSize}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <p className='hidden text-sm font-medium sm:block'>
-            {t('Rows per page')}
-          </p>
+        <div className='flex flex-wrap items-center gap-x-4 gap-y-2'>
+          <div className='flex items-center gap-2 @max-2xl/content:flex-row-reverse'>
+            <Select
+              items={[
+                ...[10, 20, 30, 40, 50, 100].map((pageSize) => ({
+                  value: `${pageSize}`,
+                  label: pageSize,
+                })),
+              ]}
+              value={`${table.getState().pagination.pageSize}`}
+              onValueChange={(value) => {
+                table.setPageSize(Number(value))
+              }}
+            >
+              <SelectTrigger className='h-8 w-[64px] sm:w-[70px]'>
+                <SelectValue
+                  placeholder={table.getState().pagination.pageSize}
+                />
+              </SelectTrigger>
+              <SelectContent side='top' alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {[10, 20, 30, 40, 50, 100].map((pageSize) => (
+                    <SelectItem key={pageSize} value={`${pageSize}`}>
+                      {pageSize}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <p className='hidden text-sm font-medium sm:block'>
+              {t('Rows per page')}
+            </p>
+          </div>
+          {leftContent}
         </div>
       </div>
 

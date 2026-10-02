@@ -50,7 +50,18 @@ import {
 } from '@/components/ai-elements/prompt-input'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { ModelGroupSelector } from '@/components/model-group-selector'
-import type { ModelOption, GroupOption } from '../types'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { resolvePlaygroundMode } from '../lib/media-routing'
+import type { ModelOption, GroupOption, PlaygroundConfig } from '../types'
 
 interface PlaygroundInputProps {
   onSubmit: (text: string) => void
@@ -59,6 +70,16 @@ interface PlaygroundInputProps {
   isGenerating?: boolean
   models: ModelOption[]
   modelValue: string
+  mode: PlaygroundConfig['mode']
+  imageEndpoint: PlaygroundConfig['imageEndpoint']
+  videoEndpoint: PlaygroundConfig['videoEndpoint']
+  chatEndpoint: PlaygroundConfig['chatEndpoint']
+  extraBody: string
+  onModeChange: (value: PlaygroundConfig['mode']) => void
+  onImageEndpointChange: (value: PlaygroundConfig['imageEndpoint']) => void
+  onVideoEndpointChange: (value: PlaygroundConfig['videoEndpoint']) => void
+  onChatEndpointChange: (value: PlaygroundConfig['chatEndpoint']) => void
+  onExtraBodyChange: (value: string) => void
   onModelChange: (value: string) => void
   isModelLoading?: boolean
   groups: GroupOption[]
@@ -82,6 +103,16 @@ export function PlaygroundInput({
   isGenerating,
   models,
   modelValue,
+  mode,
+  imageEndpoint,
+  videoEndpoint,
+  chatEndpoint,
+  extraBody,
+  onModeChange,
+  onImageEndpointChange,
+  onVideoEndpointChange,
+  onChatEndpointChange,
+  onExtraBodyChange,
   onModelChange,
   isModelLoading = false,
   groups,
@@ -94,6 +125,7 @@ export function PlaygroundInput({
   const isModelSelectDisabled =
     disabled || isModelLoading || models.length === 0
   const isGroupSelectDisabled = disabled || groups.length === 0
+  const resolvedMode = resolvePlaygroundMode(modelValue, mode)
 
   const handleSubmit = (message: PromptInputMessage) => {
     if (!message.text?.trim() || disabled) return
@@ -113,6 +145,157 @@ export function PlaygroundInput({
 
   return (
     <div className='grid shrink-0 gap-4 px-1 md:pb-4'>
+      <div className='flex flex-wrap items-end gap-3 px-1'>
+        <div className='grid gap-1.5'>
+          <Label htmlFor='playground-mode'>{t('Test type')}</Label>
+          <Select
+            value={mode}
+            onValueChange={(value) => {
+              if (value) onModeChange(value as PlaygroundConfig['mode'])
+            }}
+            disabled={disabled}
+          >
+            <SelectTrigger id='playground-mode' className='min-w-36'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value='auto'>{t('Auto detect')}</SelectItem>
+                <SelectItem value='chat'>{t('Chat')}</SelectItem>
+                <SelectItem value='image'>{t('Image')}</SelectItem>
+                <SelectItem value='video'>{t('Video')}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+        {resolvedMode === 'image' && (
+          <div className='grid gap-1.5'>
+            <Label htmlFor='playground-image-endpoint'>
+              {t('Image endpoint')}
+            </Label>
+            <Select
+              value={imageEndpoint}
+              onValueChange={(value) => {
+                if (value)
+                  onImageEndpointChange(
+                    value as PlaygroundConfig['imageEndpoint']
+                  )
+              }}
+              disabled={disabled}
+            >
+              <SelectTrigger
+                id='playground-image-endpoint'
+                className='min-w-40'
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value='auto'>{t('Auto detect')}</SelectItem>
+                  <SelectItem value='sync'>{t('Image Generation')}</SelectItem>
+                  <SelectItem value='async'>
+                    {t('Async Image Generation')}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {resolvedMode === 'video' && (
+          <div className='grid gap-1.5'>
+            <Label htmlFor='playground-video-endpoint'>
+              {t('Video endpoint')}
+            </Label>
+            <Select
+              value={videoEndpoint}
+              onValueChange={(value) => {
+                if (value)
+                  onVideoEndpointChange(
+                    value as PlaygroundConfig['videoEndpoint']
+                  )
+              }}
+              disabled={disabled}
+            >
+              <SelectTrigger
+                id='playground-video-endpoint'
+                className='min-w-40'
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value='auto'>{t('Auto detect')}</SelectItem>
+                  <SelectItem value='standard'>
+                    {t('Video Generation')}
+                  </SelectItem>
+                  <SelectItem value='async'>
+                    {t('Async Video Generation')}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {resolvedMode === 'chat' && (
+          <div className='grid gap-1.5'>
+            <Label htmlFor='playground-chat-endpoint'>
+              {t('Chat endpoint')}
+            </Label>
+            <Select
+              value={chatEndpoint}
+              onValueChange={(value) => {
+                if (value)
+                  onChatEndpointChange(
+                    value as PlaygroundConfig['chatEndpoint']
+                  )
+              }}
+              disabled={disabled}
+            >
+              <SelectTrigger id='playground-chat-endpoint' className='min-w-40'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value='completions'>
+                    {t('Chat Completions')}
+                  </SelectItem>
+                  <SelectItem value='responses'>{t('Responses')}</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <p className='text-muted-foreground pb-1 text-xs'>
+          {t('Select a test type for newly added models.')}
+        </p>
+      </div>
+      <details className='px-1 text-sm'>
+        <summary className='cursor-pointer'>
+          {t('Advanced request parameters')}
+        </summary>
+        <div className='mt-2 grid gap-1.5'>
+          <Label htmlFor='playground-extra-body'>
+            {t('Extra parameters (JSON object)')}
+          </Label>
+          <Textarea
+            id='playground-extra-body'
+            value={extraBody}
+            onChange={(event) => onExtraBodyChange(event.target.value)}
+            disabled={disabled}
+            placeholder='{"size":"1024x1024"}'
+            className='min-h-20 font-mono text-xs'
+            aria-describedby='playground-extra-body-help'
+          />
+          <p
+            id='playground-extra-body-help'
+            className='text-muted-foreground text-xs'
+          >
+            {t(
+              'Extra parameters are added to the request. Model, prompt, group, and chat messages stay controlled above.'
+            )}
+          </p>
+        </div>
+      </details>
       <PromptInput groupClassName='rounded-xl' onSubmit={handleSubmit}>
         <PromptInputTextarea
           autoComplete='off'
@@ -122,7 +305,11 @@ export function PlaygroundInput({
           className='px-5 md:text-base'
           disabled={disabled}
           onChange={(event) => setText(event.target.value)}
-          placeholder={t('Ask anything')}
+          placeholder={
+            resolvedMode === 'chat'
+              ? t('Ask anything')
+              : t('Enter a generation prompt')
+          }
           value={text}
         />
 

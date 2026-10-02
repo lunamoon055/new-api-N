@@ -285,6 +285,15 @@ func CreationRelayTask(c *gin.Context) {
 	RelayTask(c)
 }
 
+func CreationRelayVideo(c *gin.Context) {
+	if newAPIError := setupCreationRelayContext(c, "creation-video"); newAPIError != nil {
+		respondCreationRelayError(c, newAPIError)
+		return
+	}
+	c.Request.URL.Path = "/v1/videos"
+	RelayTask(c)
+}
+
 func CreationRelayImageTask(c *gin.Context) {
 	if newAPIError := setupCreationRelayContext(c, "creation-image"); newAPIError != nil {
 		respondCreationRelayError(c, newAPIError)
@@ -348,15 +357,14 @@ func setupCreationRelayContext(c *gin.Context, tokenPrefix string) *types.NewAPI
 }
 
 func resolveCreationUsingGroup(c *gin.Context, userCache *model.UserBase) string {
-	usingGroup := ""
-	if userCache != nil {
-		usingGroup = strings.TrimSpace(userCache.Group)
+	usingGroup := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
+	if usingGroup == "" {
+		if userCache != nil {
+			usingGroup = strings.TrimSpace(userCache.Group)
+		}
 	}
 	if usingGroup == "" {
 		usingGroup = strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUserGroup))
-	}
-	if usingGroup == "" {
-		usingGroup = strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyUsingGroup))
 	}
 	if usingGroup == "" {
 		usingGroup = "default"

@@ -4914,6 +4914,18 @@
     "PROCESSING": "Processing",
     "RETRY": "Retrying",
     "READY": "Ready",
-    "FAILED": "Failed"
+    "FAILED": "Failed",
+    "Test type": "Test type",
+    "Image endpoint": "Image endpoint",
+    "Select a test type for newly added models.": "Select a test type for newly added models.",
+    "Advanced request parameters": "Advanced request parameters",
+    "Extra parameters (JSON object)": "Extra parameters (JSON object)",
+    "Extra parameters are added to the request. Model, prompt, group, and chat messages stay controlled above.": "Extra parameters are added to the request. Model, prompt, group, and chat messages stay controlled above.",
+    "Enter a generation prompt": "Enter a generation prompt",
+    "Extra parameters must be valid JSON": "Extra parameters must be valid JSON",
+    "Extra parameters must be a JSON object": "Extra parameters must be a JSON object",
+    "Chat endpoint": "Chat endpoint",
+    "Video endpoint": "Video endpoint",
+    "Total records": "Total records"
   }
 }

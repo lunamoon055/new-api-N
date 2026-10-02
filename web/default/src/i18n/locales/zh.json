@@ -4914,6 +4914,18 @@
     "PROCESSING": "处理中",
     "RETRY": "等待重试",
     "READY": "已完成",
-    "FAILED": "失败"
+    "FAILED": "失败",
+    "Test type": "测试类型",
+    "Image endpoint": "图片接口",
+    "Select a test type for newly added models.": "新接入的模型可手动选择测试类型。",
+    "Advanced request parameters": "高级请求参数",
+    "Extra parameters (JSON object)": "附加参数（JSON 对象）",
+    "Extra parameters are added to the request. Model, prompt, group, and chat messages stay controlled above.": "附加参数会加入请求。模型、提示词、分组和聊天消息由上方设置控制。",
+    "Enter a generation prompt": "输入生成提示词",
+    "Extra parameters must be valid JSON": "附加参数必须是有效的 JSON",
+    "Extra parameters must be a JSON object": "附加参数必须是 JSON 对象",
+    "Chat endpoint": "聊天接口",
+    "Video endpoint": "视频接口",
+    "Total records": "总条数"
   }
 }

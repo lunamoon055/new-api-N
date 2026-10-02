@@ -31,6 +31,25 @@ func CreationVideoAsyncRequestConvert() func(c *gin.Context) {
 	}
 }
 
+func CreationVideoRequestConvert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		c.Request.URL.Path = "/pg/videos"
+		c.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
+		c.Next()
+	}
+}
+
+func CreationVideoFetchConvert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		taskID := c.Param("task_id")
+		c.Request.Method = http.MethodGet
+		c.Request.URL.Path = "/v1/videos/" + taskID
+		c.Set("task_id", taskID)
+		c.Set("relay_mode", relayconstant.RelayModeVideoFetchByID)
+		c.Next()
+	}
+}
+
 func CreationVideoAsyncFetchConvert() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		taskID := c.Param("task_id")
