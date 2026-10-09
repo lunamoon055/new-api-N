@@ -87,7 +87,11 @@ export async function sendPlaygroundMediaGeneration(
     messages,
     config.mode,
     config.imageEndpoint,
-    extraBody
+    extraBody,
+    {
+      aspectRatio: config.videoAspectRatio,
+      duration: config.videoDuration,
+    }
   )
   if (!endpoint || !payload) {
     throw new Error('Current model does not support media generation')

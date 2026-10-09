@@ -59,8 +59,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { Field, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
-import { resolvePlaygroundMode } from '../lib/media-routing'
+import {
+  getPlaygroundVideoChoices,
+  resolvePlaygroundMode,
+  resolvePlaygroundVideoSelection,
+} from '../lib/media-routing'
 import type { ModelOption, GroupOption, PlaygroundConfig } from '../types'
 
 interface PlaygroundInputProps {
@@ -73,11 +78,15 @@ interface PlaygroundInputProps {
   mode: PlaygroundConfig['mode']
   imageEndpoint: PlaygroundConfig['imageEndpoint']
   videoEndpoint: PlaygroundConfig['videoEndpoint']
+  videoAspectRatio: PlaygroundConfig['videoAspectRatio']
+  videoDuration: PlaygroundConfig['videoDuration']
   chatEndpoint: PlaygroundConfig['chatEndpoint']
   extraBody: string
   onModeChange: (value: PlaygroundConfig['mode']) => void
   onImageEndpointChange: (value: PlaygroundConfig['imageEndpoint']) => void
   onVideoEndpointChange: (value: PlaygroundConfig['videoEndpoint']) => void
+  onVideoAspectRatioChange: (value: string) => void
+  onVideoDurationChange: (value: string) => void
   onChatEndpointChange: (value: PlaygroundConfig['chatEndpoint']) => void
   onExtraBodyChange: (value: string) => void
   onModelChange: (value: string) => void
@@ -106,11 +115,15 @@ export function PlaygroundInput({
   mode,
   imageEndpoint,
   videoEndpoint,
+  videoAspectRatio,
+  videoDuration,
   chatEndpoint,
   extraBody,
   onModeChange,
   onImageEndpointChange,
   onVideoEndpointChange,
+  onVideoAspectRatioChange,
+  onVideoDurationChange,
   onChatEndpointChange,
   onExtraBodyChange,
   onModelChange,
@@ -126,6 +139,11 @@ export function PlaygroundInput({
     disabled || isModelLoading || models.length === 0
   const isGroupSelectDisabled = disabled || groups.length === 0
   const resolvedMode = resolvePlaygroundMode(modelValue, mode)
+  const videoChoices = getPlaygroundVideoChoices(modelValue)
+  const selectedVideo = resolvePlaygroundVideoSelection(modelValue, {
+    aspectRatio: videoAspectRatio,
+    duration: videoDuration,
+  })
 
   const handleSubmit = (message: PromptInputMessage) => {
     if (!message.text?.trim() || disabled) return
@@ -202,39 +220,94 @@ export function PlaygroundInput({
           </div>
         )}
         {resolvedMode === 'video' && (
-          <div className='grid gap-1.5'>
-            <Label htmlFor='playground-video-endpoint'>
-              {t('Video endpoint')}
-            </Label>
-            <Select
-              value={videoEndpoint}
-              onValueChange={(value) => {
-                if (value)
-                  onVideoEndpointChange(
-                    value as PlaygroundConfig['videoEndpoint']
-                  )
-              }}
-              disabled={disabled}
-            >
-              <SelectTrigger
-                id='playground-video-endpoint'
-                className='min-w-40'
+          <>
+            <div className='grid gap-1.5'>
+              <Label htmlFor='playground-video-endpoint'>
+                {t('Video endpoint')}
+              </Label>
+              <Select
+                value={videoEndpoint}
+                onValueChange={(value) => {
+                  if (value)
+                    onVideoEndpointChange(
+                      value as PlaygroundConfig['videoEndpoint']
+                    )
+                }}
+                disabled={disabled}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value='auto'>{t('Auto detect')}</SelectItem>
-                  <SelectItem value='standard'>
-                    {t('Video Generation')}
-                  </SelectItem>
-                  <SelectItem value='async'>
-                    {t('Async Video Generation')}
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
+                <SelectTrigger
+                  id='playground-video-endpoint'
+                  className='min-w-40'
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value='auto'>{t('Auto detect')}</SelectItem>
+                    <SelectItem value='standard'>
+                      {t('Video Generation')}
+                    </SelectItem>
+                    <SelectItem value='async'>
+                      {t('Async Video Generation')}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <Field className='w-auto min-w-28 gap-1.5'>
+              <FieldLabel htmlFor='playground-video-ratio'>
+                {t('Aspect ratio')}
+              </FieldLabel>
+              <Select
+                value={selectedVideo.aspectRatio}
+                onValueChange={(value) => {
+                  if (value) onVideoAspectRatioChange(value)
+                }}
+                disabled={disabled}
+              >
+                <SelectTrigger id='playground-video-ratio' className='min-w-28'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {videoChoices.aspectRatios.map((ratio) => (
+                      <SelectItem key={ratio} value={ratio}>
+                        {ratio}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className='w-auto min-w-28 gap-1.5'>
+              <FieldLabel htmlFor='playground-video-duration'>
+                {t('Video duration')}
+              </FieldLabel>
+              <Select
+                value={selectedVideo.duration}
+                onValueChange={(value) => {
+                  if (value) onVideoDurationChange(value)
+                }}
+                disabled={disabled}
+              >
+                <SelectTrigger
+                  id='playground-video-duration'
+                  className='min-w-28'
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {videoChoices.durations.map((duration) => (
+                      <SelectItem key={duration} value={duration}>
+                        {duration} {t('seconds')}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          </>
         )}
         {resolvedMode === 'chat' && (
           <div className='grid gap-1.5'>

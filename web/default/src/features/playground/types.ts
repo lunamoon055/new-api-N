@@ -122,6 +122,8 @@ export interface PlaygroundConfig {
   mode: 'auto' | 'chat' | 'image' | 'video'
   imageEndpoint: 'auto' | 'sync' | 'async'
   videoEndpoint: 'auto' | 'standard' | 'async'
+  videoAspectRatio: string
+  videoDuration: string
   chatEndpoint: 'completions' | 'responses'
   extraBody: string
   temperature: number

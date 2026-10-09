@@ -55,6 +55,8 @@ export const DEFAULT_CONFIG: PlaygroundConfig = {
   mode: 'auto',
   imageEndpoint: 'auto',
   videoEndpoint: 'auto',
+  videoAspectRatio: '',
+  videoDuration: '',
   chatEndpoint: 'completions',
   extraBody: '',
   temperature: 0.7,

@@ -193,6 +193,8 @@ export function Playground() {
           mode={config.mode}
           imageEndpoint={config.imageEndpoint}
           videoEndpoint={config.videoEndpoint}
+          videoAspectRatio={config.videoAspectRatio}
+          videoDuration={config.videoDuration}
           chatEndpoint={config.chatEndpoint}
           extraBody={config.extraBody}
           models={models}
@@ -204,6 +206,12 @@ export function Playground() {
           }
           onVideoEndpointChange={(value) =>
             updateConfig('videoEndpoint', value)
+          }
+          onVideoAspectRatioChange={(value) =>
+            updateConfig('videoAspectRatio', value)
+          }
+          onVideoDurationChange={(value) =>
+            updateConfig('videoDuration', value)
           }
           onChatEndpointChange={(value) => updateConfig('chatEndpoint', value)}
           onExtraBodyChange={(value) => updateConfig('extraBody', value)}

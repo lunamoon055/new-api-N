@@ -22,6 +22,8 @@ import {
   parsePlaygroundMediaResult,
   getPlaygroundModelMode,
   getPlaygroundMediaEndpoint,
+  getPlaygroundVideoChoices,
+  resolvePlaygroundVideoSelection,
 } from '../src/features/playground/lib/media-routing'
 import type { Message } from '../src/features/playground/types'
 
@@ -54,6 +56,8 @@ describe('playground media routing', () => {
       'veo31-fast',
       'veo31-ref',
       'grok-imagine-video',
+      '004系列/sd2.5(30图4-30秒480P/720P)',
+      'omni-video-1',
     ]) {
       expect(getPlaygroundModelMode(model)).toBe('video')
       expect(getPlaygroundMediaEndpoint(model)).toBe(
@@ -145,6 +149,7 @@ describe('playground media routing', () => {
       prompt: 'make a short API website video',
       seconds: '5',
       size: '1920x1080',
+      aspect_ratio: '16:9',
     })
 
     expect(buildPlaygroundMediaRequest('gpt-image2', messages)).toEqual({
@@ -158,6 +163,57 @@ describe('playground media routing', () => {
       prompt: 'make a short API website video',
       n: 1,
     })
+  })
+
+  it('sends the selected video ratio and duration using each model contract', () => {
+    const messages = [userMessage('make a video')]
+
+    expect(
+      buildPlaygroundMediaRequest('video-2.0', messages, 'video', 'auto', {}, {
+        aspectRatio: '16:9',
+        duration: '10',
+      })
+    ).toMatchObject({ duration: 10, aspect_ratio: '16:9' })
+
+    expect(
+      buildPlaygroundMediaRequest('sora2', messages, 'video', 'auto', {}, {
+        aspectRatio: '16:9',
+        duration: '8',
+      })
+    ).toMatchObject({ seconds: '8', size: '1280x720', aspect_ratio: '16:9' })
+
+    expect(
+      buildPlaygroundMediaRequest(
+        '004系列/sd2.5(30图4-30秒480P/720P)',
+        messages,
+        'video',
+        'auto',
+        {},
+        { aspectRatio: '9:16', duration: '30' }
+      )
+    ).toMatchObject({
+      seconds: '30',
+      size: '1080x1920',
+      aspect_ratio: '9:16',
+    })
+  })
+
+  it('only offers valid video selections for recognized model families', () => {
+    expect(
+      getPlaygroundVideoChoices('004系列/sd2.5(30图4-30秒480P/720P)')
+        .durations
+    ).toContain('30')
+    expect(
+      resolvePlaygroundVideoSelection('sora2', {
+        aspectRatio: '1:1',
+        duration: '30',
+      })
+    ).toEqual({ aspectRatio: '9:16', duration: '4' })
+    expect(getPlaygroundVideoChoices('omni-video-1').durations).toEqual([
+      '3',
+      '5',
+      '8',
+    ])
   })
 
   it('uses direct completed video urls when async task responses include one', () => {

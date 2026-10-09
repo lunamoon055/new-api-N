@@ -28,6 +28,8 @@ import {
 } from '@/features/media-generation/result-parsers'
 import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
+  getCreationVideoCapabilities,
+  getCreationDurationOptions,
   getCreationVideoRequestOptions,
   type CreationVideoRequestOptions,
 } from '@/features/media-generation/video-options'
@@ -39,6 +41,71 @@ export type PlaygroundMediaMode = 'chat' | 'image' | 'video'
 export type PlaygroundModeSelection = PlaygroundMediaMode | 'auto'
 export type PlaygroundImageEndpoint = 'auto' | 'sync' | 'async'
 export type PlaygroundVideoEndpoint = 'auto' | 'standard' | 'async'
+export type PlaygroundVideoSelection = {
+  aspectRatio: string
+  duration: string
+}
+
+const FALLBACK_VIDEO_RATIOS = ['16:9', '9:16', '1:1']
+const SD25_VIDEO_RATIOS = [...FALLBACK_VIDEO_RATIOS, '4:3', '3:4']
+const SD25_VIDEO_DURATIONS = Array.from({ length: 27 }, (_, index) =>
+  String(index + 4)
+)
+const FALLBACK_VIDEO_SIZES: Record<string, string> = {
+  '16:9': '1920x1080',
+  '9:16': '1080x1920',
+  '1:1': '1080x1080',
+  '4:3': '1440x1080',
+  '3:4': '1080x1440',
+}
+
+export function getPlaygroundVideoChoices(model: string) {
+  const capability = getCreationVideoCapabilities(model)
+  if (capability) {
+    return {
+      aspectRatios: capability.aspectRatios,
+      durations: getCreationDurationOptions(model).map(
+        (option) => option.value
+      ),
+    }
+  }
+
+  // These gateway model names are outside the creation-center catalog.
+  const normalizedModel = model.toLowerCase()
+  if (normalizedModel.includes('sd2.5') || normalizedModel === 'sd-2.5') {
+    return {
+      aspectRatios: SD25_VIDEO_RATIOS,
+      durations: SD25_VIDEO_DURATIONS,
+    }
+  }
+  if (normalizedModel.startsWith('omni-video-1')) {
+    return {
+      aspectRatios: FALLBACK_VIDEO_RATIOS,
+      durations: ['3', '5', '8'],
+    }
+  }
+  return {
+    aspectRatios: FALLBACK_VIDEO_RATIOS,
+    durations: getCreationDurationOptions(model).map((option) => option.value),
+  }
+}
+
+export function resolvePlaygroundVideoSelection(
+  model: string,
+  selection: PlaygroundVideoSelection
+): PlaygroundVideoSelection {
+  const choices = getPlaygroundVideoChoices(model)
+  const preferredDuration =
+    selection.duration || DEFAULT_CREATION_VIDEO_OPTIONS.duration
+  return {
+    aspectRatio: choices.aspectRatios.includes(selection.aspectRatio)
+      ? selection.aspectRatio
+      : choices.aspectRatios[0],
+    duration: choices.durations.includes(preferredDuration)
+      ? preferredDuration
+      : choices.durations[0],
+  }
+}
 
 export type PlaygroundImageRequest = {
   model: string
@@ -98,10 +165,13 @@ export function getPlaygroundModelMode(model: string): PlaygroundMediaMode {
     normalizedModel.startsWith('videos-') ||
     normalizedModel.startsWith('sd2-') ||
     normalizedModel.startsWith('sd-2.0-') ||
+    normalizedModel.startsWith('sd-2.5') ||
+    normalizedModel.includes('sd2.5') ||
     normalizedModel.startsWith('sora') ||
     normalizedModel.startsWith('veo') ||
     normalizedModel.includes('kling') ||
-    normalizedModel.includes('grok-imagine-video')
+    normalizedModel.includes('grok-imagine-video') ||
+    normalizedModel.startsWith('omni-video-')
   ) {
     return 'video'
   }
@@ -170,7 +240,8 @@ export function buildPlaygroundMediaRequest(
   messages: Message[],
   mode: PlaygroundModeSelection = 'auto',
   imageEndpoint: PlaygroundImageEndpoint = 'auto',
-  extraBody: Record<string, unknown> = {}
+  extraBody: Record<string, unknown> = {},
+  videoSelection: PlaygroundVideoSelection = { aspectRatio: '', duration: '' }
 ): PlaygroundMediaRequest | null {
   const resolvedMode = resolvePlaygroundMode(model, mode)
   if (resolvedMode === 'chat') return null
@@ -200,11 +271,27 @@ export function buildPlaygroundMediaRequest(
     }
   }
 
+  const selectedVideo = resolvePlaygroundVideoSelection(model, videoSelection)
   const videoOptions = getCreationVideoRequestOptions(
-    DEFAULT_CREATION_VIDEO_OPTIONS,
+    {
+      ...DEFAULT_CREATION_VIDEO_OPTIONS,
+      duration: selectedVideo.duration,
+      aspectRatio: selectedVideo.aspectRatio,
+    },
     model
   )
   const { estimateSeconds: _estimateSeconds, ...videoPayload } = videoOptions
+  if (!getCreationVideoCapabilities(model)) {
+    return {
+      ...videoPayload,
+      seconds: selectedVideo.duration,
+      aspect_ratio: selectedVideo.aspectRatio,
+      size: FALLBACK_VIDEO_SIZES[selectedVideo.aspectRatio],
+      ...extraBody,
+      model,
+      prompt,
+    }
+  }
   return {
     ...videoPayload,
     ...extraBody,
