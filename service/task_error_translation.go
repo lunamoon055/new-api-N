@@ -276,6 +276,8 @@ func TranslateVideoTaskError(rawMessage string, code string, statusCode int) Tas
 	detailedMessage := extractDetailedTaskErrorMessage(rawMessage)
 
 	switch {
+	case containsAny(text, "pre_consume_token_quota_failed", "token quota is not enough", "insufficient token quota"):
+		return taskErrorTranslation("API 令牌额度不足，请检查令牌额度。", "quota", false)
 	case containsAny(text,
 		"积分不足",
 		"积分不够",

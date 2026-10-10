@@ -93,9 +93,11 @@ export function useTopNavLinks(): TopNavLink[] {
 
   // Docs (supports external links)
   if (modules?.docs !== false) {
-    if (docsLink) {
+    if (docsLink && docsLink !== 'https://docs.newapi.pro') {
       links.push({ title: t('Docs'), href: docsLink, external: true })
     } else {
+      // The bundled integration guide replaces the default docs destination.
+      // Explicitly configured third-party documentation still takes precedence.
       links.push({ title: t('Docs'), href: '/docs' })
     }
   }

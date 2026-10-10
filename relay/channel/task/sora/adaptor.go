@@ -161,6 +161,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if getTaskAction(info) == constant.TaskActionRemix {
 		return validateRemixRequest(c)
 	}
+	if isXJZVideoRequest(info) {
+		return validateXJZVideoJSONRequest(c, info)
+	}
 	if taskErr := relaycommon.ValidateMultipartDirect(c, info); taskErr != nil {
 		return taskErr
 	}
@@ -253,6 +256,10 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 		setUpstreamEndpoint(info, "/v1/videos")
 		return fmt.Sprintf("%s/v1/videos", baseURL), nil
 	}
+	if isXJZVideoRequest(info) {
+		setUpstreamEndpoint(info, "/v1/videos")
+		return fmt.Sprintf("%s/v1/videos", baseURL), nil
+	}
 	if isSuanliaiOfficialTransferModelName(info.OriginModelName) ||
 		isSuanliaiOfficialTransferModelName(upstreamModelName) {
 		setUpstreamEndpoint(info, "/v1/video/generations")
@@ -329,6 +336,22 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 			newBody, err := buildAsyncImageRequestBody(cachedBody, info.OriginModelName, info.UpstreamModelName)
 			if err != nil {
 				return nil, errors.Wrap(err, "build_async_image_request_body_failed")
+			}
+			return bytes.NewReader(newBody), nil
+		}
+		if isXJZVideoRequest(info) {
+			var payload map[string]any
+			if err := common.Unmarshal(cachedBody, &payload); err != nil {
+				return nil, errors.Wrap(err, "decode_xjz_video_request_failed")
+			}
+			payload, _, _, _, _, err = normalizeXJZVideoPayload(payload, xjzVideoModelName(info))
+			if err != nil {
+				return nil, errors.Wrap(err, "normalize_xjz_video_request_failed")
+			}
+			payload["model"] = info.UpstreamModelName
+			newBody, err := common.Marshal(payload)
+			if err != nil {
+				return nil, errors.Wrap(err, "encode_xjz_video_request_failed")
 			}
 			return bytes.NewReader(newBody), nil
 		}
@@ -457,6 +480,11 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	if dResp.Status == "" {
 		dResp.Status = extractTaskStatus(dResp, rawPayload)
 	}
+	if strings.EqualFold(strings.TrimSpace(dResp.Status), "unknown") &&
+		(common.IsXJZVideoModel(dResp.Model) || common.IsXJZVideoModel(info.UpstreamModelName)) {
+		// XJZ can report unknown before its asynchronous job becomes visible.
+		dResp.Status = "queued"
+	}
 	if normalizeTaskStatus(dResp.Status) == "failed" && dResp.Error == nil {
 		if reason := extractTaskErrorReason(dResp, rawPayload); reason != "" {
 			dResp.Error = &struct {
@@ -523,6 +551,10 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		isSuanliaiUnifiedVideosModelName(originModelName) {
 		useAsyncGenerations = false
 	}
+	if common.IsXJZVideoModel(modelName) || common.IsXJZVideoModel(originModelName) {
+		useAsyncGenerations = false
+		uri = fmt.Sprintf("%s/v1/videos/%s", baseURL, url.PathEscape(taskID))
+	}
 	if useAsyncGenerations {
 		uri = fmt.Sprintf("%s/v1/video/async-generations/%s", baseURL, taskID)
 	}
@@ -561,7 +593,8 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	rawPayload := responsePayloadMap(respBody)
 	taskResult.TaskID = extractTaskIDForResult(resTask, rawPayload)
 
-	switch normalizeTaskStatus(extractTaskStatus(resTask, rawPayload)) {
+	rawStatus := extractTaskStatus(resTask, rawPayload)
+	switch normalizeTaskStatus(rawStatus) {
 	case "queued":
 		taskResult.Status = model.TaskStatusQueued
 	case "in_progress":
@@ -576,6 +609,12 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 			taskResult.Reason = "task failed"
 		}
 	default:
+		if strings.EqualFold(strings.TrimSpace(rawStatus), "unknown") &&
+			common.IsXJZVideoModel(taskcommon.DefaultString(resTask.Model, stringValue(taskResponsePayload(rawPayload), "model"))) &&
+			taskResult.TaskID != "" {
+			// The provider may need one poll cycle to expose a newly submitted job.
+			taskResult.Status = model.TaskStatusQueued
+		}
 	}
 	if progress := extractTaskProgress(resTask, rawPayload); progress > 0 && progress < 100 {
 		taskResult.Progress = fmt.Sprintf("%d%%", progress)

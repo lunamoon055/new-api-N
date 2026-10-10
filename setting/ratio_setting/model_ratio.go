@@ -417,6 +417,21 @@ func GetModelRatio(name string) (float64, bool, string) {
 	return ratio, true, name
 }
 
+// HasConfiguredModelRatio reports whether a ratio was explicitly configured
+// for the model. Unlike GetModelRatio, it does not treat the self-use fallback
+// ratio as a configured price.
+func HasConfiguredModelRatio(name string) bool {
+	name = FormatMatchingModelName(name)
+	if _, ok := modelRatioMap.Get(name); ok {
+		return true
+	}
+	if strings.HasSuffix(name, CompactModelSuffix) {
+		_, ok := modelRatioMap.Get(CompactWildcardModelKey)
+		return ok
+	}
+	return false
+}
+
 func DefaultModelRatio2JSONString() string {
 	jsonBytes, err := common.Marshal(defaultModelRatio)
 	if err != nil {

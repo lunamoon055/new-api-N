@@ -90,6 +90,9 @@ type channelTestLabRequest struct {
 
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
 	normalized := strings.TrimSpace(endpointType)
+	if common.IsXJZVideoModel(modelName) {
+		return string(constant.EndpointTypeOpenAIVideo)
+	}
 	if isLikelySanbaoChannel(channel) && !isChannelTestSanbaoEndpoint(normalized) {
 		if normalized == "" ||
 			normalized == string(constant.EndpointTypeImageGeneration) ||
@@ -244,6 +247,9 @@ func isChannelTestEmbeddingModel(channel *model.Channel, modelName string) bool 
 }
 
 func isChannelTestVideoModel(channel *model.Channel, modelName string) bool {
+	if common.IsXJZVideoModel(modelName) {
+		return true
+	}
 	modelName = strings.ToLower(strings.TrimSpace(modelName))
 	if isOpenAIAsyncVideoModelName(modelName) {
 		return true
@@ -1443,6 +1449,9 @@ func buildChannelTestRequest(model string, endpointType string, channel *model.C
 
 func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool) any {
 	testResponsesInput := json.RawMessage(`[{"role":"user","content":"hi"}]`)
+	if common.IsXJZVideoModel(model) {
+		return buildXJZVideoTestRequest(model)
+	}
 
 	// 根据端点类型构建不同的测试请求
 	if endpointType != "" {
@@ -1638,6 +1647,27 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	}
 
 	return testRequest
+}
+
+func buildXJZVideoTestRequest(modelName string) relaycommon.TaskSubmitReq {
+	request := relaycommon.TaskSubmitReq{
+		Model:    strings.TrimSpace(modelName),
+		Prompt:   "a short product video",
+		Ratio:    "16:9",
+		Duration: 5,
+	}
+	switch request.Model {
+	case "特价dola2.5-900-720P-固定30s", "特价稳sd-2.5-30s-720P可10图":
+		request.Duration = 30
+	case "TTP-grok":
+		request.Duration = 6
+		request.Resolution = "720p"
+	case "gz稳定sd2.5-720全参过脸", "gz稳定sd2.5-480全参过脸", "gz稳定sd2.5-1080全参过脸", "特价sd2.0-933-过脸":
+		request.Duration = 4
+	case "MiniMaxH3":
+		request.Duration = 4
+	}
+	return request
 }
 
 func channelTestVideoSize(modelName string) string {

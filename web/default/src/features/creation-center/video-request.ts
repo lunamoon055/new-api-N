@@ -23,12 +23,22 @@ import {
   type CreationVideoOptions,
   type CreationVideoReferences,
 } from './session'
+import { getXJZVideoModelSpec } from '@/features/media-generation/xjz-video-models'
 import type { CreationModel } from './types'
 
 export type CreationVideoSubmitRequest = {
-  endpoint: '/api/creation/video/async-generations' | '/pg/chat/completions'
+  endpoint:
+    | '/api/creation/video/async-generations'
+    | '/api/creation/videos'
+    | '/pg/chat/completions'
   payload: Record<string, unknown>
   transport: 'async-video' | 'prompt'
+}
+
+export function getCreationVideoEndpoint(modelId: string) {
+  return getXJZVideoModelSpec(modelId)
+    ? '/api/creation/videos'
+    : '/api/creation/video/async-generations'
 }
 
 export function buildCreationVideoSubmitRequest(params: {
@@ -79,7 +89,7 @@ export function buildCreationVideoSubmitRequest(params: {
   const { estimateSeconds: _estimateSeconds, ...requestPayload } =
     requestOptions
   return {
-    endpoint: '/api/creation/video/async-generations',
+    endpoint: getCreationVideoEndpoint(params.model.id),
     payload: {
       ...basePayload,
       ...requestPayload,

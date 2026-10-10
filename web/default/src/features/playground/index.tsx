@@ -195,6 +195,7 @@ export function Playground() {
           videoEndpoint={config.videoEndpoint}
           videoAspectRatio={config.videoAspectRatio}
           videoDuration={config.videoDuration}
+          videoResolution={config.videoResolution}
           chatEndpoint={config.chatEndpoint}
           extraBody={config.extraBody}
           models={models}
@@ -212,6 +213,9 @@ export function Playground() {
           }
           onVideoDurationChange={(value) =>
             updateConfig('videoDuration', value)
+          }
+          onVideoResolutionChange={(value) =>
+            updateConfig('videoResolution', value)
           }
           onChatEndpointChange={(value) => updateConfig('chatEndpoint', value)}
           onExtraBodyChange={(value) => updateConfig('extraBody', value)}

@@ -66,6 +66,7 @@ import {
   resolvePlaygroundMode,
   resolvePlaygroundVideoSelection,
 } from '../lib/media-routing'
+import { getXJZVideoModelSpec } from '@/features/media-generation/xjz-video-models'
 import type { ModelOption, GroupOption, PlaygroundConfig } from '../types'
 
 interface PlaygroundInputProps {
@@ -80,6 +81,7 @@ interface PlaygroundInputProps {
   videoEndpoint: PlaygroundConfig['videoEndpoint']
   videoAspectRatio: PlaygroundConfig['videoAspectRatio']
   videoDuration: PlaygroundConfig['videoDuration']
+  videoResolution: PlaygroundConfig['videoResolution']
   chatEndpoint: PlaygroundConfig['chatEndpoint']
   extraBody: string
   onModeChange: (value: PlaygroundConfig['mode']) => void
@@ -87,6 +89,7 @@ interface PlaygroundInputProps {
   onVideoEndpointChange: (value: PlaygroundConfig['videoEndpoint']) => void
   onVideoAspectRatioChange: (value: string) => void
   onVideoDurationChange: (value: string) => void
+  onVideoResolutionChange: (value: string) => void
   onChatEndpointChange: (value: PlaygroundConfig['chatEndpoint']) => void
   onExtraBodyChange: (value: string) => void
   onModelChange: (value: string) => void
@@ -117,6 +120,7 @@ export function PlaygroundInput({
   videoEndpoint,
   videoAspectRatio,
   videoDuration,
+  videoResolution,
   chatEndpoint,
   extraBody,
   onModeChange,
@@ -124,6 +128,7 @@ export function PlaygroundInput({
   onVideoEndpointChange,
   onVideoAspectRatioChange,
   onVideoDurationChange,
+  onVideoResolutionChange,
   onChatEndpointChange,
   onExtraBodyChange,
   onModelChange,
@@ -140,9 +145,11 @@ export function PlaygroundInput({
   const isGroupSelectDisabled = disabled || groups.length === 0
   const resolvedMode = resolvePlaygroundMode(modelValue, mode)
   const videoChoices = getPlaygroundVideoChoices(modelValue)
+  const xjzVideoSpec = getXJZVideoModelSpec(modelValue)
   const selectedVideo = resolvePlaygroundVideoSelection(modelValue, {
     aspectRatio: videoAspectRatio,
     duration: videoDuration,
+    resolution: videoResolution,
   })
 
   const handleSubmit = (message: PromptInputMessage) => {
@@ -226,7 +233,7 @@ export function PlaygroundInput({
                 {t('Video endpoint')}
               </Label>
               <Select
-                value={videoEndpoint}
+                value={xjzVideoSpec ? 'standard' : videoEndpoint}
                 onValueChange={(value) => {
                   if (value)
                     onVideoEndpointChange(
@@ -243,13 +250,17 @@ export function PlaygroundInput({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value='auto'>{t('Auto detect')}</SelectItem>
+                    {!xjzVideoSpec && (
+                      <SelectItem value='auto'>{t('Auto detect')}</SelectItem>
+                    )}
                     <SelectItem value='standard'>
                       {t('Video Generation')}
                     </SelectItem>
-                    <SelectItem value='async'>
-                      {t('Async Video Generation')}
-                    </SelectItem>
+                    {!xjzVideoSpec && (
+                      <SelectItem value='async'>
+                        {t('Async Video Generation')}
+                      </SelectItem>
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -279,6 +290,38 @@ export function PlaygroundInput({
                 </SelectContent>
               </Select>
             </Field>
+            {xjzVideoSpec?.selectableResolution && (
+              <Field className='w-auto min-w-28 gap-1.5'>
+                <FieldLabel htmlFor='playground-video-resolution'>
+                  {t('Resolution')}
+                </FieldLabel>
+                <Select
+                  value={
+                    selectedVideo.resolution ?? xjzVideoSpec.resolutions[0]
+                  }
+                  onValueChange={(value) => {
+                    if (value) onVideoResolutionChange(value)
+                  }}
+                  disabled={disabled}
+                >
+                  <SelectTrigger
+                    id='playground-video-resolution'
+                    className='min-w-28'
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {xjzVideoSpec.resolutions.map((resolution) => (
+                        <SelectItem key={resolution} value={resolution}>
+                          {resolution}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
             <Field className='w-auto min-w-28 gap-1.5'>
               <FieldLabel htmlFor='playground-video-duration'>
                 {t('Video duration')}

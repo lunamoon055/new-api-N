@@ -290,7 +290,10 @@ func CreationRelayVideo(c *gin.Context) {
 		respondCreationRelayError(c, newAPIError)
 		return
 	}
-	c.Request.URL.Path = "/v1/videos"
+	// Session-auth creation uses a temporary token with no quota of its own.
+	// The /pg path charges the user's wallet while GenRelayInfo still forwards
+	// the request as /v1/videos.
+	c.Request.URL.Path = "/pg/videos"
 	RelayTask(c)
 }
 
@@ -460,7 +463,9 @@ func buildCreationModelCatalogWithCategoriesAndMetadata(
 		mode, hasManualMode := getManualCreationModelMode(item.ModelName, manualCategories)
 		ok := hasManualMode
 		if !hasManualMode {
-			if providerMode, hasProviderMode := getCreationModelModeFromProviderMetadata(providerMeta); hasProviderMode {
+			if common.IsXJZVideoModel(item.ModelName) {
+				mode, ok = creationModeVideo, true
+			} else if providerMode, hasProviderMode := getCreationModelModeFromProviderMetadata(providerMeta); hasProviderMode {
 				mode, ok = providerMode, true
 			} else {
 				mode, ok = getCreationModelMode(item.ModelName, item.SupportedEndpointTypes)
@@ -950,6 +955,22 @@ func buildCreationModelCost(item model.Pricing, groupRatio float64) *dto.Creatio
 		groupRatio = 1
 	}
 	videoBillingMode := billing_setting.GetVideoBillingMode(item.ModelName)
+	if common.IsXJZPerCallVideoModel(item.ModelName) {
+		if videoBillingMode != billing_setting.VideoBillingModeFixed &&
+			videoBillingMode != billing_setting.VideoBillingModeTieredRequest {
+			return nil
+		}
+		if videoBillingMode == billing_setting.VideoBillingModeFixed {
+			if _, configured := ratio_setting.GetModelPrice(item.ModelName, false); !configured {
+				return nil
+			}
+		}
+		if videoBillingMode == billing_setting.VideoBillingModeTieredRequest {
+			if _, configured := billing_setting.GetVideoResolutionPrices(item.ModelName); !configured {
+				return nil
+			}
+		}
+	}
 	if billing_setting.IsVideoResolutionTierMode(videoBillingMode) {
 		if prices, ok := billing_setting.GetVideoResolutionPrices(item.ModelName); ok {
 			return &dto.CreationModelCost{
@@ -965,6 +986,17 @@ func buildCreationModelCost(item model.Pricing, groupRatio float64) *dto.Creatio
 		return &dto.CreationModelCost{
 			BillingMode: creationCostModeDynamic,
 			GroupRatio:  groupRatio,
+		}
+	}
+	if common.IsXJZVideoModel(item.ModelName) {
+		// A self-use fallback ratio is not an explicit video price. Leave the
+		// cost absent until an administrator configures this exact model ID.
+		if item.QuotaType == 1 {
+			if _, configured := ratio_setting.GetModelPrice(item.ModelName, false); !configured {
+				return nil
+			}
+		} else if !ratio_setting.HasConfiguredModelRatio(item.ModelName) {
+			return nil
 		}
 	}
 	if item.QuotaType == 1 {
@@ -1180,6 +1212,9 @@ func parseCreationModelOrder(raw string) (map[string][]string, error) {
 }
 
 func getCreationModelMode(modelName string, endpoints []constant.EndpointType) (string, bool) {
+	if common.IsXJZVideoModel(modelName) {
+		return creationModeVideo, true
+	}
 	if metadata := getCreationModelMetadata(modelName); metadata.Mode != "" {
 		return metadata.Mode, true
 	}
@@ -1216,6 +1251,13 @@ func getCreationModelMode(modelName string, endpoints []constant.EndpointType) (
 }
 
 func getCreationModelMetadata(modelName string) creationModelMetadata {
+	if common.IsXJZVideoModel(modelName) {
+		return creationModelMetadata{
+			Mode:        creationModeVideo,
+			Description: "用于异步视频生成和媒体创作。",
+			Tags:        []string{"video", "async"},
+		}
+	}
 	modelName = normalizeCreationModelName(modelName)
 	if metadata, ok := creationModelMetadataByName[modelName]; ok {
 		return metadata

@@ -24,6 +24,25 @@ type videoPollingHTTPErrorAdaptor struct {
 	parseCalled bool
 }
 
+type videoPollingUnknownStatusAdaptor struct{}
+
+func (a *videoPollingUnknownStatusAdaptor) Init(_ *relaycommon.RelayInfo) {}
+
+func (a *videoPollingUnknownStatusAdaptor) FetchTask(string, string, map[string]any, string) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{"id":"task_upstream","status":"unknown","progress":0}`)),
+	}, nil
+}
+
+func (a *videoPollingUnknownStatusAdaptor) ParseTaskResult([]byte) (*relaycommon.TaskInfo, error) {
+	return &relaycommon.TaskInfo{TaskID: "task_upstream"}, nil
+}
+
+func (a *videoPollingUnknownStatusAdaptor) AdjustBillingOnComplete(*model.Task, *relaycommon.TaskInfo) int {
+	return 0
+}
+
 func (a *videoPollingHTTPErrorAdaptor) Init(_ *relaycommon.RelayInfo) {}
 
 func (a *videoPollingHTTPErrorAdaptor) FetchTask(string, string, map[string]any, string) (*http.Response, error) {
@@ -103,6 +122,29 @@ func TestUpdateVideoSingleTaskDoesNotFailTaskOnPollingHTTPError(t *testing.T) {
 	require.False(t, adaptor.parseCalled)
 	require.Equal(t, model.TaskStatus(model.TaskStatusInProgress), task.Status)
 	require.Equal(t, "30%", task.Progress)
+	require.Empty(t, task.FailReason)
+}
+
+func TestUpdateVideoSingleTaskRetriesUnknownUpstreamStatus(t *testing.T) {
+	task := &model.Task{
+		TaskID:   "task_public",
+		Status:   model.TaskStatusQueued,
+		Progress: "0%",
+		Quota:    1_875_000,
+		PrivateData: model.TaskPrivateData{
+			UpstreamTaskID: "task_upstream",
+		},
+	}
+	err := updateVideoSingleTask(
+		context.Background(),
+		&videoPollingUnknownStatusAdaptor{},
+		&model.Channel{Type: constant.ChannelTypeOpenAI, Key: "sk-test"},
+		"task_upstream",
+		map[string]*model.Task{"task_upstream": task},
+	)
+	require.NoError(t, err)
+	require.Equal(t, model.TaskStatus(model.TaskStatusQueued), task.Status)
+	require.Equal(t, 1_875_000, task.Quota)
 	require.Empty(t, task.FailReason)
 }
 

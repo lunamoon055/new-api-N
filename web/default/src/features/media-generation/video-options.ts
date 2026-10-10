@@ -17,16 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+import { getXJZVideoModelSpec } from './xjz-video-models'
+
 export type CreationResolution = '480p' | '720p' | '1080p' | '2k' | '4k'
 export type CreationAspectRatio = string
 export type CreationDuration = string
 export type CreationVideoReferenceMode =
-  | 'text'
-  | 'image'
-  | 'video'
-  | 'multimodal'
-  | 'frames'
-  | 'image-audio'
+  'text' | 'image' | 'video' | 'multimodal' | 'frames' | 'image-audio'
 type Sora2AspectRatio = '9:16' | '16:9'
 
 export type CreationVideoOptions = {
@@ -105,7 +102,7 @@ export type CreationVideoReferenceLimits = {
 }
 
 export type CreationVideoCapability = {
-  kind: 'sora2' | 'video2' | 'videos' | 'sanbao' | 'minimax-h3'
+  kind: 'sora2' | 'video2' | 'videos' | 'sanbao' | 'minimax-h3' | 'xjz'
   durations: string[]
   resolutions: CreationResolution[]
   aspectRatios: CreationAspectRatio[]
@@ -192,12 +189,21 @@ type VideosApiCreationVideoRequestOptions = {
   end_image_url?: string
 }
 
+type XJZCreationVideoRequestOptions = {
+  duration: number
+  ratio: CreationAspectRatio
+  resolution: string
+  estimateSeconds: number
+  [key: string]: unknown
+}
+
 export type CreationVideoRequestOptions =
   | LegacyCreationVideoRequestOptions
   | Video2CreationVideoRequestOptions
   | MiniMaxH3CreationVideoRequestOptions
   | SanbaoCreationVideoRequestOptions
   | VideosApiCreationVideoRequestOptions
+  | XJZCreationVideoRequestOptions
 
 export const CREATION_VIDEO_IMAGE_REFERENCE_MAX_COUNT = 4
 export const CREATION_VIDEO_IMAGE_REFERENCE_MAX_BYTES = 20 * 1024 * 1024
@@ -770,6 +776,35 @@ function getSanbaoVideoCapability(
   }
 }
 
+function getXJZVideoCapability(
+  model?: CreationModelInput
+): CreationVideoCapability | undefined {
+  const spec = getXJZVideoModelSpec(getModelId(model))
+  if (!spec) return undefined
+  const maxAssetBytes = 10 * 1024 * 1024
+  return {
+    kind: 'xjz',
+    durations: spec.durations,
+    resolutions: spec.resolutions,
+    aspectRatios: spec.ratios,
+    referenceModes: spec.referenceModes,
+    showResolution: Boolean(spec.selectableResolution),
+    includeResolutionInRequest: true,
+    durationControl: 'select',
+    referenceLimits: {
+      maxImages: spec.maxImages,
+      maxVideos: spec.maxVideos,
+      maxAudios: spec.maxAudios,
+      maxImageSizeBytes: maxAssetBytes,
+      maxVideoSizeBytes: maxAssetBytes,
+      maxAudioSizeBytes: maxAssetBytes,
+      maxImageSizeMB: 10,
+      maxVideoSizeMB: 10,
+      maxAudioSizeMB: 10,
+    },
+  }
+}
+
 function getResolutionOption(value: CreationResolution): ResolutionOption {
   const known = [
     ...CREATION_RESOLUTION_OPTIONS,
@@ -800,6 +835,8 @@ export function isVideo2Model(model?: CreationModelInput) {
 }
 
 export function getCreationVideoCapabilities(model?: CreationModelInput) {
+  const xjzCapability = getXJZVideoCapability(model)
+  if (xjzCapability) return xjzCapability
   const sanbaoCapability = getSanbaoVideoCapability(model)
   if (sanbaoCapability) return sanbaoCapability
 
@@ -824,6 +861,9 @@ export function getCreationPromptMaxLength(model?: CreationModelInput) {
 
 export function getCreationResolutionOptions(model?: CreationModelInput) {
   const capability = getCreationVideoCapabilities(model)
+  if (capability?.kind === 'xjz') {
+    return capability.resolutions.map(getResolutionOption)
+  }
   if (capability?.kind === 'sanbao' && capability.resolutions.length) {
     return capability.resolutions.map(getResolutionOption)
   }
@@ -849,6 +889,9 @@ export function getCreationResolutionOptions(model?: CreationModelInput) {
 
 export function getCreationDurationOptions(model?: CreationModelInput) {
   const capability = getCreationVideoCapabilities(model)
+  if (capability?.kind === 'xjz') {
+    return capability.durations.map(getDurationOption)
+  }
   if (capability?.kind === 'sanbao' && capability.durations.length) {
     return capability.durations.map(getDurationOption)
   }
@@ -912,7 +955,11 @@ export function getCreationVideoOptionsError(
     !Number.isInteger(duration) ||
     !capability?.durations.includes(String(duration))
   ) {
-    if (capability?.kind === 'sanbao' || capability?.kind === 'minimax-h3') {
+    if (
+      capability?.kind === 'sanbao' ||
+      capability?.kind === 'minimax-h3' ||
+      capability?.kind === 'xjz'
+    ) {
       return 'This model does not support the selected duration.'
     }
     if (isSeedance25Model(model)) {
@@ -1297,6 +1344,20 @@ export function getCreationVideoReferenceError(
     (normalized.endImageUrl ? 1 : 0)
   const audioCount = normalized.audioUrls.length
   const referenceLimits = capability.referenceLimits
+  const xjzSpec =
+    capability.kind === 'xjz'
+      ? getXJZVideoModelSpec(getModelId(model))
+      : undefined
+  if (xjzSpec?.minImages && imageCount < xjzSpec.minImages) {
+    return 'Image reference mode requires at least one image reference.'
+  }
+  if (
+    xjzSpec?.audioNeedsVisualReference &&
+    audioCount > 0 &&
+    imageCount + normalized.videoUrls.length === 0
+  ) {
+    return 'Audio reference requires at least one image reference.'
+  }
   if (
     capability.kind === 'minimax-h3' &&
     normalized.referenceMode === 'image' &&
@@ -1330,6 +1391,9 @@ export function getCreationVideoReferenceError(
     return 'Sora2 accepts at most 1 reference image.'
   }
   if (imageCount > referenceLimits.maxImages) {
+    if (capability.kind === 'xjz') {
+      return 'Videos API accepts too many reference assets.'
+    }
     if (capability.kind === 'sanbao') {
       return 'Sanbao accepts too many reference images.'
     }
@@ -1351,6 +1415,9 @@ export function getCreationVideoReferenceError(
     return 'Video2 accepts at most 4 image references.'
   }
   if (normalized.videoUrls.length > referenceLimits.maxVideos) {
+    if (capability.kind === 'xjz') {
+      return 'Videos API accepts too many reference assets.'
+    }
     if (capability.kind === 'sanbao') {
       return 'Sanbao accepts too many reference videos.'
     }
@@ -1369,6 +1436,9 @@ export function getCreationVideoReferenceError(
     return 'Video2 accepts at most 3 video references.'
   }
   if (audioCount > referenceLimits.maxAudios) {
+    if (capability.kind === 'xjz') {
+      return 'Videos API accepts too many reference assets.'
+    }
     if (capability.kind === 'videos') {
       if (isSeedance25Model(model)) {
         return 'Seedance 2.5 accepts at most 10 reference audios.'
@@ -1645,6 +1715,45 @@ export function getCreationVideoRequestOptions(
   const audioUrls = normalizedReferences.audioUrls
     .map(getCreationReferenceURL)
     .filter(Boolean)
+
+  if (capability.kind === 'xjz') {
+    const spec = getXJZVideoModelSpec(getModelId(model))
+    if (!spec) throw new Error('Missing XJZ video model capability')
+    const request: XJZCreationVideoRequestOptions = {
+      duration: Number(normalizedOptions.duration),
+      ratio: normalizedOptions.aspectRatio ?? capability.aspectRatios[0],
+      resolution: spec.selectableResolution
+        ? normalizedOptions.resolution
+        : (spec.requestResolution ?? normalizedOptions.resolution),
+      estimateSeconds: duration.estimateSeconds,
+    }
+    if (spec.imageField && imageUrls.length) {
+      if (spec.allowFrames) {
+        request[imageUrls.length === 1 ? 'image_url' : 'image_urls'] =
+          imageUrls.length === 1 ? imageUrls[0] : imageUrls
+      } else {
+        request[spec.imageField] = imageUrls
+      }
+    }
+    if (spec.videoField && videoUrls.length)
+      request[spec.videoField] = videoUrls
+    if (spec.audioField && audioUrls.length) {
+      if (spec.audioField === 'audio_reference' && audioUrls.length === 1) {
+        request.audio_url = audioUrls[0]
+      } else {
+        request[spec.audioField] = audioUrls
+      }
+    }
+    if (normalizedReferences.referenceMode === 'frames') {
+      if (normalizedReferences.startImageUrl) {
+        request.start_image_url = normalizedReferences.startImageUrl
+      }
+      if (normalizedReferences.endImageUrl) {
+        request.end_image_url = normalizedReferences.endImageUrl
+      }
+    }
+    return request
+  }
 
   if (capability.kind === 'videos') {
     const request: VideosApiCreationVideoRequestOptions = {

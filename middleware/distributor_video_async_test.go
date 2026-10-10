@@ -8,7 +8,9 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -113,4 +115,15 @@ func TestCreationImageFetchConvertersKeepLegacyAndAsyncPathsSeparate(t *testing.
 	CreationImageTaskFetchConvert()(async)
 	require.Equal(t, "/v1/images/async-generations/task_async", async.Request.URL.Path)
 	require.Equal(t, relayconstant.RelayModeImageFetchByID, async.GetInt("relay_mode"))
+}
+
+func TestCreationVideoSubmitUsesSessionBillingWithoutTokenQuota(t *testing.T) {
+	c := newDistributorTestContext(http.MethodPost, "/api/creation/videos", `{"model":"TTP-grok","prompt":"test"}`)
+	CreationVideoRequestConvert()(c)
+
+	info, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
+	require.NoError(t, err)
+	require.True(t, info.IsPlayground)
+	require.Equal(t, "/v1/videos", info.RequestURLPath)
+	require.Equal(t, relayconstant.RelayModeVideoSubmit, info.RelayMode)
 }

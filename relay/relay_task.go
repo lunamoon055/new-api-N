@@ -22,6 +22,8 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -156,11 +158,12 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if adaptor == nil {
 		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("invalid api platform: %s", platform), "invalid_api_platform", http.StatusBadRequest)
 	}
-	// 异步图片可使用公开别名：先解析本次渠道映射，再按实际上游模型校验能力。
+	// 异步图片和 XJZ 视频可使用公开别名：先解析本次渠道映射，再按实际上游模型校验能力。
 	// 每次重试 InitChannelMeta 都重置快照，不能复用上一个渠道的映射结果。
 	imageModelMapped := strings.HasPrefix(info.RequestURLPath, "/v1/images/async-generations") &&
 		common.IsBaseURLHost(info.ChannelBaseUrl, common.LinkskyProviderHost)
-	if imageModelMapped {
+	taskModelMapped := imageModelMapped || common.IsBaseURLHost(info.ChannelBaseUrl, "api.xjzapi.cc")
+	if taskModelMapped {
 		info.UpstreamModelName = info.OriginModelName
 		if err := helper.ModelMappedHelper(c, info, nil); err != nil {
 			return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
@@ -179,7 +182,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 
 	// 2.5 应用渠道的模型映射（与同步任务对齐）
 	info.OriginModelName = modelName
-	if !imageModelMapped {
+	if !taskModelMapped {
 		info.UpstreamModelName = modelName
 		if err := helper.ModelMappedHelper(c, info, nil); err != nil {
 			return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
@@ -221,6 +224,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		if err := applyVideoResolutionTierPrice(c, info, &info.PriceData, videoBillingMode, resolutionPrices); err != nil {
 			return nil, service.TaskErrorWrapperLocal(err, "invalid_billing_config", http.StatusBadRequest)
 		}
+	}
+	if err := ensureTaskBillingConfigured(info, info.PriceData, videoBillingMode); err != nil {
+		return nil, service.TaskErrorWrapperLocal(err, "model_price_error", http.StatusBadRequest)
 	}
 
 	// 6. 将 OtherRatios 应用到基础额度。固定视频计费模式会保留参数但不叠加倍率。
@@ -295,6 +301,32 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		Platform:       platform,
 		Quota:          finalQuota,
 	}, nil
+}
+
+// Task requests can multiply the self-use fallback ratio by duration. Guard
+// playground requests and the exact XJZ video models after tier pricing has
+// had a chance to supply an explicit price.
+func ensureTaskBillingConfigured(info *relaycommon.RelayInfo, priceData types.PriceData, videoBillingMode string) error {
+	if info == nil {
+		return nil
+	}
+	xjzModel := info.OriginModelName
+	if info.ChannelMeta != nil && common.IsXJZVideoModel(info.UpstreamModelName) {
+		xjzModel = info.UpstreamModelName
+	}
+	if common.IsXJZPerCallVideoModel(xjzModel) {
+		if !priceData.UsePrice || (videoBillingMode != billing_setting.VideoBillingModeFixed && videoBillingMode != billing_setting.VideoBillingModeTieredRequest) {
+			return fmt.Errorf("模型 %s 按次计费，请配置按次价格和 fixed 或 tiered_request 计费模式", info.OriginModelName)
+		}
+		return nil
+	}
+	if priceData.UsePrice || ratio_setting.HasConfiguredModelRatio(info.OriginModelName) {
+		return nil
+	}
+	if !info.IsPlayground && !common.IsXJZVideoModel(xjzModel) {
+		return nil
+	}
+	return fmt.Errorf("模型 %s 未配置价格或倍率，请按完整模型名配置定价后再使用", info.OriginModelName)
 }
 
 func ensurePersistentTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo, platform constant.TaskPlatform) (*model.Task, error) {

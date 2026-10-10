@@ -46,6 +46,7 @@ import type {
 import {
   buildCreationVideoSubmitRequest,
   extractPromptVideoURL,
+  getCreationVideoEndpoint,
 } from './video-request'
 
 const CREATION_MODEL_CATEGORIES_OPTION_KEY = 'CreationModelCategories'
@@ -216,8 +217,9 @@ export async function getCreationVideoTask(params: {
   taskId: string
   model: string
 }): Promise<CreationResult> {
+  const path = getCreationVideoEndpoint(params.model)
   const response = await api.get(
-    `/api/creation/video/async-generations/${encodeURIComponent(params.taskId)}`,
+    `${path}/${encodeURIComponent(params.taskId)}`,
     { skipErrorHandler: true, disableDuplicate: true } as Record<
       string,
       unknown

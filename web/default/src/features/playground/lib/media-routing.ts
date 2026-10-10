@@ -31,8 +31,10 @@ import {
   getCreationVideoCapabilities,
   getCreationDurationOptions,
   getCreationVideoRequestOptions,
+  type CreationResolution,
   type CreationVideoRequestOptions,
 } from '@/features/media-generation/video-options'
+import { getXJZVideoModelSpec } from '@/features/media-generation/xjz-video-models'
 import { t } from 'i18next'
 import { API_ENDPOINTS, MESSAGE_ROLES } from '../constants'
 import type { Message } from '../types'
@@ -44,6 +46,7 @@ export type PlaygroundVideoEndpoint = 'auto' | 'standard' | 'async'
 export type PlaygroundVideoSelection = {
   aspectRatio: string
   duration: string
+  resolution?: string
 }
 
 const FALLBACK_VIDEO_RATIOS = ['16:9', '9:16', '1:1']
@@ -97,7 +100,7 @@ export function resolvePlaygroundVideoSelection(
   const choices = getPlaygroundVideoChoices(model)
   const preferredDuration =
     selection.duration || DEFAULT_CREATION_VIDEO_OPTIONS.duration
-  return {
+  const resolved = {
     aspectRatio: choices.aspectRatios.includes(selection.aspectRatio)
       ? selection.aspectRatio
       : choices.aspectRatios[0],
@@ -105,6 +108,18 @@ export function resolvePlaygroundVideoSelection(
       ? preferredDuration
       : choices.durations[0],
   }
+  const spec = getXJZVideoModelSpec(model)
+  if (spec?.selectableResolution) {
+    return {
+      ...resolved,
+      resolution: spec.resolutions.includes(
+        selection.resolution as CreationResolution
+      )
+        ? selection.resolution
+        : spec.resolutions[0],
+    }
+  }
+  return resolved
 }
 
 export type PlaygroundImageRequest = {
@@ -123,8 +138,7 @@ export type PlaygroundVideoRequest = {
 } & WithoutEstimate<CreationVideoRequestOptions>
 
 export type PlaygroundMediaRequest =
-  | PlaygroundImageRequest
-  | PlaygroundVideoRequest
+  PlaygroundImageRequest | PlaygroundVideoRequest
 
 export type PlaygroundMediaResult = {
   mode: Exclude<PlaygroundMediaMode, 'chat'>
@@ -156,6 +170,7 @@ const VIDEO_MODEL_NAMES = new Set([
 const IMAGE_MODEL_NAMES = new Set(['gpt-image2', 'seedream-5-0'])
 
 export function getPlaygroundModelMode(model: string): PlaygroundMediaMode {
+  if (getXJZVideoModelSpec(model)) return 'video'
   const normalizedModel = normalizeModelName(model)
   if (!normalizedModel) return 'chat'
 
@@ -227,6 +242,7 @@ export function getPlaygroundMediaEndpoint(
         ? API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
         : API_ENDPOINTS.IMAGE_GENERATIONS
     case 'video':
+      if (getXJZVideoModelSpec(model)) return API_ENDPOINTS.VIDEO_GENERATIONS
       return videoEndpoint === 'standard'
         ? API_ENDPOINTS.VIDEO_GENERATIONS
         : API_ENDPOINTS.VIDEO_ASYNC_GENERATIONS
@@ -277,6 +293,9 @@ export function buildPlaygroundMediaRequest(
       ...DEFAULT_CREATION_VIDEO_OPTIONS,
       duration: selectedVideo.duration,
       aspectRatio: selectedVideo.aspectRatio,
+      resolution:
+        (selectedVideo.resolution as CreationResolution | undefined) ??
+        DEFAULT_CREATION_VIDEO_OPTIONS.resolution,
     },
     model
   )

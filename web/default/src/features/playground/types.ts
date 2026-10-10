@@ -124,6 +124,7 @@ export interface PlaygroundConfig {
   videoEndpoint: 'auto' | 'standard' | 'async'
   videoAspectRatio: string
   videoDuration: string
+  videoResolution: string
   chatEndpoint: 'completions' | 'responses'
   extraBody: string
   temperature: number

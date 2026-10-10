@@ -10,7 +10,7 @@ import (
 
 // ReserveWalletQuota conditionally reserves wallet quota and, for normal relay
 // requests, token quota in the same database transaction. withToken is false
-// only for playground requests, which do not consume token quota.
+// for session-auth playground and creation requests, which have no API token.
 func ReserveWalletQuota(userId, tokenId int, tokenKey string, quota int, withToken bool) error {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")

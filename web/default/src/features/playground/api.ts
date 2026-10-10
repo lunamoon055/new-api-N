@@ -91,6 +91,7 @@ export async function sendPlaygroundMediaGeneration(
     {
       aspectRatio: config.videoAspectRatio,
       duration: config.videoDuration,
+      resolution: config.videoResolution,
     }
   )
   if (!endpoint || !payload) {

@@ -477,24 +477,23 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 	now := time.Now().Unix()
 	if taskResult.Status == "" {
-		//taskResult = relaycommon.FailTaskInfo("upstream returned empty status")
 		errorResult := &dto.GeneralErrorResponse{}
-		if err = common.Unmarshal(responseBody, &errorResult); err == nil {
-			openaiError := errorResult.TryToOpenAIError()
-			if openaiError != nil {
-				// 返回规范的 OpenAI 错误格式，提取错误信息，判断错误是否为任务失败
-				if openaiError.Code == "429" {
-					// 429 错误通常表示请求过多或速率限制，暂时不认为是任务失败，保持原状态等待下一轮轮询
-					return nil
-				}
-
-				// 其他错误认为是任务失败，原始上游消息只进入私有诊断字段。
-				taskResult = relaycommon.FailTaskInfo(openaiError.Message)
-			} else {
-				logger.LogError(ctx, fmt.Sprintf("Task %s returned empty status with unrecognized error format, body_bytes=%d", taskId, len(responseBody)))
-				taskResult = relaycommon.FailTaskInfo(string(responseBody))
-			}
+		if err = common.Unmarshal(responseBody, &errorResult); err != nil {
+			return fmt.Errorf("task %s returned an unrecognized polling response: %w", taskId, err)
 		}
+		openaiError := errorResult.TryToOpenAIError()
+		if openaiError == nil {
+			// An accepted job may temporarily have an unknown/empty status.
+			// Only an explicit task failure may end it; timeout handles jobs
+			// that never acquire a recognizable state.
+			logger.LogWarn(ctx, fmt.Sprintf("Task %s returned no recognized status, body_bytes=%d; retrying", taskId, len(responseBody)))
+			return nil
+		}
+		if openaiError.Code == "429" {
+			return nil
+		}
+		// Preserve explicit task errors as failures.
+		taskResult = relaycommon.FailTaskInfo(openaiError.Message)
 	}
 
 	billingReason := ""

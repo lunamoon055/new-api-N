@@ -131,6 +131,13 @@ func TestTranslateVideoTaskErrorMappings(t *testing.T) {
 			expected:   "视频渠道鉴权失败，请联系管理员检查 API 密钥。",
 		},
 		{
+			name:       "local token quota is not upstream authentication",
+			raw:        "token quota is not enough, need quota: $3.75: insufficient token quota",
+			code:       "pre_consume_token_quota_failed",
+			statusCode: http.StatusForbidden,
+			expected:   "API 令牌额度不足，请检查令牌额度。",
+		},
+		{
 			name:       "rate limit",
 			raw:        "too many requests",
 			statusCode: http.StatusTooManyRequests,
