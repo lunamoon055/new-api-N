@@ -32,8 +32,10 @@ final result: passed
 
 ## 验证
 
+- 2026-10-11 鉴权修复：生产环境 `/api/pricing` 可设为登录可见；独立文档页原先没有主站使用的 `New-Api-User` 请求头，因而即使浏览器登录也会收到 401。现在同源请求携带 Cookie 和该请求头，并区分 401 与 403 文案。
+- 本地鉴权夹具实测：无登录凭据时显示 401 提示；模拟同源会话及用户 ID 后，页面成功展示 2 个模型、启用复制全部按钮并出现调用示例。此验证不等同于远端生产部署。
 - 原型 Vite 构建成功；网站 Rsbuild 构建与 TypeScript `tsc -b` 成功。
-- 模型目录与批量文本的 2 个定向测试通过，覆盖模型移除、空列表、去重、待核对标记与三种语言示例。
+- 模型目录、鉴权请求头与批量文本的 3 个定向测试通过，覆盖模型移除、空列表、去重、待核对标记与三种语言示例；Sites 打包测试 4 个通过。
 - 本地站点 `http://localhost:3001/docs` 显示页面；`/docs/model-integration.html` 返回 HTML。当前网站展示 29 个模型。
 - 浏览器验证删除三步区块、复制按钮、导航入口；控制台 error 为空。
 - 单文件复制到 `docs/model-integration.html` 和 `web/default/public/docs/model-integration.html`。内置模型快照已从源代码移除。

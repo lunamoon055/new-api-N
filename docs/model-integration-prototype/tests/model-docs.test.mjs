@@ -2,6 +2,17 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { normalizeCatalog, resolveSelectedModel } from '../src/model-catalog.js'
 import { getAllModelDocs } from '../src/all-model-docs.js'
+import { getCatalogHttpError, getPricingRequestHeaders } from '../src/catalog-auth.js'
+
+test('pricing requests send the logged-in site user ID header', () => {
+  const storage = { getItem: (key) => key === 'uid' ? '42' : null }
+  assert.deepEqual(getPricingRequestHeaders(storage), { 'New-Api-User': '42' })
+  assert.deepEqual(getPricingRequestHeaders({ getItem: () => null }), {})
+  assert.deepEqual(getPricingRequestHeaders({ getItem: () => 'invalid\nvalue' }), {})
+  assert.deepEqual(getPricingRequestHeaders({ getItem: () => { throw new Error('blocked') } }), {})
+  assert.match(getCatalogHttpError(401), /鉴权失败/)
+  assert.match(getCatalogHttpError(403), /无权访问/)
+})
 
 test('live catalog is authoritative, including removed, empty and duplicate entries', () => {
   const old = normalizeCatalog({ success: true, data: [{ model_name: 'gpt-image-2' }, { model_name: 'nano-banana2' }] })

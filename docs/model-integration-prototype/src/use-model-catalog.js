@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { normalizeCatalog, resolveSelectedModel } from './model-catalog.js'
+import { getCatalogHttpError, getPricingRequestHeaders } from './catalog-auth.js'
 
 export function useModelCatalog() {
   const [catalog, setCatalog] = useState({ models: [], endpoints: {} })
@@ -21,9 +22,12 @@ export function useModelCatalog() {
         throw new Error('请从网站的文档入口打开，以读取实时模型列表。')
       }
       const response = await fetch('/api/pricing', {
-        credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
+        credentials: 'same-origin',
+        headers: getPricingRequestHeaders(),
+        cache: 'no-store',
+        signal: controller.signal,
       })
-      if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? '模型列表需要登录，请登录网站后重试。' : '暂时无法读取网站模型列表，请重试。')
+      if (!response.ok) throw new Error(getCatalogHttpError(response.status))
       const next = normalizeCatalog(await response.json())
       if (request.current !== controller) return
       setCatalog(next)

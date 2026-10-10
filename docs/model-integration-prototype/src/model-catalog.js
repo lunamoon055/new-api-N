@@ -1,4 +1,4 @@
-// The current site's public model square is the only directory source.
+// The current site's model square is the only directory source.
 // Local documentation enriches matching IDs; it never adds directory entries.
 export function normalizeCatalog(payload) {
   if (!payload?.success || !Array.isArray(payload.data)) {

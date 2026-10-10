@@ -1,4 +1,4 @@
-// The public catalog comes from /api/pricing. These exact-name additions only
+// The live catalog comes from /api/pricing. These exact-name additions only
 // cover endpoint families documented in this repository; they do not imply that
 // a particular token can use a model or that upstream generation was tested.
 
