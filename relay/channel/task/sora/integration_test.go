@@ -21,7 +21,7 @@ func TestMappedVideoContractsValidateAndBuildUpstreamRequest(t *testing.T) {
 		{"Seedance2.5-c", "sd-2.5-c1", "https://api.meaicc.com", "480p", 29, false},
 		{"官方h3-2k", "特价/官方h3-2k", "https://upstream.example", "2k", 15, false},
 		{"官方h3-1080p", "特价/官方h3-1080p", "https://upstream.example", "1080p", 15, false},
-		{"wan3.0(图片+音频参考)", "特价/wan3.0-image", "https://upstream.example", "", 5, true},
+		{"wan3.0(图片+音频参考)", "特价/wan3.0-image", "https://upstream.example", "1080p", 30, true},
 		{"sd2.5(满血原生过脸30-10-10/480P)", "全能sd2.5(满血原生过脸30-10-10/480P)", "https://upstream.example", "480p", 30, false},
 		{"sd2.5-720p(9图30秒小几率卡脸内置彩绘过脸)", "特价稳定sd2.5-720p-ch1(9图30秒小几率卡脸内置彩绘过脸)", "https://upstream.example", "720p", 30, false},
 		{"sd2.0(9-3-3/4-15秒原生不卡脸720P)", "003系列/sd2.0(9-3-3/4-15秒原生不卡脸720P)", "https://upstream.example", "720p", 15, false},

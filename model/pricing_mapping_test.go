@@ -89,6 +89,23 @@ func TestPricingImageContractUsesOutputResolutionAndProviderReferenceLimits(t *t
 	}
 }
 
+func TestMappedWANImageContractIncludesAllDocumentedResolutions(t *testing.T) {
+	endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "特价/wan3.0-image", "wan3.0(图片+音频参考)", nil)
+	require.Len(t, endpoints, 1)
+	require.Equal(t, "/v1/videos", endpoints[0].Path)
+	p := endpoints[0].Parameters
+	require.Equal(t, 2, p.Durations[0])
+	require.Equal(t, 30, p.Durations[len(p.Durations)-1])
+	require.Equal(t, []string{"720p", "480p", "1080p"}, p.Resolutions)
+	require.Equal(t, "resolution", p.ResolutionField)
+	require.Equal(t, 1, p.MinImages)
+	require.Equal(t, 10, p.MaxImages)
+	require.Equal(t, 0, p.MaxVideos)
+	require.Equal(t, 5, p.MaxAudios)
+	// Other providers and fixed XJZ models retain their own contracts.
+	require.Equal(t, []string{"720p"}, common.GetVideoIntegrationParameters("gz稳定sd2.0-903-720P").Resolutions)
+}
+
 func TestMappedPricingEndpointsForOnlineVideoCatalog(t *testing.T) {
 	tests := []struct {
 		public   string

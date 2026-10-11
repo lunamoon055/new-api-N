@@ -102,9 +102,11 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 			p.MaxVideos = 0
 		}
 	case strings.HasPrefix(name, "wan3.0(") || strings.HasPrefix(name, "wan3.0-image"):
-		// The upstream image variant requires an image; do not submit a text-only request.
-		p.MinImages, p.MaxVideos = 1, 0
-		p.Resolutions, p.ResolutionField = nil, ""
+		// Suanli's image variant supports 2-30 seconds and three explicit tiers.
+		p.Durations = integrationDurationRange(2, 30)
+		p.Resolutions = []string{"720p", "480p", "1080p"}
+		p.MinImages, p.MaxImages, p.MaxVideos, p.MaxAudios = 1, 10, 0, 5
+		p.AudioNeedsImage = true
 	default:
 		return nil
 	}
