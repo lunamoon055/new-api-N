@@ -53,6 +53,60 @@ func TestMappedPricingEndpointFollowsFinalUpstreamModel(t *testing.T) {
 	require.Equal(t, "/v1/images/generations", imageEndpoint.Path)
 }
 
+func TestMappedPricingEndpointsForOnlineVideoCatalog(t *testing.T) {
+	tests := []struct {
+		public   string
+		upstream string
+	}{
+		{"官方h3-1080p", "特价/官方h3-1080p"},
+		{"官方h3-2k", "特价/官方h3-2k"},
+		{"wan3.0(图片+音频参考)", "特价/wan3.0-image"},
+		{"sd2.5(满血原生过脸30-10-10/480P)", "全能sd2.5(满血原生过脸30-10-10/480P)"},
+		{"sd2.0(9-3-3/4-15秒原生不卡脸720P)", "003系列/sd2.0(9-3-3/4-15秒原生不卡脸720P)"},
+		{"sd2.5-720p(9图30秒小几率卡脸内置彩绘过脸)", "特价稳定sd2.5-720p-ch1(9图30秒小几率卡脸内置彩绘过脸)"},
+		{"Seedance2.5-c", "sd-2.5-c1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.public, func(t *testing.T) {
+			raw, err := common.Marshal(map[string]string{tt.public: tt.upstream})
+			require.NoError(t, err)
+			mapping := string(raw)
+			target, mapped := resolvePricingMappedModel(tt.public, &mapping)
+			require.True(t, mapped)
+			require.Equal(t, tt.upstream, target)
+			// Both the original upstream ID and its public alias must agree.
+			original := getPricingIntegrationEndpoints(constant.ChannelTypeOpenAI, target, nil)
+			public := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, target, tt.public, nil)
+			require.Equal(t, original, public)
+			require.Len(t, public, 1)
+			require.Equal(t, "video", public[0].Kind)
+			require.Equal(t, "/v1/videos", public[0].Path)
+			require.Equal(t, "/v1/videos/{task_id}", public[0].QueryPath)
+		})
+	}
+}
+
+func TestOpaqueMappedVideoPreservesPublicProtocolAndExplicitMetadata(t *testing.T) {
+	endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "provider-internal-id", "Seedance2.5-c", nil)
+	require.Len(t, endpoints, 1)
+	require.Equal(t, "/v1/videos", endpoints[0].Path)
+
+	metadata := map[string]*Model{
+		"provider-internal-id": {Endpoints: `{"openai-video":{"path":"/v1/video/generations"}}`},
+	}
+	endpoints = getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "provider-internal-id", "Seedance2.5-c", metadata)
+	require.Equal(t, "/v1/video/generations", endpoints[0].Path)
+	// A recognized upstream protocol also outranks the public-name fallback.
+	endpoints = getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "minimax-h3-2k", "官方h3-2k", nil)
+	require.Equal(t, "/v1/video/async-generations", endpoints[0].Path)
+
+	endpoints = getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "gpt-4o", "public-chat", nil)
+	require.Equal(t, "text", endpoints[0].Kind)
+	require.Equal(t, "/v1/chat/completions", endpoints[0].Path)
+	endpoints = getPricingIntegrationEndpoints(constant.ChannelTypeOpenAI, "wan3.0-1080p", nil)
+	require.Equal(t, "/v1/video/async-generations", endpoints[0].Path)
+}
+
 func TestMappedPricingEndpointHonorsConfiguredUpstreamEndpoint(t *testing.T) {
 	metadata := map[string]*Model{
 		"upstream": {Endpoints: `{"openai-video":{"path":"/v1/video/generations","method":"POST","query_path":"/v1/video/generations/{task_id}"}}`},

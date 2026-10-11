@@ -213,7 +213,7 @@ func updatePricing() {
 		if mapped {
 			modelsWithMapping[ability.Model] = true
 		}
-		effectiveEndpoints := getPricingIntegrationEndpoints(ability.ChannelType, effectiveModel, metaMap)
+		effectiveEndpoints := getPricingIntegrationEndpointsForModels(ability.ChannelType, effectiveModel, ability.Model, metaMap)
 		for _, endpoint := range effectiveEndpoints {
 			mappedEndpointCandidates[ability.Model] = appendPricingEndpoint(
 				mappedEndpointCandidates[ability.Model], endpoint,

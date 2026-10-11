@@ -117,8 +117,24 @@ func mappedEndpointsFromMetadata(meta *Model) []PricingMappedEndpoint {
 	return endpoints
 }
 
-func pricingVideoEndpoint(modelName string) *PricingMappedEndpoint {
+// Provider catalog prefixes are part of the mapped ID, but do not change the
+// gateway video contract. Normalize only the prefixes used by these catalogs.
+func normalizePricingVideoModelName(modelName string) string {
 	name := strings.ToLower(strings.TrimSpace(modelName))
+	for _, prefix := range []string{"特价/", "003系列/"} {
+		name = strings.TrimPrefix(name, prefix)
+	}
+	if strings.HasPrefix(name, "全能sd2") {
+		name = strings.TrimPrefix(name, "全能")
+	}
+	if strings.HasPrefix(name, "特价稳定sd2") {
+		name = strings.TrimPrefix(name, "特价稳定")
+	}
+	return name
+}
+
+func pricingVideoEndpoint(modelName string) *PricingMappedEndpoint {
+	name := normalizePricingVideoModelName(modelName)
 	var path string
 	switch {
 	case common.IsXJZVideoModel(modelName):
@@ -129,6 +145,9 @@ func pricingVideoEndpoint(modelName string) *PricingMappedEndpoint {
 		name == "sd-mini",
 		name == "sd-2-c1",
 		name == "sd-2.5",
+		name == "sd-2.5-c1",
+		name == "官方h3-1080p",
+		name == "官方h3-2k",
 		strings.HasPrefix(name, "004系列/"),
 		strings.HasPrefix(name, "omni-video-"),
 		strings.HasPrefix(name, "videos-"),
@@ -144,6 +163,7 @@ func pricingVideoEndpoint(modelName string) *PricingMappedEndpoint {
 	case name == "grok-imagine-video",
 		name == "ko3",
 		name == "wan3.0",
+		strings.HasPrefix(name, "wan3.0-"),
 		strings.HasPrefix(name, "sora"),
 		strings.HasPrefix(name, "veo"),
 		strings.HasPrefix(name, "kling"),
@@ -190,11 +210,23 @@ func pricingXJZVideoExample(modelName string) (int, string, bool) {
 }
 
 func getPricingIntegrationEndpoints(channelType int, modelName string, metadata map[string]*Model) []PricingMappedEndpoint {
+	return getPricingIntegrationEndpointsForModels(channelType, modelName, modelName, metadata)
+}
+
+func getPricingIntegrationEndpointsForModels(channelType int, modelName, originalModelName string, metadata map[string]*Model) []PricingMappedEndpoint {
 	if endpoints := mappedEndpointsFromMetadata(metadata[modelName]); len(endpoints) > 0 {
 		return endpoints
 	}
 	if endpoint := pricingVideoEndpoint(modelName); endpoint != nil {
 		return []PricingMappedEndpoint{*endpoint}
+	}
+	// An opaque upstream alias must not turn a known public video model into
+	// the OpenAI channel's default chat endpoint. Explicit upstream metadata
+	// and a recognized upstream protocol above still take precedence.
+	if originalModelName != modelName {
+		if endpoint := pricingVideoEndpoint(originalModelName); endpoint != nil {
+			return []PricingMappedEndpoint{*endpoint}
+		}
 	}
 	var endpoints []PricingMappedEndpoint
 	for _, endpointType := range common.GetEndpointTypesByChannelType(channelType, modelName) {
