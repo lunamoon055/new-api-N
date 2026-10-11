@@ -34,4 +34,5 @@
 .copy-dialog{width:min(720px,100%);background:#fff;border:1px solid #dce3ee;border-radius:8px;padding:22px;box-shadow:0 18px 70px #1b2d4830}
 .copy-dialog .section-heading{justify-content:space-between}.copy-dialog h2{font-size:20px;margin:0}.copy-dialog p{color:#596980;font-size:13px;line-height:1.7}.copy-dialog label{display:block;font-size:13px;margin-bottom:8px}
 .copy-dialog textarea{display:block;width:100%;height:min(55dvh,420px);resize:vertical;font:12px/1.7 monospace;background:#f7f9fc;color:#26334c;border:1px solid #c6d1e1;border-radius:6px;padding:12px}
+.unverified-note>div+div{margin-top:6px}
 @media(max-width:760px){.page-heading{align-items:flex-start;gap:14px;margin-bottom:15px}.page-heading h1{flex-basis:100%}.copy-all-button{font-size:13px}.copy-dialog{padding:17px}}

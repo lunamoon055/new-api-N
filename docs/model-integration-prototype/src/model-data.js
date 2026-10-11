@@ -41,6 +41,9 @@ const likelyVideoName = /sd2|sd-2|seedance|h3|video|grok|dola|wan3|sora|veo|klin
 export function getModelKind(model) {
   const name = model.model_name || ''
   const types = model.supported_endpoint_types || []
+  const mapped = model.mapped_endpoints || []
+  if (mapped.length && mapped.every((endpoint) => endpoint.kind === mapped[0].kind)) return mapped[0].kind
+  if (mapped.length) return 'other'
   if (imageNames.has(name) || types.includes('image-generation')) return 'image'
   if (gatewayVideo.has(name) || exactVideoDetails[name] || likelyVideoName.test(name)) return 'video'
   if (name.toLowerCase().includes('midjourney')) return 'other'
@@ -50,6 +53,30 @@ export function getModelKind(model) {
 export function getModelDoc(model, endpointMap) {
   const name = model.model_name || ''
   const kind = getModelKind(model)
+  const mapped = (model.mapped_endpoints || []).filter((endpoint) => endpoint?.path)
+  if (mapped.length > 1) {
+    return { kind, method: 'POST', path: '', source: '渠道映射', verified: false, alternatives: mapped }
+  }
+  if (mapped.length === 1) {
+    const endpoint = mapped[0]
+    const path = endpoint.path.replace('{model}', encodeURIComponent(name))
+    return {
+      kind: endpoint.kind,
+      method: endpoint.method || 'POST',
+      path,
+      queryPath: endpoint.query_path?.replace('{model}', encodeURIComponent(name)),
+      source: '渠道映射对应的上游模型',
+      verified: true,
+      mapped: true,
+      sampleSupported: endpoint.type === 'image-generation' || endpoint.type === 'openai' ||
+        ['openai-video', 'video-videos', 'video-async', 'video-generations'].includes(endpoint.type),
+      details: endpoint.example_duration ? {
+        duration: endpoint.example_duration,
+        resolution: endpoint.example_resolution,
+        imageRequired: endpoint.example_image_required,
+      } : exactVideoDetails[name],
+    }
+  }
   if (kind === 'image' && imageNames.has(name)) {
     return { kind, method: 'POST', path: '/v1/images/generations', source: '仓库接入文档', verified: true }
   }
@@ -87,23 +114,27 @@ export function getModelDoc(model, endpointMap) {
 }
 
 export function getRequestBody(model, doc) {
-  if (!doc.verified) return null
+  if (!doc.verified || doc.sampleSupported === false) return null
   if (doc.kind === 'image') {
-    return {
+    const body = {
       model: model.model_name,
       prompt: '一张简洁的海边日落电影海报',
-      aspect_ratio: '1:1',
-      resolution: '1K',
-      n: 1,
     }
+    if (!doc.mapped) {
+      body.aspect_ratio = '1:1'
+      body.resolution = '1K'
+      body.n = 1
+    }
+    return body
   }
   if (doc.kind === 'video') {
     const body = {
       model: model.model_name,
       prompt: '海边日落时，人物缓缓走向镜头，画面稳定',
-      duration: doc.details?.duration || 5,
-      ratio: '16:9',
     }
+    if (doc.details?.duration) body.duration = doc.details.duration
+    if (doc.details?.ratio) body.ratio = doc.details.ratio
+    else if (doc.details) body.ratio = '16:9'
     if (doc.details?.resolution) body.resolution = doc.details.resolution
     if (doc.details?.imageRequired) {
       body.referenceImages = ['https://cdn.example.com/reference.jpg']
@@ -117,7 +148,7 @@ export function getRequestBody(model, doc) {
 }
 
 export function getRequestParams(doc) {
-  if (!doc.verified) return []
+  if (!doc.verified || doc.sampleSupported === false) return []
   if (doc.kind === 'image') {
     return [
       ['model', 'string', '是', '从当前令牌的模型列表复制完整 ID'],
@@ -190,7 +221,7 @@ export function getCodeSample(model, doc, language) {
 }
 
 export function getResponseSample(doc) {
-  if (!doc.verified) return ''
+  if (!doc.verified || doc.sampleSupported === false) return ''
   if (doc.kind === 'image') {
     return JSON.stringify({ data: [{ url: 'https://example.com/generated-image.png' }] }, null, 2)
   }

@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -33,6 +32,7 @@ type Pricing struct {
 	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
 	EnableGroup            []string                `json:"enable_groups"`
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
+	MappedEndpoints        []PricingMappedEndpoint `json:"mapped_endpoints,omitempty"`
 	BillingMode            string                  `json:"billing_mode,omitempty"`
 	BillingExpr            string                  `json:"billing_expr,omitempty"`
 	VideoBillingMode       string                  `json:"video_billing_mode,omitempty"`
@@ -203,11 +203,29 @@ func updatePricing() {
 
 	//这里使用切片而不是Set，因为一个模型可能支持多个端点类型，并且第一个端点是优先使用端点
 	modelSupportEndpointsStr := make(map[string][]string)
+	mappedEndpointCandidates := make(map[string][]PricingMappedEndpoint)
+	modelsWithMapping := make(map[string]bool)
 
 	// 先根据已有能力填充原生端点
 	for _, ability := range enableAbilities {
 		endpoints := modelSupportEndpointsStr[ability.Model]
-		channelTypes := common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+		effectiveModel, mapped := resolvePricingMappedModel(ability.Model, ability.ModelMapping)
+		if mapped {
+			modelsWithMapping[ability.Model] = true
+		}
+		effectiveEndpoints := getPricingIntegrationEndpoints(ability.ChannelType, effectiveModel, metaMap)
+		for _, endpoint := range effectiveEndpoints {
+			mappedEndpointCandidates[ability.Model] = appendPricingEndpoint(
+				mappedEndpointCandidates[ability.Model], endpoint,
+			)
+		}
+		channelTypes := common.GetEndpointTypesByChannelType(ability.ChannelType, effectiveModel)
+		if len(effectiveEndpoints) > 0 {
+			channelTypes = make([]constant.EndpointType, 0, len(effectiveEndpoints))
+			for _, endpoint := range effectiveEndpoints {
+				channelTypes = append(channelTypes, constant.EndpointType(endpoint.Type))
+			}
+		}
 		for _, channelType := range channelTypes {
 			if !common.StringsContains(endpoints, string(channelType)) {
 				endpoints = append(endpoints, string(channelType))
@@ -222,7 +240,7 @@ func updatePricing() {
 			continue
 		}
 		var raw map[string]interface{}
-		if err := json.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
+		if err := common.UnmarshalJsonStr(meta.Endpoints, &raw); err == nil {
 			endpoints := make([]string, 0, len(raw))
 			for k, v := range raw {
 				switch v.(type) {
@@ -266,7 +284,7 @@ func updatePricing() {
 			continue
 		}
 		var raw map[string]interface{}
-		if err := json.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
+		if err := common.UnmarshalJsonStr(meta.Endpoints, &raw); err == nil {
 			for k, v := range raw {
 				switch val := v.(type) {
 				case string:
@@ -299,6 +317,11 @@ func updatePricing() {
 			ModelName:              model,
 			EnableGroup:            groups.Items(),
 			SupportedEndpointTypes: modelSupportEndpointTypes[model],
+		}
+		if modelsWithMapping[model] {
+			if meta := metaMap[model]; meta == nil || strings.TrimSpace(meta.Endpoints) == "" {
+				pricing.MappedEndpoints = mappedEndpointCandidates[model]
+			}
 		}
 
 		// 补充模型元数据（描述、标签、供应商、状态）

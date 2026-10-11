@@ -47,6 +47,18 @@ export type PricingModel = {
   enable_groups: string[]
   tags?: string
   supported_endpoint_types?: string[]
+  /** Public gateway routes resolved from channel model mappings. */
+  mapped_endpoints?: Array<{
+    type: string
+    kind: 'text' | 'image' | 'video' | 'other'
+    path: string
+    method: string
+    query_path?: string
+    query_method?: string
+    example_duration?: number
+    example_resolution?: string
+    example_image_required?: boolean
+  }>
   key?: string
   group_ratio?: Record<string, number>
   /** Billing mode (e.g. "tiered_expr") used to flag dynamic pricing */

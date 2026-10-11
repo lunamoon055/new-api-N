@@ -20,17 +20,28 @@ export function getAllModelDocs(catalog, baseUrl) {
     lines.push(`## ${model.model_name}`, '')
     if (model.description) lines.push(model.description, '')
     if (!doc.verified) {
+      if (doc.alternatives?.length) {
+        lines.push('该模型关联多个接口，请按实际协议和使用的渠道选择：')
+        for (const endpoint of doc.alternatives) lines.push(`- ${endpoint.method || 'POST'} ${endpoint.path}`)
+        lines.push('暂无适用于全部接口的单一调用示例。', '')
+        continue
+      }
       lines.push('端点信息待核对，暂无经过文档确认的调用示例。')
       if (doc.path) lines.push(`站点声明的端点：${doc.method} ${doc.path}（需进一步核对）`)
       lines.push('请确认专用协议与参数后调用。', '')
       continue
     }
-    lines.push(`接口：${doc.method} ${doc.path}`, `信息来源：${doc.source}`, '',
-      '### 参数', '', '| 参数 | 类型 | 必填 | 说明 |', '| --- | --- | --- | --- |')
+    lines.push(`接口：${doc.method} ${doc.path}`, `信息来源：${doc.source}`, '')
+    if (doc.sampleSupported === false) {
+      lines.push('此端点使用专用请求格式，请按照所选协议构造请求。', '')
+      continue
+    }
+    lines.push('### 参数', '', '| 参数 | 类型 | 必填 | 说明 |', '| --- | --- | --- | --- |')
     for (const param of getRequestParams(doc)) lines.push('| ' + param.join(' | ') + ' |')
     lines.push('')
     for (const [label, fence] of [['cURL', 'sh'], ['Python', 'python'], ['TypeScript', 'typescript']]) {
-      lines.push(`### ${label}`, '', '```' + fence, getCodeSample(model, doc, label), '```', '')
+      const sample = getCodeSample(model, doc, label)
+      if (sample) lines.push(`### ${label}`, '', '```' + fence, sample, '```', '')
     }
     if (doc.queryPath) {
       lines.push('### 查询任务', '', `接口：GET ${doc.queryPath}`, '', '```sh',

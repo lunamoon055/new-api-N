@@ -32,16 +32,18 @@ final result: passed
 
 ## 验证
 
+- 2026-10-11 模型映射修复：服务端按渠道映射链继承最终上游模型的端点，独立文档与模型广场读取公开路径；示例请求保留网站对外模型 ID。浏览器夹具中 `Grok` 显示 `POST /v1/videos`、`GET /v1/videos/{task_id}`，cURL 使用公开 ID `Grok`；截图见 `qa/mapping-grok.jpg`。同名模型跨渠道路径冲突时列出候选，不生成猜测示例。
+- 实际本地复查发现三个启用渠道把 `Grok` 映射到 `TTP-grok`，此前夹具使用了不同的上游名，且 `3001` 代理的后端仍运行旧镜像。现已为 XJZ 视频模型补齐端点识别与有效示例参数，重建 `new-api-dev`；`http://127.0.0.1:3001/api/pricing` 中 `Grok` 返回 `openai-video`、`POST /v1/videos`、`GET /v1/videos/{task_id}`、示例 `duration: 6` 与 `resolution: 480p`。Edge 两个已打开的 `/docs` 标签在完整刷新后，选中 `Grok` 都显示对应端点和完整 cURL；实际站点截图见 `qa/local-3001-grok.jpg`。此验证仅覆盖本地开发站点，不代表远端配置或真实生成已验收。
 - 2026-10-11 鉴权修复：生产环境 `/api/pricing` 可设为登录可见；独立文档页原先没有主站使用的 `New-Api-User` 请求头，因而即使浏览器登录也会收到 401。现在同源请求携带 Cookie 和该请求头，并区分 401 与 403 文案。
 - 本地鉴权夹具实测：无登录凭据时显示 401 提示；模拟同源会话及用户 ID 后，页面成功展示 2 个模型、启用复制全部按钮并出现调用示例。此验证不等同于远端生产部署。
 - 原型 Vite 构建成功；网站 Rsbuild 构建与 TypeScript `tsc -b` 成功。
-- 模型目录、鉴权请求头与批量文本的 3 个定向测试通过，覆盖模型移除、空列表、去重、待核对标记与三种语言示例；Sites 打包测试 4 个通过。
+- 模型目录、鉴权请求头、映射端点与批量文本的 6 个定向测试通过，覆盖模型移除、空列表、去重、同名模型的多路径提示与公开模型 ID；Sites 打包测试 4 个通过。Go 的 model、common、controller 与 relay 包测试通过；前端类型检查和网站构建通过。
 - 本地站点 `http://localhost:3001/docs` 显示页面；`/docs/model-integration.html` 返回 HTML。当前网站展示 29 个模型。
 - 浏览器验证删除三步区块、复制按钮、导航入口；控制台 error 为空。
 - 单文件复制到 `docs/model-integration.html` 和 `web/default/public/docs/model-integration.html`。内置模型快照已从源代码移除。
 
 ## 限制
 
-- `/api/pricing` 是网站模型广场的数据源；具体令牌权限仍需 `GET /v1/models` 核对。当前 29 个模型中 4 个缺少已确认的专用协议，只显示待核对说明。
+- `/api/pricing` 是网站模型广场的数据源；具体令牌权限仍需 `GET /v1/models` 核对。尚无已确认专用协议的模型只显示待核对说明。
 - 未进行真实付费模型调用，也未发布远端服务器。当前本地开发站点已可查看。
 - 使用 `file://` 打开单文件时无法访问同源 API，因此页面提示从网站入口打开，不显示旧模型。

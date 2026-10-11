@@ -87,6 +87,11 @@ type SampleContext = {
   modelName: string
   endpointType: string
   endpointPath: string
+  endpointKind?: 'video' | 'image'
+  mapped?: boolean
+  exampleDuration?: number
+  exampleResolution?: string
+  exampleImageRequired?: boolean
 }
 
 type DisplayEndpoint = {
@@ -94,10 +99,18 @@ type DisplayEndpoint = {
   labelKey: string
   kind?: 'video' | 'image'
   isPreset?: boolean
+  isMapped?: boolean
   path: string
   method: string
   queryPath?: string
   queryMethod?: string
+  exampleDuration?: number
+  exampleResolution?: string
+  exampleImageRequired?: boolean
+}
+
+function endpointKey(endpoint: DisplayEndpoint): string {
+  return `${endpoint.type}|${endpoint.method}|${endpoint.path}|${endpoint.queryPath || ''}`
 }
 
 function buildChatSample(lang: Lang, ctx: SampleContext): string {
@@ -372,10 +385,11 @@ function buildEmbeddingSample(lang: Lang, ctx: SampleContext): string {
 function buildImageSample(lang: Lang, ctx: SampleContext): string {
   const url = `${ctx.baseUrl}${ctx.endpointPath}`
   const prompt = 'A serene koi pond at sunset, ukiyo-e style.'
+  const optionalFields = ctx.mapped ? {} : { size: '1024x1024', n: 1 }
 
   if (lang === 'curl') {
     const body = JSON.stringify(
-      { model: ctx.modelName, prompt, size: '1024x1024', n: 1 },
+      { model: ctx.modelName, prompt, ...optionalFields },
       null,
       2
     )
@@ -395,8 +409,7 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
       'response = client.images.generate(',
       `    model="${ctx.modelName}",`,
       `    prompt="${prompt}",`,
-      `    size="1024x1024",`,
-      `    n=1,`,
+      ...(ctx.mapped ? [] : [`    size="1024x1024",`, `    n=1,`]),
       ')',
       '',
       'print(response.data[0].url)',
@@ -414,8 +427,7 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
       `const response = await client.images.generate({`,
       `  model: '${ctx.modelName}',`,
       `  prompt: '${prompt}',`,
-      `  size: '1024x1024',`,
-      `  n: 1,`,
+      ...(ctx.mapped ? [] : [`  size: '1024x1024',`, `  n: 1,`]),
       `})`,
       '',
       `console.log(response.data[0].url)`,
@@ -431,8 +443,7 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
     `  body: JSON.stringify({`,
     `    model: '${ctx.modelName}',`,
     `    prompt: '${prompt}',`,
-    `    size: '1024x1024',`,
-    `    n: 1,`,
+    ...(ctx.mapped ? [] : [`    size: '1024x1024',`, `    n: 1,`]),
     `  }),`,
     `})`,
     '',
@@ -510,7 +521,13 @@ function buildVideoSample(lang: Lang, ctx: SampleContext): string {
   }
 
   // 为 videos API 格式添加特定参数
-  if (isVideosApi) {
+  if (ctx.mapped) {
+    if (ctx.exampleDuration) body.duration = ctx.exampleDuration
+    if (ctx.exampleResolution) body.resolution = ctx.exampleResolution
+    if (ctx.exampleImageRequired) {
+      body.referenceImages = ['https://cdn.example.com/reference.jpg']
+    }
+  } else if (isVideosApi) {
     body.ratio = '16:9'
     body.resolution = '720p'
     body.duration = 5
@@ -568,6 +585,12 @@ function buildSample(
   endpointType: string,
   ctx: SampleContext
 ): string {
+  if (ctx.mapped && ctx.endpointKind === 'video') {
+    return buildVideoSample(lang, ctx)
+  }
+  if (ctx.mapped && ctx.endpointKind === 'image') {
+    return buildImageSample(lang, ctx)
+  }
   if (endpointType === 'anthropic') return buildAnthropicSample(lang, ctx)
   if (endpointType === 'gemini') return buildGeminiSample(lang, ctx)
   if (endpointType === 'embeddings' || endpointType === 'jina-rerank')
@@ -609,6 +632,30 @@ function CodeSamplesSection(props: {
   }, [status])
 
   const endpoints = useMemo(() => {
+    const mapped = props.model.mapped_endpoints || []
+    if (mapped.length) {
+      return mapped.map((endpoint): DisplayEndpoint => ({
+        type: endpoint.type,
+        labelKey: '',
+        kind:
+          endpoint.kind === 'video' || endpoint.kind === 'image'
+            ? endpoint.kind
+            : undefined,
+        isMapped: true,
+        path: replaceModelInPath(endpoint.path, props.model.model_name || ''),
+        method: endpoint.method || 'POST',
+        queryPath: endpoint.query_path
+          ? replaceModelInPath(
+              endpoint.query_path,
+              props.model.model_name || ''
+            )
+          : undefined,
+        queryMethod: endpoint.query_method,
+        exampleDuration: endpoint.example_duration,
+        exampleResolution: endpoint.example_resolution,
+        exampleImageRequired: endpoint.example_image_required,
+      }))
+    }
     const types = props.model.supported_endpoint_types || []
     const preset = getModelEndpointPreset(props.model.model_name)
     const configured: DisplayEndpoint[] = types
@@ -689,12 +736,12 @@ function CodeSamplesSection(props: {
   }, [props.model, props.endpointMap])
 
   const [endpointType, setEndpointType] = useState<string>(
-    endpoints[0]?.type ?? ''
+    endpoints[0] ? endpointKey(endpoints[0]) : ''
   )
   const [lang, setLang] = useState<Lang>('curl')
 
   const activeEndpoint = useMemo(() => {
-    return endpoints.find((e) => e.type === endpointType) ?? endpoints[0]
+    return endpoints.find((e) => endpointKey(e) === endpointType) ?? endpoints[0]
   }, [endpointType, endpoints])
 
   if (endpoints.length === 0 || !activeEndpoint) {
@@ -707,6 +754,11 @@ function CodeSamplesSection(props: {
     modelName: props.model.model_name || '',
     endpointType: activeEndpoint.type,
     endpointPath: activeEndpoint.path,
+    endpointKind: activeEndpoint.kind,
+    mapped: activeEndpoint.isMapped,
+    exampleDuration: activeEndpoint.exampleDuration,
+    exampleResolution: activeEndpoint.exampleResolution,
+    exampleImageRequired: activeEndpoint.exampleImageRequired,
   })
 
   return (
@@ -715,15 +767,15 @@ function CodeSamplesSection(props: {
 
       <div className='flex flex-wrap items-center gap-2'>
         {endpoints.length > 1 && (
-          <Tabs value={activeEndpoint.type} onValueChange={setEndpointType}>
+          <Tabs value={endpointKey(activeEndpoint)} onValueChange={setEndpointType}>
             <TabsList className='bg-muted/40 h-8 p-0.5'>
               {endpoints.map((ep) => (
                 <TabsTrigger
-                  key={ep.type}
-                  value={ep.type}
+                  key={endpointKey(ep)}
+                  value={endpointKey(ep)}
                   className='h-7 px-2.5 text-xs'
                 >
-                  {ep.labelKey ? t(ep.labelKey) : ep.type}
+                  {ep.isMapped ? ep.path : (ep.labelKey && t(ep.labelKey)) || ep.type}
                 </TabsTrigger>
               ))}
             </TabsList>
