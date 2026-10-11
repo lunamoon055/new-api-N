@@ -54,9 +54,11 @@ describe('mapped playground integration', () => {
     expect(request).not.toHaveProperty('size')
   })
   it('keeps image resolution, aspect ratio and references in synchronous requests', () => {
-    const metadata = info('nano-banana2', 'image', { ratios: ['1:1', '16:9'], resolutions: ['1K', '2K', '4K'], ratio_field: 'aspect_ratio', resolution_field: 'resolution', image_field: 'images', max_images: 14, max_videos: 0, max_audios: 0 }, '/v1/images/generations')
+    const metadata = info('nano-banana2', 'image', { ratios: ['1:1', '16:9'], resolutions: ['1K', '2K', '4K'], ratio_field: 'aspect_ratio', resolution_field: 'output_resolution', image_field: 'images', max_images: 14, max_videos: 0, max_audios: 0 }, '/v1/images/generations')
     expect(getPlaygroundMediaEndpoint('nano-banana2', 'auto', 'auto', 'auto', metadata)).toBe('/api/creation/images/generations')
-    expect(buildPlaygroundMediaRequest('nano-banana2', [message], 'auto', 'auto', {}, { duration: '', aspectRatio: '' }, metadata, { aspectRatio: '16:9', resolution: '4K', images: 'https://cdn.example/1.png\nhttps://cdn.example/2.png' })).toMatchObject({ n: 1, aspect_ratio: '16:9', resolution: '4K', images: ['https://cdn.example/1.png', 'https://cdn.example/2.png'] })
+    const request = buildPlaygroundMediaRequest('nano-banana2', [message], 'auto', 'auto', {}, { duration: '', aspectRatio: '' }, metadata, { aspectRatio: '16:9', resolution: '4K', images: 'https://cdn.example/1.png\nhttps://cdn.example/2.png' })
+    expect(request).toMatchObject({ n: 1, aspect_ratio: '16:9', output_resolution: '4K', images: ['https://cdn.example/1.png', 'https://cdn.example/2.png'] })
+    expect(request).not.toHaveProperty('resolution')
   })
   it('rejects unsupported reference kinds and invalid URLs before submission', () => {
     const metadata = info('Grok', 'video', parameters)

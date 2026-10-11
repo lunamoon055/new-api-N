@@ -23,7 +23,7 @@ const gatewayVideo = new Set([
 const exactVideoDetails = {
   '特价dola2.5-900-720P-固定30s': { duration: 30, resolution: '720p', imageRequired: true },
   '特价dola-sd2.0-900-720p': { duration: 10, resolution: '720p', imageRequired: true },
-  'TTP-grok': { duration: 6, resolution: '480p' },
+  'TTP-grok': { duration: 6, resolution: '720p' },
   'gz稳定sd2.0-903-720P': { duration: 5, resolution: '720p' },
   'Xminimex-h3-2K-933': { duration: 5, resolution: '2k' },
   '特价sd2.0-720p-933-过脸': { duration: 5, resolution: '720p' },
@@ -133,7 +133,7 @@ export function getRequestBody(model, doc) {
     }
     if (!doc.mapped) {
       body.aspect_ratio = '1:1'
-      body.resolution = '1K'
+      body.output_resolution = '1K'
       body.n = 1
     }
     return body
@@ -176,7 +176,7 @@ export function getRequestParams(doc) {
       ['model', 'string', '是', '从当前令牌的模型列表复制完整 ID'],
       ['prompt', 'string', '是', '希望生成的图像描述'],
       ['aspect_ratio', 'string', '否', '例如 1:1、16:9；以模型能力为准'],
-      ['resolution', 'string', '否', '例如 1K、2K；以模型能力为准'],
+      ['output_resolution', 'string', '否', '例如 1K、2K、4K；以模型能力为准'],
       ['n', 'integer', '否', '生成数量；以模型详情为准'],
     ]
   }

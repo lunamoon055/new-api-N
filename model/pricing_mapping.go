@@ -183,7 +183,7 @@ func pricingXJZVideoExample(modelName string) (int, string, bool) {
 	case "特价dola-sd2.0-900-720p":
 		return 5, "720p", true
 	case "TTP-grok":
-		return 6, "480p", false
+		return 6, "720p", false
 	case "gz稳定sd2.0-903-720P", "特价sd2.0-720p-933-过脸", "特价稳sd2.0-933-720p":
 		return 5, "720p", false
 	case "Xminimex-h3-2K-933":

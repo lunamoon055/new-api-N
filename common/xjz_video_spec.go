@@ -32,7 +32,8 @@ var XJZVideoSpecs = map[string]XJZVideoSpec{
 		ImageField: "images", MinImages: 1, MaxImages: 1,
 	},
 	"TTP-grok": {
-		MinDuration: 6, MaxDuration: 15, Resolutions: []string{"480p", "720p"}, Ratios: xjzStandardRatios,
+		// Prefer the verified 720p default; 480p remains an explicit protocol option.
+		MinDuration: 6, MaxDuration: 15, Resolutions: []string{"720p", "480p"}, Ratios: xjzStandardRatios,
 		ImageField: "images", MaxImages: 7,
 	},
 	"gz稳定sd2.0-903-720P": {

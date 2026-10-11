@@ -122,6 +122,9 @@ func GetImageIntegrationParameters(modelName string) *ModelIntegrationParameters
 		return nil
 	}
 	maxImages := 17
+	if strings.HasPrefix(name, "gpt-image-2.5") {
+		maxImages = 16
+	}
 	if name == "nano-banana-pro" {
 		maxImages = 10
 	}
@@ -130,6 +133,6 @@ func GetImageIntegrationParameters(modelName string) *ModelIntegrationParameters
 	}
 	return &ModelIntegrationParameters{
 		Resolutions: []string{"1K", "2K", "4K"}, Ratios: []string{"1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"},
-		RatioField: "aspect_ratio", ResolutionField: "resolution", ImageField: "images", MaxImages: maxImages,
+		RatioField: "aspect_ratio", ResolutionField: "output_resolution", ImageField: "images", MaxImages: maxImages,
 	}
 }

@@ -109,4 +109,8 @@ test('examples use the same public model parameters as playground and relay', ()
   })
   const mj = { model_name: 'midjourney-默认1次4张1K', mapped_endpoints: [{ type: 'image-generation', kind: 'image', path: '/v1/images/generations', parameters: { resolutions: ['1024x1024'], resolution_field: 'size', max_images: 0, max_videos: 0, max_audios: 0 } }] }
   assert.equal(getRequestBody(mj, getModelDoc(mj, {})).size, '1024x1024')
+  const image = { model_name: 'gpt-image-2', mapped_endpoints: [{ type: 'image-generation', kind: 'image', path: '/v1/images/generations', parameters: { resolutions: ['1K', '2K', '4K'], ratios: ['1:1'], ratio_field: 'aspect_ratio', resolution_field: 'output_resolution', max_images: 17, max_videos: 0, max_audios: 0 } }] }
+  const imageBody = getRequestBody(image, getModelDoc(image, {}))
+  assert.equal(imageBody.output_resolution, '1K')
+  assert.equal(imageBody.resolution, undefined)
 })

@@ -51,12 +51,14 @@ func TestMappedPricingEndpointFollowsFinalUpstreamModel(t *testing.T) {
 	imageEndpoint := imageEndpoints[0]
 	require.Equal(t, "image", imageEndpoint.Kind)
 	require.Equal(t, "/v1/images/generations", imageEndpoint.Path)
+	require.Equal(t, "output_resolution", imageEndpoint.Parameters.ResolutionField)
 }
 
 func TestPricingIntegrationParametersIncludeMappedLimitsWithoutUpstreamNames(t *testing.T) {
 	endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "TTP-grok", "Grok", nil)
 	require.Len(t, endpoints, 1)
-	require.Equal(t, []string{"480p", "720p"}, endpoints[0].Parameters.Resolutions)
+	require.Equal(t, []string{"720p", "480p"}, endpoints[0].Parameters.Resolutions)
+	require.Equal(t, "720p", endpoints[0].ExampleResolution)
 	require.Equal(t, 6, endpoints[0].Parameters.Durations[0])
 	require.Equal(t, 7, endpoints[0].Parameters.MaxImages)
 	encoded, err := common.Marshal(endpoints)
@@ -69,6 +71,22 @@ func TestPricingIntegrationParametersIncludeMappedLimitsWithoutUpstreamNames(t *
 	native := getPricingIntegrationEndpoints(constant.ChannelTypeGemini, "nano-banana2", nil)
 	require.Equal(t, "text", native[0].Kind)
 	require.Contains(t, native[0].Path, "generateContent")
+}
+
+func TestPricingImageContractUsesOutputResolutionAndProviderReferenceLimits(t *testing.T) {
+	for name, maxImages := range map[string]int{
+		"gpt-image-2": 17, "gpt-image-2.5-flare": 16, "gpt-image-2.5-sunburst": 16,
+		"nano-banana-pro": 10, "nano-banana2": 14,
+	} {
+		t.Run(name, func(t *testing.T) {
+			endpoints := getPricingIntegrationEndpoints(constant.ChannelTypeOpenAI, name, nil)
+			require.Len(t, endpoints, 1)
+			require.Equal(t, "/v1/images/generations", endpoints[0].Path)
+			require.Equal(t, "output_resolution", endpoints[0].Parameters.ResolutionField)
+			require.Equal(t, []string{"1K", "2K", "4K"}, endpoints[0].Parameters.Resolutions)
+			require.Equal(t, maxImages, endpoints[0].Parameters.MaxImages)
+		})
+	}
 }
 
 func TestMappedPricingEndpointsForOnlineVideoCatalog(t *testing.T) {
@@ -197,7 +215,7 @@ func TestPricingPublishesMappedRouteUnderPublicModelName(t *testing.T) {
 	require.Len(t, public.MappedEndpoints, 1)
 	require.Equal(t, "/v1/videos", public.MappedEndpoints[0].Path)
 	require.Equal(t, 6, public.MappedEndpoints[0].ExampleDuration)
-	require.Equal(t, "480p", public.MappedEndpoints[0].ExampleResolution)
+	require.Equal(t, "720p", public.MappedEndpoints[0].ExampleResolution)
 	encoded, err := common.Marshal(public)
 	require.NoError(t, err)
 	require.Contains(t, string(encoded), `"model_name":"Grok"`)
