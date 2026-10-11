@@ -16,13 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-
 export type MediaTaskStatus =
-  | 'queued'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'unknown'
+  'queued' | 'processing' | 'completed' | 'failed' | 'unknown'
 
 export type ParsedImageGenerationResult = {
   id?: string
@@ -153,8 +148,14 @@ export function extractMediaErrorMessage(raw: unknown): string | undefined {
   return (
     getString(error, 'message') ||
     getString(envelopeError, 'message') ||
-    getString(data, 'message') ||
-    failedStatus
+    getString(data, 'error') ||
+    getString(envelopeData, 'error') ||
+    failedStatus ||
+    (data.success === false || normalizeMediaTaskStatus(status) === 'failed'
+      ? getString(data, 'message') ||
+        getString(envelopeData, 'message') ||
+        'Media generation failed'
+      : undefined)
   )
 }
 

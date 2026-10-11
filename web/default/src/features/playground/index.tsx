@@ -24,6 +24,7 @@ import { PlaygroundInput } from './components/playground-input'
 import { usePlaygroundState, useChatHandler } from './hooks'
 import { createUserMessage, createLoadingAssistantMessage } from './lib'
 import type { Message as MessageType } from './types'
+import { getPlaygroundGroupModels } from './lib/model-integration'
 
 export function Playground() {
   const {
@@ -36,10 +37,17 @@ export function Playground() {
     setModels,
     setGroups,
     updateConfig,
+    updateConfigValues,
   } = usePlaygroundState()
 
+  const availableModels = getPlaygroundGroupModels(models, config.group)
+
   const { sendChat, stopGeneration, isGenerating, canStop } = useChatHandler({
-    config,
+    config: {
+      ...config,
+      modelInfo: models.find((model) => model.value === config.model)
+        ?.modelInfo,
+    },
     parameterEnabled,
     onMessageUpdate: updateMessages,
   })
@@ -68,11 +76,19 @@ export function Playground() {
     setModels(modelsData)
 
     // Set default model if current model is not available
-    const isCurrentModelValid = modelsData.some((m) => m.value === config.model)
-    if (modelsData.length > 0 && !isCurrentModelValid) {
-      updateConfig('model', modelsData[0].value)
+    const allowedModels = getPlaygroundGroupModels(modelsData, config.group)
+    const isCurrentModelValid = allowedModels.some(
+      (m) => m.value === config.model
+    )
+    if (allowedModels.length > 0 && !isCurrentModelValid) {
+      updateConfigValues({
+        model: allowedModels[0].value,
+        mode: 'auto',
+        imageEndpoint: 'auto',
+        videoEndpoint: 'auto',
+      })
     }
-  }, [modelsData, config.model, setModels, updateConfig])
+  }, [modelsData, config.model, config.group, setModels, updateConfigValues])
 
   // Update groups when data changes
   useEffect(() => {
@@ -182,9 +198,9 @@ export function Playground() {
       </div>
 
       {/* Input area: center content and constrain to the same container width */}
-      <div className='mx-auto w-full max-w-4xl'>
+      <div className='mx-auto max-h-[60dvh] w-full max-w-4xl overflow-y-auto'>
         <PlaygroundInput
-          disabled={isGenerating}
+          disabled={isGenerating || isLoadingModels}
           groups={groups}
           groupValue={config.group}
           isGenerating={isGenerating}
@@ -196,11 +212,18 @@ export function Playground() {
           videoAspectRatio={config.videoAspectRatio}
           videoDuration={config.videoDuration}
           videoResolution={config.videoResolution}
+          config={config}
+          onConfigChange={updateConfigValues}
           chatEndpoint={config.chatEndpoint}
           extraBody={config.extraBody}
-          models={models}
+          models={availableModels}
           onGroupChange={(value) => updateConfig('group', value)}
-          onModelChange={(value) => updateConfig('model', value)}
+          onModelChange={(value) => {
+            updateConfig('model', value)
+            updateConfig('mode', 'auto')
+            updateConfig('imageEndpoint', 'auto')
+            updateConfig('videoEndpoint', 'auto')
+          }}
           onModeChange={(value) => updateConfig('mode', value)}
           onImageEndpointChange={(value) =>
             updateConfig('imageEndpoint', value)

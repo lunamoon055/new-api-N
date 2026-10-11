@@ -4927,6 +4927,16 @@
     "Extra parameters must be a JSON object": "Extra parameters must be a JSON object",
     "Chat endpoint": "Chat endpoint",
     "Video endpoint": "Video endpoint",
-    "Total records": "Total records"
+    "Total records": "Total records",
+    "Reference URLs must use HTTP or HTTPS": "Reference URLs must use HTTP or HTTPS",
+    "This model requires a reference image": "This model requires a reference image",
+    "Audio references require an image or video reference": "Audio references require an image or video reference",
+    "Too many references for this model: {{kind}} (maximum {{count}})": "Too many references for this model: {{kind}} (maximum {{count}})",
+    "Reference image required": "Reference image required",
+    "Maximum {{count}}": "Maximum {{count}}",
+    "One public URL per line": "One public URL per line",
+    "Reference order matches image, video and audio numbers in your prompt.": "Reference order matches image, video and audio numbers in your prompt.",
+    "Uploading reference assets...": "Uploading reference assets...",
+    "Media generation failed": "Media generation failed"
   }
 }

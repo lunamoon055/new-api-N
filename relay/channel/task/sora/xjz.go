@@ -19,91 +19,9 @@ import (
 // The public XJZ catalog uses these exact API IDs. In particular, the
 // shorter labels shown in its sidebar are not valid model IDs. The catalog's
 // structured parameters take precedence over its generic example request.
-type xjzVideoSpec struct {
-	minDuration     int
-	maxDuration     int
-	durations       []int
-	resolution      string
-	resolutions     []string
-	ratios          []string
-	imageField      string
-	videoField      string
-	audioField      string
-	minImages       int
-	maxImages       int
-	maxVideos       int
-	maxAudios       int
-	audioNeedsImage bool
-	allowFrames     bool
-}
+type xjzVideoSpec = common.XJZVideoSpec
 
-var xjzWideRatios = []string{"16:9", "9:16", "1:1", "4:3", "3:4", "21:9"}
-var xjzStandardRatios = []string{"16:9", "9:16", "1:1"}
-
-var xjzVideoSpecs = map[string]xjzVideoSpec{
-	"特价dola2.5-900-720P-固定30s": {
-		durations: []int{30}, resolution: "720p", ratios: xjzWideRatios,
-		imageField: "images", minImages: 1, maxImages: 9,
-	},
-	"特价dola-sd2.0-900-720p": {
-		durations: []int{5, 10, 15}, resolution: "720p", ratios: xjzWideRatios,
-		imageField: "images", minImages: 1, maxImages: 1,
-	},
-	"TTP-grok": {
-		minDuration: 6, maxDuration: 15, resolutions: []string{"480p", "720p"}, ratios: xjzStandardRatios,
-		imageField: "images", maxImages: 7,
-	},
-	"gz稳定sd2.0-903-720P": {
-		minDuration: 5, maxDuration: 15, resolution: "720p", ratios: xjzWideRatios,
-		imageField: "images", audioField: "reference_audios", maxImages: 9, maxAudios: 3,
-	},
-	"Xminimex-h3-2K-933": {
-		minDuration: 5, maxDuration: 15, resolution: "2k", ratios: xjzWideRatios,
-		imageField: "images", videoField: "reference_videos", audioField: "reference_audios",
-		maxImages: 9, maxVideos: 3, maxAudios: 3,
-	},
-	"特价sd2.0-720p-933-过脸": {
-		minDuration: 5, maxDuration: 15, resolution: "720p", ratios: xjzWideRatios,
-		imageField: "images", videoField: "reference_videos", audioField: "reference_audios",
-		maxImages: 9, maxVideos: 3, maxAudios: 3,
-	},
-	"特价稳sd-2.5-30s-720P可10图": {
-		durations: []int{30}, resolution: "720p", ratios: xjzWideRatios,
-		imageField: "reference_images", maxImages: 10,
-	},
-	"特价稳sd2.0-933-720p": {
-		// The text says 5-15 seconds while one catalog parameter says 4-15.
-		// Use the narrower range until the provider resolves the discrepancy.
-		minDuration: 5, maxDuration: 15, resolution: "720P", ratios: xjzWideRatios,
-		imageField: "reference_images", videoField: "reference_videos", audioField: "reference_audios",
-		maxImages: 9, maxVideos: 3, maxAudios: 3,
-	},
-	"gz稳定sd2.5-720全参过脸": {
-		minDuration: 4, maxDuration: 30, resolution: "720P", ratios: xjzWideRatios,
-		imageField: "reference_images", videoField: "reference_videos", audioField: "reference_audios",
-		maxImages: 30, maxVideos: 10, maxAudios: 10,
-	},
-	"gz稳定sd2.5-480全参过脸": {
-		minDuration: 4, maxDuration: 30, resolution: "480P", ratios: xjzWideRatios,
-		imageField: "reference_images", videoField: "reference_videos", audioField: "reference_audios",
-		maxImages: 30, maxVideos: 10, maxAudios: 10,
-	},
-	"gz稳定sd2.5-1080全参过脸": {
-		minDuration: 4, maxDuration: 30, resolution: "1080p", ratios: xjzWideRatios,
-		imageField: "reference_images", videoField: "reference_videos", audioField: "reference_audios",
-		maxImages: 30, maxVideos: 10, maxAudios: 10,
-	},
-	"特价sd2.0-933-过脸": {
-		minDuration: 4, maxDuration: 15, resolution: "720p", ratios: []string{"16:9", "9:16", "1:1", "4:3"},
-		imageField: "image_urls", videoField: "video_urls", audioField: "audio_urls",
-		maxImages: 9, maxVideos: 3, maxAudios: 3, audioNeedsImage: true,
-	},
-	"MiniMaxH3": {
-		minDuration: 4, maxDuration: 15, resolution: "2K", ratios: xjzStandardRatios,
-		imageField: "image_urls", audioField: "audio_reference",
-		maxImages: 9, maxAudios: 3, audioNeedsImage: true, allowFrames: true,
-	},
-}
+var xjzVideoSpecs = common.XJZVideoSpecs
 
 func isXJZVideoRequest(info *relaycommon.RelayInfo) bool {
 	if info == nil {
@@ -144,14 +62,14 @@ func validateXJZVideoJSONRequest(c *gin.Context, info *relaycommon.RelayInfo) *d
 		Resolution: xjzString(normalized["resolution"]),
 	}
 	spec := xjzVideoSpecs[modelName]
-	imageKeys := []string{spec.imageField}
-	audioKeys := []string{spec.audioField}
-	if spec.allowFrames {
+	imageKeys := []string{spec.ImageField}
+	audioKeys := []string{spec.AudioField}
+	if spec.AllowFrames {
 		imageKeys = append(imageKeys, "image_url")
 		audioKeys = append(audioKeys, "audio_url")
 	}
 	req.Images, _ = xjzCollectURLs(normalized, imageKeys)
-	req.Videos, _ = xjzCollectURLs(normalized, []string{spec.videoField})
+	req.Videos, _ = xjzCollectURLs(normalized, []string{spec.VideoField})
 	req.Audios, _ = xjzCollectURLs(normalized, audioKeys)
 	req.StartImageURL = xjzString(normalized["start_image_url"])
 	req.EndImageURL = xjzString(normalized["end_image_url"])
@@ -216,20 +134,20 @@ func normalizeXJZVideoPayload(source map[string]any, modelName string) (map[stri
 	if ratio == "" {
 		ratio = "16:9"
 	}
-	if !xjzContains(spec.ratios, ratio) {
+	if !xjzContains(spec.Ratios, ratio) {
 		return nil, 0, 0, 0, 0, fmt.Errorf("ratio %q is unsupported for %s", ratio, modelName)
 	}
 	payload["ratio"] = ratio
 	delete(payload, "aspect_ratio")
 
 	resolution := strings.TrimSpace(xjzString(payload["resolution"]))
-	if spec.resolution != "" {
-		if resolution != "" && !strings.EqualFold(resolution, spec.resolution) {
-			return nil, 0, 0, 0, 0, fmt.Errorf("resolution must be %s", spec.resolution)
+	if spec.Resolution != "" {
+		if resolution != "" && !strings.EqualFold(resolution, spec.Resolution) {
+			return nil, 0, 0, 0, 0, fmt.Errorf("resolution must be %s", spec.Resolution)
 		}
-		resolution = spec.resolution
-	} else if !xjzContains(spec.resolutions, resolution) {
-		return nil, 0, 0, 0, 0, fmt.Errorf("resolution must be one of %s", strings.Join(spec.resolutions, ", "))
+		resolution = spec.Resolution
+	} else if !xjzContains(spec.Resolutions, resolution) {
+		return nil, 0, 0, 0, 0, fmt.Errorf("resolution must be one of %s", strings.Join(spec.Resolutions, ", "))
 	}
 	payload["resolution"] = resolution
 
@@ -238,7 +156,7 @@ func normalizeXJZVideoPayload(source map[string]any, modelName string) (map[stri
 		return nil, 0, 0, 0, 0, err
 	}
 	imageCount := len(imageURLs)
-	if spec.allowFrames {
+	if spec.AllowFrames {
 		for _, key := range []string{"start_image_url", "end_image_url"} {
 			value := strings.TrimSpace(xjzString(payload[key]))
 			if value == "" {
@@ -253,16 +171,16 @@ func normalizeXJZVideoPayload(source map[string]any, modelName string) (map[stri
 	} else if payload["start_image_url"] != nil || payload["end_image_url"] != nil {
 		return nil, 0, 0, 0, 0, fmt.Errorf("start/end frames are unsupported for %s", modelName)
 	}
-	if imageCount < spec.minImages || imageCount > spec.maxImages {
-		return nil, 0, 0, 0, 0, fmt.Errorf("image references must be between %d and %d", spec.minImages, spec.maxImages)
+	if imageCount < spec.MinImages || imageCount > spec.MaxImages {
+		return nil, 0, 0, 0, 0, fmt.Errorf("image references must be between %d and %d", spec.MinImages, spec.MaxImages)
 	}
-	if len(videoURLs) > spec.maxVideos {
-		return nil, 0, 0, 0, 0, fmt.Errorf("video references must not exceed %d", spec.maxVideos)
+	if len(videoURLs) > spec.MaxVideos {
+		return nil, 0, 0, 0, 0, fmt.Errorf("video references must not exceed %d", spec.MaxVideos)
 	}
-	if len(audioURLs) > spec.maxAudios {
-		return nil, 0, 0, 0, 0, fmt.Errorf("audio references must not exceed %d", spec.maxAudios)
+	if len(audioURLs) > spec.MaxAudios {
+		return nil, 0, 0, 0, 0, fmt.Errorf("audio references must not exceed %d", spec.MaxAudios)
 	}
-	if spec.audioNeedsImage && len(audioURLs) > 0 && imageCount+len(videoURLs) == 0 {
+	if spec.AudioNeedsImage && len(audioURLs) > 0 && imageCount+len(videoURLs) == 0 {
 		return nil, 0, 0, 0, 0, fmt.Errorf("audio references require an image or video reference")
 	}
 	return payload, duration, imageCount, len(videoURLs), len(audioURLs), nil
@@ -274,8 +192,8 @@ func xjzDuration(payload map[string]any, spec xjzVideoSpec) (int, error) {
 		raw, exists = payload["seconds"]
 	}
 	if !exists || raw == nil {
-		if len(spec.durations) == 1 {
-			return spec.durations[0], nil
+		if len(spec.Durations) == 1 {
+			return spec.Durations[0], nil
 		}
 		return 0, fmt.Errorf("duration is required")
 	}
@@ -289,16 +207,16 @@ func xjzDuration(payload map[string]any, spec xjzVideoSpec) (int, error) {
 			return 0, fmt.Errorf("seconds conflicts with duration")
 		}
 	}
-	if len(spec.durations) > 0 {
-		for _, allowed := range spec.durations {
+	if len(spec.Durations) > 0 {
+		for _, allowed := range spec.Durations {
 			if duration == allowed {
 				return duration, nil
 			}
 		}
 		return 0, fmt.Errorf("duration %d is unsupported for this model", duration)
 	}
-	if duration < spec.minDuration || duration > spec.maxDuration {
-		return 0, fmt.Errorf("duration must be between %d and %d", spec.minDuration, spec.maxDuration)
+	if duration < spec.MinDuration || duration > spec.MaxDuration {
+		return 0, fmt.Errorf("duration must be between %d and %d", spec.MinDuration, spec.MaxDuration)
 	}
 	return duration, nil
 }
@@ -341,16 +259,16 @@ func xjzReferences(payload map[string]any, spec xjzVideoSpec) ([]string, []strin
 			delete(payload, key)
 		}
 	}
-	if spec.imageField == "" && len(images) > 0 {
+	if spec.ImageField == "" && len(images) > 0 {
 		return nil, nil, nil, fmt.Errorf("image references are unsupported")
 	}
-	if spec.videoField == "" && len(videos) > 0 {
+	if spec.VideoField == "" && len(videos) > 0 {
 		return nil, nil, nil, fmt.Errorf("video references are unsupported")
 	}
-	if spec.audioField == "" && len(audios) > 0 {
+	if spec.AudioField == "" && len(audios) > 0 {
 		return nil, nil, nil, fmt.Errorf("audio references are unsupported")
 	}
-	if spec.allowFrames {
+	if spec.AllowFrames {
 		if len(images) == 1 {
 			payload["image_url"] = images[0]
 		} else if len(images) > 1 {
@@ -363,13 +281,13 @@ func xjzReferences(payload map[string]any, spec xjzVideoSpec) ([]string, []strin
 		}
 	} else {
 		if len(images) > 0 {
-			payload[spec.imageField] = images
+			payload[spec.ImageField] = images
 		}
 		if len(videos) > 0 {
-			payload[spec.videoField] = videos
+			payload[spec.VideoField] = videos
 		}
 		if len(audios) > 0 {
-			payload[spec.audioField] = audios
+			payload[spec.AudioField] = audios
 		}
 	}
 	return images, videos, audios, nil

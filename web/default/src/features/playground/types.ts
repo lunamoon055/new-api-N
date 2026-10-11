@@ -16,6 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { PricingModel, PricingEndpoint } from '@/features/pricing/types'
+
+export type PlaygroundModelInfo = {
+  model: PricingModel
+  endpoints: Record<string, PricingEndpoint>
+}
+
 // Message types
 export type MessageRole = 'user' | 'assistant' | 'system'
 
@@ -125,6 +132,13 @@ export interface PlaygroundConfig {
   videoAspectRatio: string
   videoDuration: string
   videoResolution: string
+  imageAspectRatio: string
+  imageResolution: string
+  referenceImages: string
+  referenceVideos: string
+  referenceAudios: string
+  /** Current fetched model metadata; supplied at send time, never persisted. */
+  modelInfo?: PlaygroundModelInfo
   chatEndpoint: 'completions' | 'responses'
   extraBody: string
   temperature: number
@@ -149,6 +163,7 @@ export interface ParameterEnabled {
 export interface ModelOption {
   label: string
   value: string
+  modelInfo?: PlaygroundModelInfo
 }
 
 export interface GroupOption {

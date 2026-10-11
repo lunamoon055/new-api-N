@@ -70,6 +70,17 @@ export function usePlaygroundState() {
     []
   )
 
+  const updateConfigValues = useCallback(
+    (values: Partial<PlaygroundConfig>) => {
+      setConfig((previous) => {
+        const updated = { ...previous, ...values }
+        saveConfig(updated)
+        return updated
+      })
+    },
+    []
+  )
+
   // Update parameter enabled with automatic save
   const updateParameterEnabled = useCallback(
     (key: keyof ParameterEnabled, value: boolean) => {
@@ -122,6 +133,7 @@ export function usePlaygroundState() {
 
     // Actions
     updateConfig,
+    updateConfigValues,
     updateParameterEnabled,
     updateMessages,
     clearMessages,

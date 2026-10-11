@@ -178,14 +178,19 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if info != nil && info.ChannelMeta != nil {
 		upstreamModelName = info.UpstreamModelName
 	}
+	contractModelName := req.Model
+	if common.GetVideoIntegrationParameters(upstreamModelName) != nil {
+		contractModelName = upstreamModelName
+	}
+	if common.GetVideoIntegrationParameters(contractModelName) != nil {
+		return validateIntegrationVideoRequest(c, contractModelName, isMeaiccNestedSeedanceModel(a.baseURL, upstreamModelName))
+	}
 	if isSuanliaiModelPair(req.Model, upstreamModelName) {
 		modelName := upstreamModelName
 		if !isSuanliaiModelName(modelName) {
 			modelName = req.Model
 		}
-		if taskErr := validateSuanliaiJSONRequest(c, modelName); taskErr != nil {
-			return taskErr
-		}
+		return validateSuanliaiJSONRequest(c, modelName)
 	}
 	if isSeedance2ModelName(req.Model) {
 		return validateSeedance2JSONRequest(c)

@@ -68,6 +68,7 @@ export function getModelDoc(model, endpointMap) {
       source: '渠道映射对应的上游模型',
       verified: true,
       mapped: true,
+      parameters: endpoint.parameters,
       sampleSupported: endpoint.type === 'image-generation' || endpoint.type === 'openai' ||
         ['openai-video', 'video-videos', 'video-async', 'video-generations'].includes(endpoint.type),
       details: endpoint.example_duration ? {
@@ -115,6 +116,16 @@ export function getModelDoc(model, endpointMap) {
 
 export function getRequestBody(model, doc) {
   if (!doc.verified || doc.sampleSupported === false) return null
+  if (doc.parameters && (doc.kind === 'image' || doc.kind === 'video')) {
+    const p = doc.parameters
+    const body = { model: model.model_name, prompt: doc.kind === 'image' ? '一张简洁的海边日落电影海报' : '海边日落时，人物缓缓走向镜头，画面稳定' }
+    if (doc.kind === 'image') body.n = 1
+    if (p.duration_field && p.durations?.length) body[p.duration_field] = doc.details?.duration || p.durations[0]
+    if (p.ratio_field && p.ratios?.length) body[p.ratio_field] = p.ratios[0]
+    if (p.resolution_field && p.resolutions?.length) body[p.resolution_field] = p.request_resolution || p.resolutions[0]
+    if (p.min_images && p.image_field) body[p.image_field] = ['https://cdn.example.com/reference.jpg']
+    return body
+  }
   if (doc.kind === 'image') {
     const body = {
       model: model.model_name,
@@ -149,6 +160,17 @@ export function getRequestBody(model, doc) {
 
 export function getRequestParams(doc) {
   if (!doc.verified || doc.sampleSupported === false) return []
+  if (doc.parameters) {
+    const p = doc.parameters
+    const rows = [['model', 'string', '是', '从当前令牌的模型列表复制完整 ID'], ['prompt', 'string', '是', '希望生成的内容描述']]
+    if (p.duration_field) rows.push([p.duration_field, 'integer', '按模型', `支持时长（秒）：${(p.durations || []).join('、')}`])
+    if (p.ratio_field) rows.push([p.ratio_field, 'string', '否', `支持比例：${(p.ratios || []).join('、')}`])
+    if (p.resolution_field) rows.push([p.resolution_field, 'string', '按模型', `支持分辨率：${(p.resolutions || []).join('、')}`])
+    for (const [field, count, label] of [[p.image_field, p.max_images, '图片'], [p.video_field, p.max_videos, '视频'], [p.audio_field, p.max_audios, '音频']]) {
+      if (field && count) rows.push([field, 'string[]', field === p.image_field && p.min_images ? '是' : '否', `最多 ${count} 个可公开访问的${label} URL`])
+    }
+    return rows
+  }
   if (doc.kind === 'image') {
     return [
       ['model', 'string', '是', '从当前令牌的模型列表复制完整 ID'],

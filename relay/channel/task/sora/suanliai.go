@@ -47,8 +47,11 @@ func isSuanliaiModelPair(originModelName, upstreamModelName string) bool {
 // Keep them separate from the legacy Linksky async-generation model family,
 // which still uses /v1/video/async-generations in this adaptor.
 func isSuanliaiUnifiedVideosModelName(modelName string) bool {
-	normalized := normalizeSuanliaiModelName(modelName)
+	normalized := common.NormalizeGatewayVideoModelName(modelName)
 	return normalized == "sd2.0" ||
+		strings.HasPrefix(normalized, "sd2.0(") ||
+		strings.HasPrefix(normalized, "sd2.5") ||
+		normalized == "官方h3-1080p" || normalized == "官方h3-2k" ||
 		normalized == "sd-mini" ||
 		normalized == "sd-2.5" ||
 		normalized == "grok-imagine-video-1.5" ||

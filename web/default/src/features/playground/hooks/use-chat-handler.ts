@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
   sendChatCompletion,
@@ -52,6 +52,8 @@ export function useChatHandler({
   onMessageUpdate,
 }: UseChatHandlerOptions) {
   const { sendStreamRequest, stopStream, isStreaming } = useStreamRequest()
+  const mediaController = useRef<AbortController | null>(null)
+  useEffect(() => () => mediaController.current?.abort(), [])
   const [isMediaGenerating, setIsMediaGenerating] = useState(false)
   const [isChatGenerating, setIsChatGenerating] = useState(false)
 
@@ -247,8 +249,19 @@ export function useChatHandler({
   const sendMediaGeneration = useCallback(
     async (messages: Message[]) => {
       setIsMediaGenerating(true)
+      const controller = new AbortController()
+      mediaController.current = controller
       try {
-        const result = await sendPlaygroundMediaGeneration(config, messages)
+        const result = await sendPlaygroundMediaGeneration(config, messages, {
+          signal: controller.signal,
+          onProgress: (result) =>
+            onMessageUpdate((prev) =>
+              updateLastAssistantMessage(prev, (message) => ({
+                ...updateCurrentVersionContent(message, result.content),
+                status: MESSAGE_STATUS.STREAMING,
+              }))
+            ),
+        })
         onMessageUpdate((prev) =>
           updateLastAssistantMessage(prev, (message) => ({
             ...finalizeMessage(
@@ -267,6 +280,7 @@ export function useChatHandler({
           }))
         )
       } catch (error: unknown) {
+        if (controller.signal.aborted) return
         const err = error as {
           response?: {
             data?: {
@@ -284,6 +298,7 @@ export function useChatHandler({
           err?.response?.data?.error?.code || undefined
         )
       } finally {
+        mediaController.current = null
         setIsMediaGenerating(false)
       }
     },
@@ -298,7 +313,8 @@ export function useChatHandler({
           config.model,
           config.mode,
           config.imageEndpoint,
-          config.videoEndpoint
+          config.videoEndpoint,
+          config.modelInfo
         )
       ) {
         sendMediaGeneration(messages)
@@ -319,6 +335,7 @@ export function useChatHandler({
       config.mode,
       config.imageEndpoint,
       config.videoEndpoint,
+      config.modelInfo,
       config.stream,
       config.chatEndpoint,
       sendMediaGeneration,
@@ -331,6 +348,7 @@ export function useChatHandler({
   // Stop generation
   const stopGeneration = useCallback(() => {
     stopStream()
+    mediaController.current?.abort()
     onMessageUpdate((prev) =>
       updateLastAssistantMessage(prev, (message) =>
         message.status === MESSAGE_STATUS.LOADING ||
@@ -345,6 +363,6 @@ export function useChatHandler({
     sendChat,
     stopGeneration,
     isGenerating: isStreaming || isMediaGenerating || isChatGenerating,
-    canStop: isStreaming,
+    canStop: isStreaming || isMediaGenerating,
   }
 }

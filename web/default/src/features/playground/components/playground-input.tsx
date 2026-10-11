@@ -49,7 +49,7 @@ import {
   type PromptInputMessage,
 } from '@/components/ai-elements/prompt-input'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
-import { ModelGroupSelector } from '@/components/model-group-selector'
+import { GroupSelector, ModelSelector } from '@/components/model-group-selector'
 import {
   Select,
   SelectContent,
@@ -67,9 +67,12 @@ import {
   resolvePlaygroundVideoSelection,
 } from '../lib/media-routing'
 import { getXJZVideoModelSpec } from '@/features/media-generation/xjz-video-models'
+import { PlaygroundMediaFields } from './media-fields'
 import type { ModelOption, GroupOption, PlaygroundConfig } from '../types'
 
 interface PlaygroundInputProps {
+  config: PlaygroundConfig
+  onConfigChange: (value: Partial<PlaygroundConfig>) => void
   onSubmit: (text: string) => void
   onStop?: () => void
   disabled?: boolean
@@ -109,9 +112,11 @@ const suggestions = [
 ]
 
 export function PlaygroundInput({
+  config,
+  onConfigChange,
   onSubmit,
   onStop,
-  disabled,
+  disabled: propsDisabled,
   isGenerating,
   models,
   modelValue,
@@ -139,21 +144,30 @@ export function PlaygroundInput({
 }: PlaygroundInputProps) {
   const { t } = useTranslation()
   const [text, setText] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
+  const disabled = propsDisabled || isUploading
+  const modelInfo = models.find(
+    (model) => model.value === modelValue
+  )?.modelInfo
 
   const isModelSelectDisabled =
     disabled || isModelLoading || models.length === 0
   const isGroupSelectDisabled = disabled || groups.length === 0
-  const resolvedMode = resolvePlaygroundMode(modelValue, mode)
-  const videoChoices = getPlaygroundVideoChoices(modelValue)
+  const resolvedMode = resolvePlaygroundMode(modelValue, mode, modelInfo)
+  const videoChoices = getPlaygroundVideoChoices(modelValue, modelInfo)
   const xjzVideoSpec = getXJZVideoModelSpec(modelValue)
-  const selectedVideo = resolvePlaygroundVideoSelection(modelValue, {
-    aspectRatio: videoAspectRatio,
-    duration: videoDuration,
-    resolution: videoResolution,
-  })
+  const selectedVideo = resolvePlaygroundVideoSelection(
+    modelValue,
+    {
+      aspectRatio: videoAspectRatio,
+      duration: videoDuration,
+      resolution: videoResolution,
+    },
+    modelInfo
+  )
 
   const handleSubmit = (message: PromptInputMessage) => {
-    if (!message.text?.trim() || disabled) return
+    if (!message.text?.trim() || disabled || models.length === 0) return
     onSubmit(message.text)
     setText('')
   }
@@ -165,6 +179,7 @@ export function PlaygroundInput({
   }
 
   const handleSuggestionClick = (suggestion: string) => {
+    if (disabled || models.length === 0) return
     onSubmit(suggestion)
   }
 
@@ -290,14 +305,14 @@ export function PlaygroundInput({
                 </SelectContent>
               </Select>
             </Field>
-            {xjzVideoSpec?.selectableResolution && (
+            {videoChoices.resolutions.length > 0 && (
               <Field className='w-auto min-w-28 gap-1.5'>
                 <FieldLabel htmlFor='playground-video-resolution'>
                   {t('Resolution')}
                 </FieldLabel>
                 <Select
                   value={
-                    selectedVideo.resolution ?? xjzVideoSpec.resolutions[0]
+                    selectedVideo.resolution ?? videoChoices.resolutions[0]
                   }
                   onValueChange={(value) => {
                     if (value) onVideoResolutionChange(value)
@@ -312,7 +327,7 @@ export function PlaygroundInput({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      {xjzVideoSpec.resolutions.map((resolution) => (
+                      {videoChoices.resolutions.map((resolution) => (
                         <SelectItem key={resolution} value={resolution}>
                           {resolution}
                         </SelectItem>
@@ -385,6 +400,16 @@ export function PlaygroundInput({
           {t('Select a test type for newly added models.')}
         </p>
       </div>
+      {resolvedMode !== 'chat' && (
+        <PlaygroundMediaFields
+          config={config}
+          modelInfo={modelInfo}
+          mode={resolvedMode}
+          disabled={disabled}
+          onChange={onConfigChange}
+          onUploadingChange={setIsUploading}
+        />
+      )}
       <details className='px-1 text-sm'>
         <summary className='cursor-pointer'>
           {t('Advanced request parameters')}
@@ -430,70 +455,75 @@ export function PlaygroundInput({
         />
 
         <PromptInputFooter className='p-2.5'>
-          <PromptInputTools>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <PromptInputButton
-                    className='border font-medium'
-                    disabled={disabled}
-                    variant='outline'
-                  />
-                }
-              >
-                <PaperclipIcon size={16} />
-                <span className='hidden sm:inline'>{t('Attach')}</span>
-                <span className='sr-only sm:hidden'>{t('Attach')}</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='start'>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('upload-file')}
+          {resolvedMode === 'chat' && (
+            <PromptInputTools>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <PromptInputButton
+                      className='border font-medium'
+                      disabled={disabled}
+                      variant='outline'
+                    />
+                  }
                 >
-                  <FileIcon className='mr-2' size={16} />
-                  {t('Upload file')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('upload-photo')}
-                >
-                  <ImageIcon className='mr-2' size={16} />
-                  {t('Upload photo')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('take-screenshot')}
-                >
-                  <ScreenShareIcon className='mr-2' size={16} />
-                  {t('Take screenshot')}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleFileAction('take-photo')}
-                >
-                  <CameraIcon className='mr-2' size={16} />
-                  {t('Take photo')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <PaperclipIcon size={16} />
+                  <span className='hidden sm:inline'>{t('Attach')}</span>
+                  <span className='sr-only sm:hidden'>{t('Attach')}</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='start'>
+                  <DropdownMenuItem
+                    onClick={() => handleFileAction('upload-file')}
+                  >
+                    <FileIcon className='mr-2' size={16} />
+                    {t('Upload file')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleFileAction('upload-photo')}
+                  >
+                    <ImageIcon className='mr-2' size={16} />
+                    {t('Upload photo')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleFileAction('take-screenshot')}
+                  >
+                    <ScreenShareIcon className='mr-2' size={16} />
+                    {t('Take screenshot')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleFileAction('take-photo')}
+                  >
+                    <CameraIcon className='mr-2' size={16} />
+                    {t('Take photo')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-            <PromptInputButton
-              className='border font-medium'
-              disabled={disabled}
-              onClick={() => toast.info(t('Search feature in development'))}
-              variant='outline'
-            >
-              <GlobeIcon size={16} />
-              <span className='hidden sm:inline'>{t('Search')}</span>
-              <span className='sr-only sm:hidden'>{t('Search')}</span>
-            </PromptInputButton>
-          </PromptInputTools>
+              <PromptInputButton
+                className='border font-medium'
+                disabled={disabled}
+                onClick={() => toast.info(t('Search feature in development'))}
+                variant='outline'
+              >
+                <GlobeIcon size={16} />
+                <span className='hidden sm:inline'>{t('Search')}</span>
+                <span className='sr-only sm:hidden'>{t('Search')}</span>
+              </PromptInputButton>
+            </PromptInputTools>
+          )}
 
           <div className='flex items-center gap-1.5 md:gap-2'>
-            <ModelGroupSelector
-              selectedModel={modelValue}
-              models={models}
-              onModelChange={onModelChange}
+            <GroupSelector
               selectedGroup={groupValue}
               groups={groups}
               onGroupChange={onGroupChange}
-              disabled={isModelSelectDisabled || isGroupSelectDisabled}
+              disabled={isGroupSelectDisabled}
+            />
+            <ModelSelector
+              selectedModel={modelValue}
+              models={models}
+              onModelChange={onModelChange}
+              disabled={isModelSelectDisabled}
             />
 
             {isGenerating && onStop ? (
@@ -509,7 +539,7 @@ export function PlaygroundInput({
             ) : (
               <PromptInputButton
                 className='text-foreground font-medium'
-                disabled={disabled || !text.trim()}
+                disabled={disabled || !text.trim() || models.length === 0}
                 type='submit'
                 variant='secondary'
               >
@@ -522,21 +552,23 @@ export function PlaygroundInput({
         </PromptInputFooter>
       </PromptInput>
 
-      <Suggestions>
-        {suggestions.map(({ icon: Icon, text, color }) => (
-          <Suggestion
-            className={`text-xs font-normal sm:text-sm ${
-              text === 'More' ? 'hidden sm:flex' : ''
-            }`}
-            key={text}
-            onClick={() => handleSuggestionClick(text)}
-            suggestion={text}
-          >
-            {Icon && <Icon size={16} style={{ color }} />}
-            {text}
-          </Suggestion>
-        ))}
-      </Suggestions>
+      {resolvedMode === 'chat' && (
+        <Suggestions>
+          {suggestions.map(({ icon: Icon, text, color }) => (
+            <Suggestion
+              className={`text-xs font-normal sm:text-sm ${
+                text === 'More' ? 'hidden sm:flex' : ''
+              }`}
+              key={text}
+              onClick={() => handleSuggestionClick(text)}
+              suggestion={text}
+            >
+              {Icon && <Icon size={16} style={{ color }} />}
+              {text}
+            </Suggestion>
+          ))}
+        </Suggestions>
+      )}
     </div>
   )
 }

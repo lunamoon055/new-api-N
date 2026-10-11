@@ -318,7 +318,7 @@ func updatePricing() {
 			EnableGroup:            groups.Items(),
 			SupportedEndpointTypes: modelSupportEndpointTypes[model],
 		}
-		if modelsWithMapping[model] {
+		if modelsWithMapping[model] || common.GetVideoIntegrationParameters(model) != nil || common.GetImageIntegrationParameters(model) != nil {
 			if meta := metaMap[model]; meta == nil || strings.TrimSpace(meta.Endpoints) == "" {
 				pricing.MappedEndpoints = mappedEndpointCandidates[model]
 			}

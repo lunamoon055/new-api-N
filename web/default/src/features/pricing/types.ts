@@ -58,6 +58,7 @@ export type PricingModel = {
     example_duration?: number
     example_resolution?: string
     example_image_required?: boolean
+    parameters?: IntegrationParameters
   }>
   key?: string
   group_ratio?: Record<string, number>
@@ -85,6 +86,26 @@ export type PricingModel = {
   input_modalities?: Modality[]
   output_modalities?: Modality[]
   capabilities?: ModelCapability[]
+}
+
+/** Public model-specific request contract shared with relay validation. */
+export type IntegrationParameters = {
+  durations?: number[]
+  resolutions?: string[]
+  ratios?: string[]
+  duration_field?: string
+  ratio_field?: string
+  resolution_field?: string
+  request_resolution?: string
+  image_field?: string
+  video_field?: string
+  audio_field?: string
+  min_images?: number
+  max_images: number
+  max_videos: number
+  max_audios: number
+  audio_needs_image?: boolean
+  allow_frames?: boolean
 }
 
 /** Public API endpoint metadata returned by `/api/pricing`. */

@@ -4459,7 +4459,7 @@
     "Unable to save descriptions.": "无法保存描述。",
     "Unable to save model order.": "无法保存模型排序。",
     "Unable to save note.": "无法保存备注。",
-    "Unable to upload reference file.": "无法上传参考文件。",
+    "Unable to upload reference file.": "参考素材上传失败。",
     "Unable to upload reference image.": "无法上传参考图片。",
     "Unauthorized": "未授权",
     "Unauthorized Access": "未经授权的访问",
@@ -4927,6 +4927,16 @@
     "Extra parameters must be a JSON object": "附加参数必须是 JSON 对象",
     "Chat endpoint": "聊天接口",
     "Video endpoint": "视频接口",
-    "Total records": "总条数"
+    "Total records": "总条数",
+    "Reference URLs must use HTTP or HTTPS": "参考地址必须使用 HTTP 或 HTTPS",
+    "This model requires a reference image": "此模型需要至少一张参考图片",
+    "Audio references require an image or video reference": "音频参考需要同时提供图片或视频参考",
+    "Too many references for this model: {{kind}} (maximum {{count}})": "此模型的{{kind}}超出支持数量（最多 {{count}} 个）",
+    "Reference image required": "需要参考图片",
+    "Maximum {{count}}": "最多 {{count}} 个",
+    "One public URL per line": "每行一个公开可访问的 URL",
+    "Reference order matches image, video and audio numbers in your prompt.": "素材顺序对应提示词中的图片、视频和音频编号。",
+    "Uploading reference assets...": "正在上传参考素材…",
+    "Media generation failed": "媒体生成失败"
   }
 }

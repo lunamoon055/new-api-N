@@ -11,15 +11,16 @@ import (
 // PricingMappedEndpoint exposes the public gateway route inherited from a
 // channel's final mapped model without exposing the channel's mapping table.
 type PricingMappedEndpoint struct {
-	Type                 string `json:"type"`
-	Kind                 string `json:"kind"`
-	Path                 string `json:"path"`
-	Method               string `json:"method"`
-	QueryPath            string `json:"query_path,omitempty"`
-	QueryMethod          string `json:"query_method,omitempty"`
-	ExampleDuration      int    `json:"example_duration,omitempty"`
-	ExampleResolution    string `json:"example_resolution,omitempty"`
-	ExampleImageRequired bool   `json:"example_image_required,omitempty"`
+	Type                 string                             `json:"type"`
+	Kind                 string                             `json:"kind"`
+	Path                 string                             `json:"path"`
+	Method               string                             `json:"method"`
+	QueryPath            string                             `json:"query_path,omitempty"`
+	QueryMethod          string                             `json:"query_method,omitempty"`
+	ExampleDuration      int                                `json:"example_duration,omitempty"`
+	ExampleResolution    string                             `json:"example_resolution,omitempty"`
+	ExampleImageRequired bool                               `json:"example_image_required,omitempty"`
+	Parameters           *common.ModelIntegrationParameters `json:"parameters,omitempty"`
 }
 
 func resolvePricingMappedModel(modelName string, rawMapping *string) (string, bool) {
@@ -120,17 +121,7 @@ func mappedEndpointsFromMetadata(meta *Model) []PricingMappedEndpoint {
 // Provider catalog prefixes are part of the mapped ID, but do not change the
 // gateway video contract. Normalize only the prefixes used by these catalogs.
 func normalizePricingVideoModelName(modelName string) string {
-	name := strings.ToLower(strings.TrimSpace(modelName))
-	for _, prefix := range []string{"特价/", "003系列/"} {
-		name = strings.TrimPrefix(name, prefix)
-	}
-	if strings.HasPrefix(name, "全能sd2") {
-		name = strings.TrimPrefix(name, "全能")
-	}
-	if strings.HasPrefix(name, "特价稳定sd2") {
-		name = strings.TrimPrefix(name, "特价稳定")
-	}
-	return name
+	return common.NormalizeGatewayVideoModelName(modelName)
 }
 
 func pricingVideoEndpoint(modelName string) *PricingMappedEndpoint {
@@ -179,6 +170,9 @@ func pricingVideoEndpoint(modelName string) *PricingMappedEndpoint {
 	if endpoint != nil && common.IsXJZVideoModel(modelName) {
 		endpoint.ExampleDuration, endpoint.ExampleResolution, endpoint.ExampleImageRequired = pricingXJZVideoExample(modelName)
 	}
+	if endpoint != nil {
+		endpoint.Parameters = common.GetVideoIntegrationParameters(modelName)
+	}
 	return endpoint
 }
 
@@ -215,6 +209,17 @@ func getPricingIntegrationEndpoints(channelType int, modelName string, metadata 
 
 func getPricingIntegrationEndpointsForModels(channelType int, modelName, originalModelName string, metadata map[string]*Model) []PricingMappedEndpoint {
 	if endpoints := mappedEndpointsFromMetadata(metadata[modelName]); len(endpoints) > 0 {
+		for index := range endpoints {
+			if endpoints[index].Kind == "video" {
+				endpoints[index].Parameters = common.GetVideoIntegrationParameters(modelName)
+			}
+			if endpoints[index].Kind == "image" {
+				endpoints[index].Parameters = common.GetImageIntegrationParameters(modelName)
+				if parameters := endpoints[index].Parameters; parameters != nil && strings.Contains(endpoints[index].Path, "async-generations") {
+					parameters.ResolutionField, parameters.ImageField = "output_resolution", "image_urls"
+				}
+			}
+		}
 		return endpoints
 	}
 	if endpoint := pricingVideoEndpoint(modelName); endpoint != nil {
@@ -227,6 +232,11 @@ func getPricingIntegrationEndpointsForModels(channelType int, modelName, origina
 		if endpoint := pricingVideoEndpoint(originalModelName); endpoint != nil {
 			return []PricingMappedEndpoint{*endpoint}
 		}
+	}
+	if parameters := common.GetImageIntegrationParameters(modelName); parameters != nil && channelType != constant.ChannelTypeGemini && channelType != constant.ChannelTypeVertexAi {
+		endpoint := makePricingMappedEndpoint(string(constant.EndpointTypeImageGeneration), common.EndpointInfo{Path: "/v1/images/generations", Method: "POST"})
+		endpoint.Parameters = parameters
+		return []PricingMappedEndpoint{*endpoint}
 	}
 	var endpoints []PricingMappedEndpoint
 	for _, endpointType := range common.GetEndpointTypesByChannelType(channelType, modelName) {

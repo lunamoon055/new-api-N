@@ -30,6 +30,7 @@ import {
   DEFAULT_CREATION_VIDEO_OPTIONS,
   getCreationVideoCapabilities,
   getCreationDurationOptions,
+  getCreationResolutionOptions,
   getCreationVideoRequestOptions,
   type CreationResolution,
   type CreationVideoRequestOptions,
@@ -37,7 +38,13 @@ import {
 import { getXJZVideoModelSpec } from '@/features/media-generation/xjz-video-models'
 import { t } from 'i18next'
 import { API_ENDPOINTS, MESSAGE_ROLES } from '../constants'
-import type { Message } from '../types'
+import type { Message, PlaygroundModelInfo } from '../types'
+import {
+  buildPlaygroundReferences,
+  getPlaygroundIntegration,
+  resolveIntegrationChoice,
+  type PlaygroundReferenceSelection,
+} from './model-integration'
 
 export type PlaygroundMediaMode = 'chat' | 'image' | 'video'
 export type PlaygroundModeSelection = PlaygroundMediaMode | 'auto'
@@ -62,12 +69,26 @@ const FALLBACK_VIDEO_SIZES: Record<string, string> = {
   '3:4': '1080x1440',
 }
 
-export function getPlaygroundVideoChoices(model: string) {
+export function getPlaygroundVideoChoices(
+  model: string,
+  info?: PlaygroundModelInfo
+) {
+  const parameters = getPlaygroundIntegration(info)?.parameters
+  if (parameters?.durations?.length) {
+    return {
+      aspectRatios: parameters.ratios ?? FALLBACK_VIDEO_RATIOS,
+      durations: parameters.durations.map(String),
+      resolutions: parameters.resolutions ?? [],
+    }
+  }
   const capability = getCreationVideoCapabilities(model)
   if (capability) {
     return {
       aspectRatios: capability.aspectRatios,
       durations: getCreationDurationOptions(model).map(
+        (option) => option.value
+      ),
+      resolutions: getCreationResolutionOptions(model).map(
         (option) => option.value
       ),
     }
@@ -79,25 +100,29 @@ export function getPlaygroundVideoChoices(model: string) {
     return {
       aspectRatios: SD25_VIDEO_RATIOS,
       durations: SD25_VIDEO_DURATIONS,
+      resolutions: [],
     }
   }
   if (normalizedModel.startsWith('omni-video-1')) {
     return {
       aspectRatios: FALLBACK_VIDEO_RATIOS,
       durations: ['3', '5', '8'],
+      resolutions: [],
     }
   }
   return {
     aspectRatios: FALLBACK_VIDEO_RATIOS,
     durations: getCreationDurationOptions(model).map((option) => option.value),
+    resolutions: [],
   }
 }
 
 export function resolvePlaygroundVideoSelection(
   model: string,
-  selection: PlaygroundVideoSelection
+  selection: PlaygroundVideoSelection,
+  info?: PlaygroundModelInfo
 ): PlaygroundVideoSelection {
-  const choices = getPlaygroundVideoChoices(model)
+  const choices = getPlaygroundVideoChoices(model, info)
   const preferredDuration =
     selection.duration || DEFAULT_CREATION_VIDEO_OPTIONS.duration
   const resolved = {
@@ -109,6 +134,18 @@ export function resolvePlaygroundVideoSelection(
       : choices.durations[0],
   }
   const spec = getXJZVideoModelSpec(model)
+  if (
+    getPlaygroundIntegration(info)?.parameters ||
+    (selection.resolution && choices.resolutions.length)
+  ) {
+    return {
+      ...resolved,
+      resolution: resolveIntegrationChoice(
+        selection.resolution,
+        choices.resolutions
+      ),
+    }
+  }
   if (spec?.selectableResolution) {
     return {
       ...resolved,
@@ -135,7 +172,7 @@ type WithoutEstimate<T> = T extends { estimateSeconds: number }
 export type PlaygroundVideoRequest = {
   model: string
   prompt: string
-} & WithoutEstimate<CreationVideoRequestOptions>
+} & (WithoutEstimate<CreationVideoRequestOptions> | Record<string, unknown>)
 
 export type PlaygroundMediaRequest =
   PlaygroundImageRequest | PlaygroundVideoRequest
@@ -169,7 +206,13 @@ const VIDEO_MODEL_NAMES = new Set([
 
 const IMAGE_MODEL_NAMES = new Set(['gpt-image2', 'seedream-5-0'])
 
-export function getPlaygroundModelMode(model: string): PlaygroundMediaMode {
+export function getPlaygroundModelMode(
+  model: string,
+  info?: PlaygroundModelInfo
+): PlaygroundMediaMode {
+  const integration = getPlaygroundIntegration(info)
+  if (integration?.kind === 'image' || integration?.kind === 'video')
+    return integration.kind
   if (getXJZVideoModelSpec(model)) return 'video'
   const normalizedModel = normalizeModelName(model)
   if (!normalizedModel) return 'chat'
@@ -205,9 +248,10 @@ export function getPlaygroundModelMode(model: string): PlaygroundMediaMode {
 
 export function resolvePlaygroundMode(
   model: string,
-  mode: PlaygroundModeSelection
+  mode: PlaygroundModeSelection,
+  info?: PlaygroundModelInfo
 ): PlaygroundMediaMode {
-  return mode === 'auto' ? getPlaygroundModelMode(model) : mode
+  return mode === 'auto' ? getPlaygroundModelMode(model, info) : mode
 }
 
 export function parsePlaygroundExtraBody(
@@ -230,9 +274,24 @@ export function getPlaygroundMediaEndpoint(
   model: string,
   mode: PlaygroundModeSelection = 'auto',
   imageEndpoint: PlaygroundImageEndpoint = 'auto',
-  videoEndpoint: PlaygroundVideoEndpoint = 'auto'
+  videoEndpoint: PlaygroundVideoEndpoint = 'auto',
+  info?: PlaygroundModelInfo
 ): string | null {
-  switch (resolvePlaygroundMode(model, mode)) {
+  const resolvedMode = resolvePlaygroundMode(model, mode, info)
+  const integration = getPlaygroundIntegration(info)
+  if (integration?.kind === resolvedMode) {
+    if (resolvedMode === 'image' && imageEndpoint === 'auto') {
+      return integration.path?.includes('async-generations')
+        ? API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
+        : API_ENDPOINTS.IMAGE_GENERATIONS
+    }
+    if (resolvedMode === 'video' && videoEndpoint === 'auto') {
+      return integration.path?.includes('async-generations')
+        ? API_ENDPOINTS.VIDEO_ASYNC_GENERATIONS
+        : API_ENDPOINTS.VIDEO_GENERATIONS
+    }
+  }
+  switch (resolvedMode) {
     case 'image':
       return (
         imageEndpoint === 'auto'
@@ -257,15 +316,77 @@ export function buildPlaygroundMediaRequest(
   mode: PlaygroundModeSelection = 'auto',
   imageEndpoint: PlaygroundImageEndpoint = 'auto',
   extraBody: Record<string, unknown> = {},
-  videoSelection: PlaygroundVideoSelection = { aspectRatio: '', duration: '' }
+  videoSelection: PlaygroundVideoSelection = { aspectRatio: '', duration: '' },
+  info?: PlaygroundModelInfo,
+  mediaSelection: PlaygroundReferenceSelection = {}
 ): PlaygroundMediaRequest | null {
-  const resolvedMode = resolvePlaygroundMode(model, mode)
+  const resolvedMode = resolvePlaygroundMode(model, mode, info)
   if (resolvedMode === 'chat') return null
 
   const prompt = getLatestUserPrompt(messages)
+  const integration = getPlaygroundIntegration(info)
+  const parameters =
+    integration?.kind === resolvedMode ? integration.parameters : undefined
+  if (parameters) {
+    const payload: Record<string, unknown> = { ...extraBody }
+    const imageIsAsync =
+      resolvedMode === 'image' &&
+      getPlaygroundMediaEndpoint(model, mode, imageEndpoint, 'auto', info) ===
+        API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
+    const contract = imageIsAsync
+      ? {
+          ...parameters,
+          resolution_field: 'output_resolution',
+          image_field: 'image_urls',
+        }
+      : parameters
+    const selection =
+      resolvedMode === 'video'
+        ? resolvePlaygroundVideoSelection(model, videoSelection, info)
+        : {
+            aspectRatio: resolveIntegrationChoice(
+              mediaSelection.aspectRatio,
+              parameters.ratios
+            ),
+            resolution: resolveIntegrationChoice(
+              mediaSelection.resolution,
+              parameters.resolutions
+            ),
+          }
+    if (resolvedMode === 'image') payload.n = 1
+    if (parameters.duration_field && resolvedMode === 'video')
+      payload[parameters.duration_field] = Number(
+        (selection as PlaygroundVideoSelection).duration
+      )
+    if (parameters.ratio_field && selection.aspectRatio)
+      payload[parameters.ratio_field] = selection.aspectRatio
+    if (parameters.resolution_field && selection.resolution)
+      payload[contract.resolution_field ?? parameters.resolution_field] =
+        parameters.request_resolution ?? selection.resolution
+    const readExtraReferences = (field?: string) => {
+      const value = field ? extraBody[field] : undefined
+      return Array.isArray(value) &&
+        value.every((url) => typeof url === 'string')
+        ? value.join('\n')
+        : undefined
+    }
+    Object.assign(
+      payload,
+      buildPlaygroundReferences(contract, {
+        ...mediaSelection,
+        images:
+          mediaSelection.images || readExtraReferences(contract.image_field),
+        videos:
+          mediaSelection.videos || readExtraReferences(contract.video_field),
+        audios:
+          mediaSelection.audios || readExtraReferences(contract.audio_field),
+      })
+    )
+    return { ...payload, model, prompt }
+  }
   if (resolvedMode === 'image') {
     const isAsync =
-      getPlaygroundMediaEndpoint(model, mode, imageEndpoint) ===
+      getPlaygroundMediaEndpoint(model, mode, imageEndpoint, 'auto', info) ===
       API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
     if (isAsync) {
       return {
@@ -287,7 +408,11 @@ export function buildPlaygroundMediaRequest(
     }
   }
 
-  const selectedVideo = resolvePlaygroundVideoSelection(model, videoSelection)
+  const selectedVideo = resolvePlaygroundVideoSelection(
+    model,
+    videoSelection,
+    info
+  )
   const videoOptions = getCreationVideoRequestOptions(
     {
       ...DEFAULT_CREATION_VIDEO_OPTIONS,
@@ -373,6 +498,7 @@ function isVideoApiContentUrl(url: string | undefined) {
 
 function parseImageResult(raw: unknown, model: string): PlaygroundMediaResult {
   const result = parseImageGenerationResult(raw)
+  if (result.status === 'failed') throw new Error(t('Media generation failed'))
 
   const completed = !!result.imageUrl
   const lines = [
@@ -398,6 +524,7 @@ function parseImageResult(raw: unknown, model: string): PlaygroundMediaResult {
 
 function parseVideoResult(raw: unknown, model: string): PlaygroundMediaResult {
   const result = parseVideoGenerationResult(raw)
+  if (result.status === 'failed') throw new Error(t('Media generation failed'))
   const normalizedResultUrl = normalizePreviewUrl(result.videoUrl)
   const videoUrl =
     normalizedResultUrl && !isVideoApiContentUrl(normalizedResultUrl)
@@ -423,7 +550,7 @@ function parseVideoResult(raw: unknown, model: string): PlaygroundMediaResult {
     mode: 'video',
     content: lines.join('\n'),
     taskId: result.taskId,
-    status: result.upstreamStatus,
+    status: result.status,
     mediaUrl: completed ? videoUrl : undefined,
   }
 }

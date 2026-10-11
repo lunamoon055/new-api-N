@@ -19,6 +19,7 @@ type ImageRequest struct {
 	Quality           string          `json:"quality,omitempty"`
 	ResponseFormat    string          `json:"response_format,omitempty"`
 	OutputResolution  json.RawMessage `json:"output_resolution,omitempty"`
+	Resolution        json.RawMessage `json:"resolution,omitempty"`
 	AspectRatio       json.RawMessage `json:"aspect_ratio,omitempty"`
 	Messages          json.RawMessage `json:"messages,omitempty"`
 	Style             json.RawMessage `json:"style,omitempty"`

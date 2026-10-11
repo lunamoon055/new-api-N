@@ -97,3 +97,16 @@ test('mapped image example does not invent upstream image options', () => {
     prompt: '一张简洁的海边日落电影海报',
   })
 })
+
+test('examples use the same public model parameters as playground and relay', () => {
+  const model = { model_name: 'dola 2.5 900', mapped_endpoints: [{
+    type: 'openai-video', kind: 'video', path: '/v1/videos', method: 'POST',
+    parameters: { durations: [30], resolutions: ['720p'], ratios: ['16:9'], duration_field: 'duration', ratio_field: 'ratio', resolution_field: 'resolution', image_field: 'images', min_images: 1, max_images: 9, max_videos: 0, max_audios: 0 },
+  }] }
+  const doc = getModelDoc(model, {})
+  assert.deepEqual(getRequestBody(model, doc), {
+    model: 'dola 2.5 900', prompt: '海边日落时，人物缓缓走向镜头，画面稳定', duration: 30, resolution: '720p', ratio: '16:9', images: ['https://cdn.example.com/reference.jpg'],
+  })
+  const mj = { model_name: 'midjourney-默认1次4张1K', mapped_endpoints: [{ type: 'image-generation', kind: 'image', path: '/v1/images/generations', parameters: { resolutions: ['1024x1024'], resolution_field: 'size', max_images: 0, max_videos: 0, max_audios: 0 } }] }
+  assert.equal(getRequestBody(mj, getModelDoc(mj, {})).size, '1024x1024')
+})

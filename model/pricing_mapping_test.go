@@ -53,6 +53,24 @@ func TestMappedPricingEndpointFollowsFinalUpstreamModel(t *testing.T) {
 	require.Equal(t, "/v1/images/generations", imageEndpoint.Path)
 }
 
+func TestPricingIntegrationParametersIncludeMappedLimitsWithoutUpstreamNames(t *testing.T) {
+	endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "TTP-grok", "Grok", nil)
+	require.Len(t, endpoints, 1)
+	require.Equal(t, []string{"480p", "720p"}, endpoints[0].Parameters.Resolutions)
+	require.Equal(t, 6, endpoints[0].Parameters.Durations[0])
+	require.Equal(t, 7, endpoints[0].Parameters.MaxImages)
+	encoded, err := common.Marshal(endpoints)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "TTP-grok")
+	image := getPricingIntegrationEndpoints(constant.ChannelTypeOpenAI, "midjourney-默认1次4张1K", nil)
+	require.Equal(t, "/v1/images/generations", image[0].Path)
+	require.Equal(t, "size", image[0].Parameters.ResolutionField)
+	require.Equal(t, []string{"1024x1024"}, image[0].Parameters.Resolutions)
+	native := getPricingIntegrationEndpoints(constant.ChannelTypeGemini, "nano-banana2", nil)
+	require.Equal(t, "text", native[0].Kind)
+	require.Contains(t, native[0].Path, "generateContent")
+}
+
 func TestMappedPricingEndpointsForOnlineVideoCatalog(t *testing.T) {
 	tests := []struct {
 		public   string

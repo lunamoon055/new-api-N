@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import type { PricingData } from '@/features/pricing/types'
+import { pollPlaygroundTask } from './lib/media-task-polling'
 import { API_ENDPOINTS } from './constants'
 import {
   buildPlaygroundResponsesPayload,
@@ -72,13 +74,18 @@ export async function sendPlaygroundResponses(
  */
 export async function sendPlaygroundMediaGeneration(
   config: PlaygroundConfig,
-  messages: Message[]
+  messages: Message[],
+  options: {
+    signal?: AbortSignal
+    onProgress?: (result: PlaygroundMediaResult) => void
+  } = {}
 ): Promise<PlaygroundMediaResult> {
   const endpoint = getPlaygroundMediaEndpoint(
     config.model,
     config.mode,
     config.imageEndpoint,
-    config.videoEndpoint
+    config.videoEndpoint,
+    config.modelInfo
   )
   const extraBody = parsePlaygroundExtraBody(config.extraBody)
   delete extraBody.group
@@ -92,6 +99,14 @@ export async function sendPlaygroundMediaGeneration(
       aspectRatio: config.videoAspectRatio,
       duration: config.videoDuration,
       resolution: config.videoResolution,
+    },
+    config.modelInfo,
+    {
+      aspectRatio: config.imageAspectRatio,
+      resolution: config.imageResolution,
+      images: config.referenceImages,
+      videos: config.referenceVideos,
+      audios: config.referenceAudios,
     }
   )
   if (!endpoint || !payload) {
@@ -101,74 +116,48 @@ export async function sendPlaygroundMediaGeneration(
   const res = await api.post(endpoint, payload, {
     skipErrorHandler: true,
     headers: { 'X-Playground-Group': config.group },
+    signal: options.signal,
   } as Record<string, unknown>)
+  const resolvedMode = resolvePlaygroundMode(
+    config.model,
+    config.mode,
+    config.modelInfo
+  )
   const initialResult = parsePlaygroundMediaResult(
     res.data,
     config.model,
-    config.mode
+    resolvedMode
   )
+  options.onProgress?.(initialResult)
 
   if (
     !initialResult.taskId ||
     initialResult.mediaUrl ||
-    (resolvePlaygroundMode(config.model, config.mode) === 'image' &&
+    (resolvedMode === 'image' &&
       endpoint !== API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS)
   ) {
     return initialResult
   }
 
-  return pollPlaygroundMediaTask(
-    config.model,
-    config.mode,
-    endpoint,
-    initialResult
-  )
-}
-
-async function pollPlaygroundMediaTask(
-  model: string,
-  selectedMode: PlaygroundConfig['mode'],
-  endpoint: string,
-  initialResult: PlaygroundMediaResult
-): Promise<PlaygroundMediaResult> {
-  const taskId = initialResult.taskId
-  if (!taskId) return initialResult
-
-  let latestResult = initialResult
-  const path = endpoint
-  for (let attempt = 0; attempt < 45; attempt += 1) {
-    await delay(4000)
-    const response = await api.get(`${path}/${encodeURIComponent(taskId)}`, {
-      skipErrorHandler: true,
-      disableDuplicate: true,
-    } as Record<string, unknown>)
-    latestResult = parsePlaygroundMediaResult(
-      response.data,
-      model,
-      selectedMode
-    )
-    if (latestResult.mediaUrl || isTerminalMediaStatus(latestResult.status)) {
-      return latestResult
-    }
-  }
-
-  return latestResult
-}
-
-function isTerminalMediaStatus(status: string | undefined) {
-  switch (status?.toLowerCase()) {
-    case 'completed':
-    case 'failed':
-    case 'cancelled':
-    case 'canceled':
-      return true
-    default:
-      return false
-  }
-}
-
-function delay(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
+  return pollPlaygroundTask(initialResult, {
+    ...options,
+    fetch: async (taskId) => {
+      const response = await api.get(
+        `${endpoint}/${encodeURIComponent(taskId)}`,
+        {
+          skipErrorHandler: true,
+          disableDuplicate: true,
+          signal: options.signal,
+          headers: { 'X-Playground-Group': config.group },
+        } as Record<string, unknown>
+      )
+      return parsePlaygroundMediaResult(
+        response.data,
+        config.model,
+        resolvedMode
+      )
+    },
+  })
 }
 
 /**
@@ -182,9 +171,27 @@ export async function getUserModels(): Promise<ModelOption[]> {
     return []
   }
 
+  // Use the same live endpoint metadata as the HTML integration document.
+  // The user-model list remains authoritative for what can be selected.
+  const pricing = await api
+    .get<PricingData>('/api/pricing', {
+      skipErrorHandler: true,
+    } as Record<string, unknown>)
+    .catch(() => undefined)
+  const catalog =
+    pricing?.data.success && Array.isArray(pricing.data.data)
+      ? pricing.data.data
+      : []
+  const byName = new Map(catalog.map((model) => [model.model_name, model]))
   return data.data.map((model: string) => ({
     label: model,
     value: model,
+    modelInfo: byName.has(model)
+      ? {
+          model: byName.get(model)!,
+          endpoints: pricing?.data.supported_endpoint ?? {},
+        }
+      : undefined,
   }))
 }
 
