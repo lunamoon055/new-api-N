@@ -108,7 +108,7 @@ export function App() {
         })}
         {!loading && !error && !filteredModels.length && <p className='directory-state'>{search ? '没有匹配的模型' : '网站模型列表为空'}</p>}
       </div>
-    </nav><div className='sidebar-footer'>{updatedAt ? `已同步 ${updatedAt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}，每分钟自动刷新` : '目录来自网站实时模型列表'}</div></aside>
+    </nav><div className='sidebar-footer'>{updatedAt ? `已同步 ${updatedAt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}，点击刷新按钮更新` : '打开时自动加载，后续手动刷新'}</div></aside>
 
     <main className='workspace' id='guide'><div className='article-and-code'>
       <article className='article'>

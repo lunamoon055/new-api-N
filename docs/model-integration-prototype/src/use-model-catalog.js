@@ -48,16 +48,7 @@ export function useModelCatalog() {
 
   useEffect(() => {
     loadCatalog()
-    function refreshVisible() {
-      if (document.visibilityState === 'visible') loadCatalog()
-    }
-    const timer = window.setInterval(refreshVisible, 60000)
-    window.addEventListener('focus', refreshVisible)
-    document.addEventListener('visibilitychange', refreshVisible)
     return () => {
-      window.clearInterval(timer)
-      window.removeEventListener('focus', refreshVisible)
-      document.removeEventListener('visibilitychange', refreshVisible)
       const active = request.current
       request.current = null
       active?.abort()

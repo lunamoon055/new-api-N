@@ -7,14 +7,14 @@
 - `model-integration.html`：单文件构建结果，包含品牌图片、样式和脚本。需要通过网站地址访问，才能读取实时模型列表。
 - `../model-integration.html`：项目文档目录中的交付文件。
 - `../../web/default/public/docs/model-integration.html`：网站 `/docs` 页使用的静态文件。
-- 页面打开时读取同源 `/api/pricing`，与主站一样携带登录 Cookie 和 `New-Api-User` 请求头；每分钟及返回页面时刷新。读取失败时清空旧目录并提示重试；本地文件协议下不展示离线模型。
+- 页面打开时读取同源 `/api/pricing` 一次，与主站一样携带登录 Cookie 和 `New-Api-User` 请求头；之后通过「刷新模型目录」按钮手动更新，切换窗口或返回页面不会触发刷新。读取失败时清空旧目录并提示重试；本地文件协议下不展示离线模型。
 - 「复制全部模型对接」会复制当前目录的鉴权、接口、参数、cURL、Python、TypeScript 示例。待核对模型仅包含说明。
 - 当前目录与接入文档已覆盖的调用格式分别标记。缺少明确专用端点的模型保留在目录中，并显示“端点信息待核对”。
 - 渠道模型映射会由服务端解析到最终上游模型，`/api/pricing` 返回对应的公开接入路径。文档仍使用网站对外模型 ID 发请求；如果同一别名跨渠道对应不同路径，会列出各路径，不猜测单一调用示例。
 
 ## 内容维护
 
-- `src/model-catalog.js` 和 `src/use-model-catalog.js`：目录过滤、选择状态与自动刷新。
+- `src/model-catalog.js` 和 `src/use-model-catalog.js`：目录过滤、选择状态、首次加载与手动刷新。
 - `src/all-model-docs.js`：批量复制文本。
 - `src/model-data.js`：精确模型 ID 对应的端点、参数与代码示例。
 - `src/App.jsx`：文档内容与交互。

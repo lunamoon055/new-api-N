@@ -2,7 +2,9 @@
 
 Selected visual target: the first displayed Product Design concept, with a left model directory, editorial integration guide, and a dark right code panel. Deliver a standalone HTML export in addition to the Vite preview. Keep existing New API and QuantumNous identity.
 
-User revision, 2026-10-11: remove the three-step quick-start section and its obsolete navigation links. Provide one-click copying of all current models' integration documentation, including authentication and code examples. Read the site's live model-square list only; never display models from a bundled snapshot or from the documentation mapping alone. Auto-refresh and clear outdated entries on failure. Export to `docs/model-integration.html` and `web/default/public/docs/model-integration.html`, mounted at the site's `/docs` entry.
+User revision, 2026-10-11: remove the three-step quick-start section and its obsolete navigation links. Provide one-click copying of all current models' integration documentation, including authentication and code examples. Read the site's live model-square list only; never display models from a bundled snapshot or from the documentation mapping alone. Clear outdated entries on failure. Export to `docs/model-integration.html` and `web/default/public/docs/model-integration.html`, mounted at the site's `/docs` entry.
+
+User refresh preference, 2026-10-11: load the model catalog automatically once when the document opens. All subsequent catalog updates must be initiated by the manual refresh/retry buttons; do not poll or refresh on window focus or page visibility changes. Show this behavior in the sidebar footer.
 
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
