@@ -17,11 +17,15 @@ type embedFileSystem struct {
 }
 
 func (e *embedFileSystem) Exists(prefix string, path string) bool {
-	_, err := e.Open(path)
+	file, err := e.Open(path)
 	if err != nil {
 		return false
 	}
-	return true
+	defer file.Close()
+	info, err := file.Stat()
+	// Directory paths can also be SPA routes (for example /docs). Let the
+	// web router handle them instead of FileServer redirecting to a slash.
+	return err == nil && !info.IsDir()
 }
 
 func (e *embedFileSystem) Open(name string) (http.File, error) {
