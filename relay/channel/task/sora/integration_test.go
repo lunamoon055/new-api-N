@@ -81,3 +81,53 @@ func TestIntegrationRejectsUnsupportedFixedParametersAndMissingReferences(t *tes
 	duration = 0
 	require.Error(t, validateIntegrationVideoParameters(req, common.GetVideoIntegrationParameters("特价/wan3.0-image")))
 }
+
+func TestMappedSeedance25CReferenceLimitsBeforeUpstreamSubmission(t *testing.T) {
+	images := make([]string, 10)
+	for index := range images {
+		images[index] = "https://cdn.example/reference.png"
+	}
+	cases := []struct {
+		name  string
+		req   videosRequest
+		valid bool
+	}{
+		{"text only", videosRequest{}, true},
+		{"ten images", videosRequest{ReferenceImages: images}, true},
+		{"eleven images", videosRequest{ReferenceImages: append(append([]string{}, images...), "https://cdn.example/extra.png")}, false},
+		{"video reference", videosRequest{ReferenceVideos: []string{"https://cdn.example/ref.mp4"}}, false},
+		{"audio reference", videosRequest{ReferenceAudios: []string{"https://cdn.example/ref.mp3"}}, false},
+		{"eight images and frames", videosRequest{ReferenceImages: images[:8], StartImageURL: "https://cdn.example/start.png", EndImageURL: "https://cdn.example/end.png"}, true},
+		{"nine images and frames", videosRequest{ReferenceImages: images[:9], StartImageURL: "https://cdn.example/start.png", EndImageURL: "https://cdn.example/end.png"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := tc.req
+			req.Model, req.Prompt = "Seedance2.5-c", "A quiet sunrise over the sea"
+			raw, err := common.Marshal(req)
+			require.NoError(t, err)
+			c := newVideo2JSONContext(t, string(raw))
+			info := &relaycommon.RelayInfo{
+				OriginModelName: req.Model, RequestURLPath: "/v1/videos", TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+				ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "sd-2.5-c1", ChannelBaseUrl: "https://api.meaicc.com"},
+			}
+			adaptor := &TaskAdaptor{baseURL: "https://api.meaicc.com"}
+			taskErr := adaptor.ValidateRequestAndSetAction(c, info)
+			if !tc.valid {
+				require.NotNil(t, taskErr)
+				require.Equal(t, 400, taskErr.StatusCode)
+				return
+			}
+			require.Nil(t, taskErr)
+			reader, err := adaptor.BuildRequestBody(c, info)
+			require.NoError(t, err)
+			var payload seedance2Request
+			require.NoError(t, common.DecodeJson(reader, &payload))
+			require.Equal(t, "sd-2.5-c1", payload.Model)
+			require.Len(t, payload.Input.Media, len(req.ReferenceImages)+countNonBlank([]string{req.StartImageURL, req.EndImageURL}))
+			for _, media := range payload.Input.Media {
+				require.Contains(t, []string{"reference_image", "first_frame", "last_frame"}, media.Type)
+			}
+		})
+	}
+}

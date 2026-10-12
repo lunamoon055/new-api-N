@@ -76,7 +76,11 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 			p.Durations = integrationDurationRange(4, 30)
 		}
 		p.Resolutions = []string{"480p", "720p"}
-		p.MaxImages, p.MaxVideos, p.MaxAudios = 30, 10, 10
+		p.MaxImages, p.MaxVideos, p.MaxAudios = 10, 0, 0
+		// The generic Seedance 2.5 contract has separate multimodal limits.
+		if name == "seedance-2.5" {
+			p.MaxImages, p.MaxVideos, p.MaxAudios = 30, 10, 10
+		}
 		p.AllowFrames = true
 	case strings.HasPrefix(name, "sd-2-c"), strings.HasPrefix(name, "seedance2.0"), strings.HasPrefix(name, "seedance-2.0"):
 		p.Ratios = []string{"16:9", "9:16", "1:1", "4:3", "3:4"}

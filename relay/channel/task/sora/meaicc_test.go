@@ -14,7 +14,7 @@ import (
 
 func meaiccTestRequest(t *testing.T, baseURL, origin, upstream, path string, duration *int) (*TaskAdaptor, *relaycommon.RelayInfo, *gin.Context) {
 	t.Helper()
-	encoded, err := common.Marshal(videosRequest{
+	req := videosRequest{
 		Model: origin, Prompt: "a cat walking", Duration: duration,
 		Ratio: "16:9", Resolution: "720p",
 		StartImageURL:   "https://cdn.example/start.png",
@@ -22,7 +22,18 @@ func meaiccTestRequest(t *testing.T, baseURL, origin, upstream, path string, dur
 		ReferenceImages: []string{"https://cdn.example/ref.png"},
 		ReferenceVideos: []string{"https://cdn.example/ref.mp4"},
 		ReferenceAudios: []string{"https://cdn.example/ref.mp3"},
-	})
+	}
+	contract := common.GetVideoIntegrationParameters(upstream)
+	if contract == nil {
+		contract = common.GetVideoIntegrationParameters(origin)
+	}
+	if contract != nil && contract.MaxVideos == 0 {
+		req.ReferenceVideos = nil
+	}
+	if contract != nil && contract.MaxAudios == 0 {
+		req.ReferenceAudios = nil
+	}
+	encoded, err := common.Marshal(req)
 	require.NoError(t, err)
 	c := newVideo2JSONContext(t, string(encoded))
 	c.Request.URL.Path = path
@@ -64,13 +75,17 @@ func TestMeaiccMappedSeedanceUsesNestedContract(t *testing.T) {
 				require.Equal(t, model.upstream, payload.Model)
 				require.Equal(t, "a cat walking", payload.Input.Prompt)
 				require.Equal(t, seedance2Parameters{Resolution: "720p", Ratio: "16:9", Duration: &duration}, payload.Parameters)
-				require.Equal(t, []seedance2Media{
+				media := []seedance2Media{
 					{Type: "first_frame", URL: "https://cdn.example/start.png"},
 					{Type: "last_frame", URL: "https://cdn.example/end.png"},
 					{Type: "reference_image", URL: "https://cdn.example/ref.png"},
-					{Type: "reference_video", URL: "https://cdn.example/ref.mp4"},
-					{Type: "reference_voice", URL: "https://cdn.example/ref.mp3"},
-				}, payload.Input.Media)
+				}
+				if model.upstream != "sd-2.5-c1" {
+					media = append(media,
+						seedance2Media{Type: "reference_video", URL: "https://cdn.example/ref.mp4"},
+						seedance2Media{Type: "reference_voice", URL: "https://cdn.example/ref.mp3"})
+				}
+				require.Equal(t, media, payload.Input.Media)
 				var fields map[string]any
 				require.NoError(t, common.Unmarshal(encoded, &fields))
 				require.NotContains(t, fields, "prompt")

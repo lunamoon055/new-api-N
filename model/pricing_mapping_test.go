@@ -106,6 +106,32 @@ func TestMappedWANImageContractIncludesAllDocumentedResolutions(t *testing.T) {
 	require.Equal(t, []string{"720p"}, common.GetVideoIntegrationParameters("gz稳定sd2.0-903-720P").Resolutions)
 }
 
+func TestMappedSeedance25CContractLimitsImageReferences(t *testing.T) {
+	for _, name := range []string{"Seedance2.5-c", "sd-2.5-c1"} {
+		endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, name, "Seedance2.5-c", nil)
+		require.Len(t, endpoints, 1)
+		p := endpoints[0].Parameters
+		require.Equal(t, "referenceImages", p.ImageField)
+		require.Equal(t, 10, p.MaxImages)
+		require.Zero(t, p.MaxVideos)
+		require.Zero(t, p.MaxAudios)
+		encoded, err := common.Marshal(p)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), `"max_videos":0`)
+		require.Contains(t, string(encoded), `"max_audios":0`)
+	}
+	for _, name := range []string{"seedance-2.5", "sd2.5(满血原生过脸30-10-10/480P)"} {
+		p := common.GetVideoIntegrationParameters(name)
+		require.Equal(t, 30, p.MaxImages)
+		require.Equal(t, 10, p.MaxVideos)
+		require.Equal(t, 10, p.MaxAudios)
+	}
+	p := common.GetVideoIntegrationParameters("sd-2-c8")
+	require.Equal(t, 9, p.MaxImages)
+	require.Equal(t, 3, p.MaxVideos)
+	require.Equal(t, 3, p.MaxAudios)
+}
+
 func TestMappedPricingEndpointsForOnlineVideoCatalog(t *testing.T) {
 	tests := []struct {
 		public   string
