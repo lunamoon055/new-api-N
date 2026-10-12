@@ -4937,6 +4937,22 @@
     "One public URL per line": "One public URL per line",
     "Reference order matches image, video and audio numbers in your prompt.": "Reference order matches image, video and audio numbers in your prompt.",
     "Uploading reference assets...": "Uploading reference assets...",
-    "Media generation failed": "Media generation failed"
+    "Media generation failed": "Media generation failed",
+    "Manual media transfer": "Manual media transfer",
+    "Upload the generated video or provide a replacement download URL to complete this task.": "Upload the generated video or provide a replacement download URL to complete this task.",
+    "Transfer source": "Transfer source",
+    "Upload local video": "Upload local video",
+    "Download URL": "Download URL",
+    "Video file": "Video file",
+    "Select an MP4 or WebM video up to 200 MB": "Select an MP4 or WebM video up to 200 MB",
+    "Provide a valid public HTTP download URL": "Provide a valid public HTTP download URL",
+    "Use a direct download URL. If it requires website login, download the video and upload the local file instead.": "Use a direct download URL. If it requires website login, download the video and upload the local file instead.",
+    "Storage provider": "Storage provider",
+    "Select a storage provider": "Select a storage provider",
+    "Enable and save a storage provider before transferring": "Enable and save a storage provider before transferring",
+    "Manual media transfer queued": "Manual media transfer queued",
+    "Manual media transfer failed. Check the task status and try again.": "Manual media transfer failed. Check the task status and try again.",
+    "Uploading video: {{percent}}%": "Uploading video: {{percent}}%",
+    "Start manual transfer": "Start manual transfer"
   }
 }

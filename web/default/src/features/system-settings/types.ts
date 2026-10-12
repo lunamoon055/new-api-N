@@ -93,6 +93,14 @@ export type MediaTransferJob = {
   completed_at?: number
 }
 
+export type ManualMediaTransferInput = {
+  id: number
+  providerId: string
+  file?: File
+  sourceUrl?: string
+  onProgress?: (percent: number) => void
+}
+
 export type MediaTransferDashboardResponse = {
   success: boolean
   message: string

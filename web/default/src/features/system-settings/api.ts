@@ -28,6 +28,7 @@ import type {
   MediaStorageSettingsResponse,
   MediaStorageTestResponse,
   MediaTransferDashboardResponse,
+  ManualMediaTransferInput,
   UpstreamChannelsResponse,
   UpstreamRatiosResponse,
 } from './types'
@@ -115,6 +116,29 @@ export async function retryMediaTransferJob(id: number) {
   )
   if (!res.data.success) {
     throw new Error(res.data.message || 'Failed to retry media transfer')
+  }
+  return res.data
+}
+
+export async function manuallyTransferMedia(input: ManualMediaTransferInput) {
+  const body = new FormData()
+  body.append('provider_id', input.providerId)
+  if (input.file) body.append('file', input.file)
+  if (input.sourceUrl) body.append('source_url', input.sourceUrl.trim())
+  const res = await api.post<UpdateOptionResponse>(
+    `/api/option/media_storage/transfers/${input.id}/manual`,
+    body,
+    {
+      timeout: 15 * 60 * 1000,
+      onUploadProgress: (event) => {
+        if (event.total) {
+          input.onProgress?.(Math.round((event.loaded / event.total) * 100))
+        }
+      },
+    }
+  )
+  if (!res.data.success) {
+    throw new Error(res.data.message || 'Manual media transfer failed')
   }
   return res.data
 }

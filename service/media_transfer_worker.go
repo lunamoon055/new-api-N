@@ -139,6 +139,13 @@ func mediaTransferFilePath(id int64) string {
 	return filepath.Join(mediaTransferSpoolDir(), strconv.FormatInt(id, 10)+".media")
 }
 
+func mediaTransferJobFilePath(job *model.MediaTransferJob) string {
+	if job.SpoolFile != "" {
+		return filepath.Join(mediaTransferSpoolDir(), filepath.Base(job.SpoolFile))
+	}
+	return mediaTransferFilePath(job.ID)
+}
+
 // EnqueueVideoMediaTransfer commits a still-processing task and an encrypted
 // transfer job together. The upstream generation is never called again by the
 // worker. The caller prepares FINALIZE_PENDING billing before invoking this
@@ -300,17 +307,21 @@ func mediaTransferErrorCategory(err error) string {
 }
 
 func transferMediaJob(ctx context.Context, job *model.MediaTransferJob) error {
-	sourceURL, err := decryptMediaTransferValue(job.SourceCiphertext)
-	if err != nil {
-		return fmt.Errorf("decrypt source: %w", err)
-	}
-	optionsJSON, err := decryptMediaTransferValue(job.OptionsCiphertext)
-	if err != nil {
-		return fmt.Errorf("decrypt options: %w", err)
-	}
+	var sourceURL string
 	var options MediaDownloadOptions
-	if err := common.Unmarshal([]byte(optionsJSON), &options); err != nil {
-		return fmt.Errorf("decode options: %w", err)
+	if !job.ManualFile {
+		var err error
+		sourceURL, err = decryptMediaTransferValue(job.SourceCiphertext)
+		if err != nil {
+			return fmt.Errorf("decrypt source: %w", err)
+		}
+		optionsJSON, err := decryptMediaTransferValue(job.OptionsCiphertext)
+		if err != nil {
+			return fmt.Errorf("decrypt options: %w", err)
+		}
+		if err := common.Unmarshal([]byte(optionsJSON), &options); err != nil {
+			return fmt.Errorf("decode options: %w", err)
+		}
 	}
 	// A successful upload followed by a transient verification failure is
 	// checkpointed. Verify that URL first on the next attempt so a retry never
@@ -335,7 +346,7 @@ func transferMediaJob(ctx context.Context, job *model.MediaTransferJob) error {
 					logger.LogError(ctx, fmt.Sprintf("complete media task %s billing recovery needed: %v", task.TaskID, billingErr))
 				}
 			}
-			filePath := mediaTransferFilePath(job.ID)
+			filePath := mediaTransferJobFilePath(job)
 			if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
 				logger.LogWarn(ctx, fmt.Sprintf("remove completed media spool file %d failed: %v", job.ID, err))
 			}
@@ -360,7 +371,10 @@ func transferMediaJob(ctx context.Context, job *model.MediaTransferJob) error {
 		if !provider.Enabled {
 			continue
 		}
-		if !mediaProviderAvailable(provider.ID, time.Now()) {
+		if job.RequestedProvider != "" && provider.ID != job.RequestedProvider {
+			continue
+		}
+		if job.RequestedProvider == "" && !mediaProviderAvailable(provider.ID, time.Now()) {
 			continue
 		}
 		storedURL, uploadErr := uploadMediaFile(ctx, provider, filePath, size, filename, contentType)
@@ -441,7 +455,7 @@ func replaceMediaSourceURL(value any, sourceURL, storedURL string) any {
 }
 
 func ensureMediaTransferFile(ctx context.Context, job *model.MediaTransferJob, sourceURL string, options MediaDownloadOptions) (string, int64, string, string, string, error) {
-	filePath := mediaTransferFilePath(job.ID)
+	filePath := mediaTransferJobFilePath(job)
 	if stat, err := os.Stat(filePath); err == nil && stat.Size() > 0 && stat.Size() <= mediaStorageMaxBytes {
 		file, err := os.Open(filePath)
 		if err != nil {
@@ -462,6 +476,9 @@ func ensureMediaTransferFile(ctx context.Context, job *model.MediaTransferJob, s
 			contentType = "video/mp4"
 		}
 		return filePath, stat.Size(), hex.EncodeToString(hash.Sum(nil)), filename, contentType, nil
+	}
+	if job.ManualFile {
+		return "", 0, "", "", "", fmt.Errorf("manual upload file is missing; upload the video again")
 	}
 	if err := os.MkdirAll(mediaTransferSpoolDir(), 0700); err != nil {
 		return "", 0, "", "", "", err

@@ -4937,6 +4937,22 @@
     "One public URL per line": "每行一个公开可访问的 URL",
     "Reference order matches image, video and audio numbers in your prompt.": "素材顺序对应提示词中的图片、视频和音频编号。",
     "Uploading reference assets...": "正在上传参考素材…",
-    "Media generation failed": "媒体生成失败"
+    "Media generation failed": "媒体生成失败",
+    "Manual media transfer": "手动转存",
+    "Upload the generated video or provide a replacement download URL to complete this task.": "上传已生成的视频，或填写备用下载链接，完成这条任务的转存。",
+    "Transfer source": "转存来源",
+    "Upload local video": "上传本地视频",
+    "Download URL": "下载链接",
+    "Video file": "视频文件",
+    "Select an MP4 or WebM video up to 200 MB": "请选择 MP4 或 WebM 视频，最大 200 MB",
+    "Provide a valid public HTTP download URL": "请输入有效的公开 HTTP 下载链接",
+    "Use a direct download URL. If it requires website login, download the video and upload the local file instead.": "请使用可直接下载的链接。如果链接需要网站登录，请先下载视频，再上传本地文件。",
+    "Storage provider": "存储渠道",
+    "Select a storage provider": "选择存储渠道",
+    "Enable and save a storage provider before transferring": "请先启用并保存一个存储渠道",
+    "Manual media transfer queued": "手动转存已提交，可在转存监控中查看进度",
+    "Manual media transfer failed. Check the task status and try again.": "手动转存提交失败，请检查任务状态后重试。",
+    "Uploading video: {{percent}}%": "正在上传视频：{{percent}}%",
+    "Start manual transfer": "开始转存"
   }
 }

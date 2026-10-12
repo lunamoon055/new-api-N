@@ -31,7 +31,8 @@ import {
   testMediaStorageProvider,
   updateMediaStorageSettings,
 } from '../api'
-import type { MediaStorageProvider } from '../types'
+import type { MediaStorageProvider, MediaTransferJob } from '../types'
+import { ManualMediaTransferDialog } from './manual-media-transfer-dialog'
 
 const createProvider = (): MediaStorageProvider => ({
   id: `media-${Date.now()}`,
@@ -88,6 +89,8 @@ export function MediaStorageSettingsSection() {
   const [testingProviderId, setTestingProviderId] = useState<string | null>(
     null
   )
+  const [manualTransferJob, setManualTransferJob] =
+    useState<MediaTransferJob | null>(null)
   const providers =
     draftProviders ??
     settingsQuery.data?.data?.providers ??
@@ -417,10 +420,18 @@ export function MediaStorageSettingsSection() {
         isRefreshing={transferQuery.isFetching}
         onRefresh={() => transferQuery.refetch()}
         onRetry={(id) => retryMutation.mutate(id)}
+        onManualTransfer={setManualTransferJob}
         retryingId={
           retryMutation.isPending ? (retryMutation.variables ?? null) : null
         }
       />
+      {manualTransferJob && (
+        <ManualMediaTransferDialog
+          job={manualTransferJob}
+          providers={settingsQuery.data?.data?.providers ?? []}
+          onClose={() => setManualTransferJob(null)}
+        />
+      )}
     </SettingsSection>
   )
 }
@@ -431,6 +442,7 @@ type MediaTransferMonitorProps = {
   isRefreshing: boolean
   onRefresh: () => void
   onRetry: (id: number) => void
+  onManualTransfer: (job: MediaTransferJob) => void
   retryingId: number | null
 }
 
@@ -456,6 +468,7 @@ function MediaTransferMonitor({
   isRefreshing,
   onRefresh,
   onRetry,
+  onManualTransfer,
   retryingId,
 }: MediaTransferMonitorProps) {
   const { t } = useTranslation()
@@ -560,18 +573,29 @@ function MediaTransferMonitor({
                   </TableCell>
                   <TableCell className='text-right'>
                     {(job.status === 'FAILED' || job.status === 'RETRY') && (
-                      <Button
-                        type='button'
-                        variant='outline'
-                        size='sm'
-                        onClick={() => onRetry(job.id)}
-                        disabled={retryingId === job.id}
-                      >
-                        <RotateCcw data-icon='inline-start' />
-                        {retryingId === job.id
-                          ? t('Retrying...')
-                          : t('Retry transfer')}
-                      </Button>
+                      <div className='flex justify-end gap-2'>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          onClick={() => onRetry(job.id)}
+                          disabled={retryingId === job.id}
+                        >
+                          <RotateCcw data-icon='inline-start' />
+                          {retryingId === job.id
+                            ? t('Retrying...')
+                            : t('Retry transfer')}
+                        </Button>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          onClick={() => onManualTransfer(job)}
+                          disabled={retryingId === job.id}
+                        >
+                          {t('Manual media transfer')}
+                        </Button>
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>

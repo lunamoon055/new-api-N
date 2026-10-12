@@ -39,6 +39,9 @@ type MediaTransferJob struct {
 	SHA256                 string              `gorm:"type:varchar(64);not null;default:''"`
 	FileName               string              `gorm:"type:varchar(255);not null;default:''"`
 	ContentType            string              `gorm:"type:varchar(128);not null;default:''"`
+	SpoolFile              string              `gorm:"type:varchar(191);not null;default:''"`
+	ManualFile             bool                `gorm:"not null;default:false"`
+	RequestedProvider      string              `gorm:"type:varchar(191);not null;default:''"`
 	LastError              string              `gorm:"type:varchar(512);not null;default:''"`
 	CreatedAt              int64               `gorm:"not null;index"`
 	UpdatedAt              int64               `gorm:"not null"`
@@ -283,6 +286,59 @@ func RetryMediaTransferJob(id int64) (bool, error) {
 		}
 		result = tx.Model(&Task{}).
 			Where("id = ? AND media_transfer_state = ? AND status = ?", job.TaskRecordID, expectedTaskState, TaskStatusInProgress).
+			Updates(map[string]any{"media_transfer_state": string(MediaTransferPending), "updated_at": now})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrInvalidTransaction
+		}
+		won = true
+		return nil
+	})
+	return won, err
+}
+
+// ReplaceMediaTransferInput requeues the same generated task with an operator
+// supplied input. A new spool name prevents an older download from being reused.
+// The status CAS excludes workers and other administrators; billing is untouched.
+func ReplaceMediaTransferInput(id int64, input *MediaTransferJob) (bool, error) {
+	if input == nil || input.SpoolFile == "" || input.RequestedProvider == "" {
+		return false, gorm.ErrInvalidData
+	}
+	now := common.GetTimestamp()
+	var won bool
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var job MediaTransferJob
+		if err := tx.First(&job, id).Error; err != nil {
+			return err
+		}
+		if job.Status != MediaTransferFailed && job.Status != MediaTransferRetry {
+			return nil
+		}
+		result := tx.Model(&MediaTransferJob{}).
+			Where("id = ? AND status = ?", id, job.Status).
+			Updates(map[string]any{
+				"status": MediaTransferPending, "attempts": 0, "next_retry_at": now,
+				"lease_until": 0, "lease_token": "", "last_error": "", "updated_at": now,
+				"source_ciphertext": input.SourceCiphertext, "options_ciphertext": input.OptionsCiphertext,
+				"response_ciphertext": "", "candidate_url_ciphertext": "", "candidate_provider": "",
+				"spool_file": input.SpoolFile, "manual_file": input.ManualFile,
+				"requested_provider": input.RequestedProvider, "byte_size": input.ByteSize,
+				"sha256": input.SHA256, "file_name": input.FileName, "content_type": input.ContentType,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return nil
+		}
+		expectedState := string(MediaTransferPending)
+		if job.Status == MediaTransferFailed {
+			expectedState = string(MediaTransferFailed)
+		}
+		result = tx.Model(&Task{}).
+			Where("id = ? AND status = ? AND media_transfer_state = ?", job.TaskRecordID, TaskStatusInProgress, expectedState).
 			Updates(map[string]any{"media_transfer_state": string(MediaTransferPending), "updated_at": now})
 		if result.Error != nil {
 			return result.Error
