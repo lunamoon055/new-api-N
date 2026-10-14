@@ -240,6 +240,10 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if size == "1792x1024" || size == "1024x1792" {
 		ratios["size"] = 1.666667
 	}
+	if spec, ok := common.XJZVideoSpecs[xjzVideoModelName(info)]; ok && spec.ReferenceVideoMultiplier > 1 && len(req.Videos) > 0 {
+		// The documented surcharge applies once to the whole request.
+		ratios["reference_video"] = spec.ReferenceVideoMultiplier
+	}
 	return ratios
 }
 

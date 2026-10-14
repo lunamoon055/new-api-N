@@ -105,6 +105,7 @@ export type IntegrationParameters = {
   max_videos: number
   max_audios: number
   audio_needs_image?: boolean
+  audio_requires_image?: boolean
   allow_frames?: boolean
 }
 

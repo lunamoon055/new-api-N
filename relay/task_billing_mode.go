@@ -35,6 +35,10 @@ func applyTaskOtherRatiosToQuota(priceData *types.PriceData, videoBillingMode st
 			priceData.Quota = int(float64(priceData.Quota) * ra)
 			priceData.AppliedOtherRatios = true
 		}
+		if ra, ok := priceData.OtherRatios["reference_video"]; ok && ra != 1.0 {
+			priceData.Quota = int(float64(priceData.Quota) * ra)
+			priceData.AppliedOtherRatios = true
+		}
 		return nil
 	}
 

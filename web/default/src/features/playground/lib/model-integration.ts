@@ -86,6 +86,9 @@ export function buildPlaygroundReferences(
   const images = parsePlaygroundReferenceURLs(selection.images)
   const videos = parsePlaygroundReferenceURLs(selection.videos)
   const audios = parsePlaygroundReferenceURLs(selection.audios)
+  if (parameters.audio_requires_image && audios.length && !images.length) {
+    throw new Error(t('Audio reference requires at least one image reference.'))
+  }
   if (images.length < (parameters.min_images ?? 0)) {
     throw new Error(t('This model requires a reference image'))
   }
@@ -128,7 +131,9 @@ export function buildPlaygroundReferences(
         })
       )
     }
-    payload[reference.field] = reference.urls
+    payload[reference.field] = reference.field.endsWith('_url')
+      ? reference.urls[0]
+      : reference.urls
   }
   return payload
 }

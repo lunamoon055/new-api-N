@@ -1656,16 +1656,25 @@ func buildXJZVideoTestRequest(modelName string) relaycommon.TaskSubmitReq {
 		Ratio:    "16:9",
 		Duration: 5,
 	}
-	switch request.Model {
-	case "特价dola2.5-900-720P-固定30s", "特价稳sd-2.5-30s-720P可10图":
-		request.Duration = 30
-	case "TTP-grok":
-		request.Duration = 6
-		request.Resolution = "720p"
-	case "gz稳定sd2.5-720全参过脸", "gz稳定sd2.5-480全参过脸", "gz稳定sd2.5-1080全参过脸", "特价sd2.0-933-过脸":
-		request.Duration = 4
-	case "MiniMaxH3":
-		request.Duration = 4
+	spec := common.XJZVideoSpecs[request.Model]
+	request.Duration = spec.MinDuration
+	if len(spec.Durations) > 0 {
+		request.Duration = spec.Durations[0]
+	}
+	if spec.DefaultDuration > 0 {
+		request.Duration = spec.DefaultDuration
+	}
+	if len(spec.Resolutions) > 0 {
+		request.Resolution = spec.DefaultResolution
+		if request.Resolution == "" {
+			request.Resolution = spec.Resolutions[0]
+		}
+	}
+	if spec.RatioParameter() == "aspect_ratio" {
+		request.AspectRatio, request.Ratio = request.Ratio, ""
+	}
+	if spec.ResolutionParameter() == "size" {
+		request.Size = spec.Resolution
 	}
 	return request
 }

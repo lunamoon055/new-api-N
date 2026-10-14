@@ -16,9 +16,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// The public XJZ catalog uses these exact API IDs. In particular, the
-// shorter labels shown in its sidebar are not valid model IDs. The catalog's
-// structured parameters take precedence over its generic example request.
+// Match exact public API IDs from the XJZ catalog and dedicated documentation.
+// Structured parameters and model-specific corrections take precedence over
+// the documentation page's generic example request.
 type xjzVideoSpec = common.XJZVideoSpec
 
 var xjzVideoSpecs = common.XJZVideoSpecs
@@ -58,8 +58,8 @@ func validateXJZVideoJSONRequest(c *gin.Context, info *relaycommon.RelayInfo) *d
 		Model:      strings.TrimSpace(xjzString(normalized["model"])),
 		Prompt:     xjzString(normalized["prompt"]),
 		Duration:   duration,
-		Ratio:      xjzString(normalized["ratio"]),
-		Resolution: xjzString(normalized["resolution"]),
+		Ratio:      xjzString(normalized[xjzVideoSpecs[modelName].RatioParameter()]),
+		Resolution: xjzString(normalized[xjzVideoSpecs[modelName].ResolutionParameter()]),
 	}
 	spec := xjzVideoSpecs[modelName]
 	imageKeys := []string{spec.ImageField}
@@ -111,10 +111,9 @@ func normalizeXJZVideoPayload(source map[string]any, modelName string) (map[stri
 			return nil, 0, 0, 0, 0, fmt.Errorf("generate_audio must be a boolean")
 		}
 	}
-	if payload["size"] != nil && strings.TrimSpace(xjzString(payload["size"])) != "" {
+	if spec.ResolutionParameter() != "size" && payload["size"] != nil && strings.TrimSpace(xjzString(payload["size"])) != "" {
 		return nil, 0, 0, 0, 0, fmt.Errorf("size is unsupported; use resolution")
 	}
-	delete(payload, "size")
 
 	duration, err := xjzDuration(payload, spec)
 	if err != nil {
@@ -137,10 +136,23 @@ func normalizeXJZVideoPayload(source map[string]any, modelName string) (map[stri
 	if !xjzContains(spec.Ratios, ratio) {
 		return nil, 0, 0, 0, 0, fmt.Errorf("ratio %q is unsupported for %s", ratio, modelName)
 	}
-	payload["ratio"] = ratio
+	delete(payload, "ratio")
 	delete(payload, "aspect_ratio")
+	payload[spec.RatioParameter()] = ratio
 
 	resolution := strings.TrimSpace(xjzString(payload["resolution"]))
+	if spec.ResolutionParameter() == "size" {
+		size := strings.TrimSpace(xjzString(payload["size"]))
+		if resolution != "" && size != "" && !strings.EqualFold(resolution, size) {
+			return nil, 0, 0, 0, 0, fmt.Errorf("resolution conflicts with size")
+		}
+		if size != "" {
+			resolution = size
+		}
+	}
+	if resolution == "" {
+		resolution = spec.DefaultResolution
+	}
 	if spec.Resolution != "" {
 		if resolution != "" && !strings.EqualFold(resolution, spec.Resolution) {
 			return nil, 0, 0, 0, 0, fmt.Errorf("resolution must be %s", spec.Resolution)
@@ -149,7 +161,9 @@ func normalizeXJZVideoPayload(source map[string]any, modelName string) (map[stri
 	} else if !xjzContains(spec.Resolutions, resolution) {
 		return nil, 0, 0, 0, 0, fmt.Errorf("resolution must be one of %s", strings.Join(spec.Resolutions, ", "))
 	}
-	payload["resolution"] = resolution
+	delete(payload, "resolution")
+	delete(payload, "size")
+	payload[spec.ResolutionParameter()] = resolution
 
 	imageURLs, videoURLs, audioURLs, err := xjzReferences(payload, spec)
 	if err != nil {
@@ -183,6 +197,9 @@ func normalizeXJZVideoPayload(source map[string]any, modelName string) (map[stri
 	if spec.AudioNeedsImage && len(audioURLs) > 0 && imageCount+len(videoURLs) == 0 {
 		return nil, 0, 0, 0, 0, fmt.Errorf("audio references require an image or video reference")
 	}
+	if spec.AudioRequiresImage && len(audioURLs) > 0 && imageCount == 0 {
+		return nil, 0, 0, 0, 0, fmt.Errorf("audio references require an image reference")
+	}
 	return payload, duration, imageCount, len(videoURLs), len(audioURLs), nil
 }
 
@@ -192,6 +209,9 @@ func xjzDuration(payload map[string]any, spec xjzVideoSpec) (int, error) {
 		raw, exists = payload["seconds"]
 	}
 	if !exists || raw == nil {
+		if spec.DefaultDuration > 0 {
+			return spec.DefaultDuration, nil
+		}
 		if len(spec.Durations) == 1 {
 			return spec.Durations[0], nil
 		}
@@ -281,16 +301,23 @@ func xjzReferences(payload map[string]any, spec xjzVideoSpec) ([]string, []strin
 		}
 	} else {
 		if len(images) > 0 {
-			payload[spec.ImageField] = images
+			payload[spec.ImageField] = xjzReferenceValue(spec.ImageField, images)
 		}
 		if len(videos) > 0 {
-			payload[spec.VideoField] = videos
+			payload[spec.VideoField] = xjzReferenceValue(spec.VideoField, videos)
 		}
 		if len(audios) > 0 {
-			payload[spec.AudioField] = audios
+			payload[spec.AudioField] = xjzReferenceValue(spec.AudioField, audios)
 		}
 	}
 	return images, videos, audios, nil
+}
+
+func xjzReferenceValue(field string, urls []string) any {
+	if strings.HasSuffix(field, "_url") {
+		return urls[0]
+	}
+	return urls
 }
 
 func xjzCollectURLs(payload map[string]any, keys []string) ([]string, error) {

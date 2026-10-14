@@ -67,6 +67,16 @@ func TestApplyTaskOtherRatiosToQuotaTieredSecondsUsesOnlySeconds(t *testing.T) {
 	}
 }
 
+func TestApplyTaskOtherRatiosToQuotaTieredSecondsIncludesReferenceVideoOnce(t *testing.T) {
+	priceData := types.PriceData{Quota: 20, UsePrice: true, OtherRatios: map[string]float64{"seconds": 8, "reference_video": 2, "resolution": 2}}
+	if err := applyTaskOtherRatiosToQuota(&priceData, billing_setting.VideoBillingModeTieredSeconds, false); err != nil {
+		t.Fatal(err)
+	}
+	if priceData.Quota != 320 {
+		t.Fatalf("expected 20 per second * 8 seconds * 2 reference-video multiplier, got %d", priceData.Quota)
+	}
+}
+
 func TestApplyTaskOtherRatiosToQuotaTieredRequestKeepsResolutionPriceQuota(t *testing.T) {
 	priceData := types.PriceData{
 		Quota:       20,

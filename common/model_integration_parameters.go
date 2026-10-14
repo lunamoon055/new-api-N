@@ -5,22 +5,23 @@ import "strings"
 // ModelIntegrationParameters describes public request fields, never channel IDs
 // or upstream mapping tables. The same XJZ spec also validates relay requests.
 type ModelIntegrationParameters struct {
-	Durations         []int    `json:"durations,omitempty"`
-	Resolutions       []string `json:"resolutions,omitempty"`
-	Ratios            []string `json:"ratios,omitempty"`
-	DurationField     string   `json:"duration_field,omitempty"`
-	RatioField        string   `json:"ratio_field,omitempty"`
-	ResolutionField   string   `json:"resolution_field,omitempty"`
-	RequestResolution string   `json:"request_resolution,omitempty"`
-	ImageField        string   `json:"image_field,omitempty"`
-	VideoField        string   `json:"video_field,omitempty"`
-	AudioField        string   `json:"audio_field,omitempty"`
-	MinImages         int      `json:"min_images,omitempty"`
-	MaxImages         int      `json:"max_images"`
-	MaxVideos         int      `json:"max_videos"`
-	MaxAudios         int      `json:"max_audios"`
-	AudioNeedsImage   bool     `json:"audio_needs_image,omitempty"`
-	AllowFrames       bool     `json:"allow_frames,omitempty"`
+	Durations          []int    `json:"durations,omitempty"`
+	Resolutions        []string `json:"resolutions,omitempty"`
+	Ratios             []string `json:"ratios,omitempty"`
+	DurationField      string   `json:"duration_field,omitempty"`
+	RatioField         string   `json:"ratio_field,omitempty"`
+	ResolutionField    string   `json:"resolution_field,omitempty"`
+	RequestResolution  string   `json:"request_resolution,omitempty"`
+	ImageField         string   `json:"image_field,omitempty"`
+	VideoField         string   `json:"video_field,omitempty"`
+	AudioField         string   `json:"audio_field,omitempty"`
+	MinImages          int      `json:"min_images,omitempty"`
+	MaxImages          int      `json:"max_images"`
+	MaxVideos          int      `json:"max_videos"`
+	MaxAudios          int      `json:"max_audios"`
+	AudioNeedsImage    bool     `json:"audio_needs_image,omitempty"`
+	AudioRequiresImage bool     `json:"audio_requires_image,omitempty"`
+	AllowFrames        bool     `json:"allow_frames,omitempty"`
 }
 
 func integrationDurationRange(minimum, maximum int) []int {
@@ -57,10 +58,11 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 		}
 		return &ModelIntegrationParameters{
 			Durations: durations, Resolutions: resolutions, Ratios: spec.Ratios,
-			DurationField: "duration", RatioField: "ratio", ResolutionField: "resolution", RequestResolution: spec.Resolution,
+			DurationField: "duration", RatioField: spec.RatioParameter(), ResolutionField: spec.ResolutionParameter(), RequestResolution: spec.Resolution,
 			ImageField: spec.ImageField, VideoField: spec.VideoField, AudioField: spec.AudioField,
 			MinImages: spec.MinImages, MaxImages: spec.MaxImages, MaxVideos: spec.MaxVideos, MaxAudios: spec.MaxAudios,
 			AudioNeedsImage: spec.AudioNeedsImage, AllowFrames: spec.AllowFrames,
+			AudioRequiresImage: spec.AudioRequiresImage,
 		}
 	}
 	name := NormalizeGatewayVideoModelName(modelName)

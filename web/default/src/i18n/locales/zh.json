@@ -4829,6 +4829,7 @@
     "Year": "今年",
     "years": "年",
     "Yes": "是",
+    "Yesterday": "昨天",
     "You are about to delete {{count}} API key(s).": "您即将删除 {{count}} 个 API 密钥。",
     "You are running the latest version ({{version}}).": "您正在运行最新版本 ({{version}})。",
     "You can also type or edit the model name manually": "也可以手动输入或修改模型名",

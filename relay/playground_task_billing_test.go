@@ -88,3 +88,13 @@ func TestEnsureTaskBillingConfigured(t *testing.T) {
 		})
 	}
 }
+
+func TestNewXJZPerCallPricesCannotUsePerSecondBilling(t *testing.T) {
+	for _, modelName := range []string{"grok-1.5-700", "dola-sd-2.5", "sd2.5-720p-ch1", "quanneng2.0", "viraldance900", "viraldance933-fast", "viraldance2.5-15-stable"} {
+		info := &relaycommon.RelayInfo{OriginModelName: modelName}
+		price := types.PriceData{UsePrice: true, ModelPrice: 1}
+		require.Error(t, ensureTaskBillingConfigured(info, price, billing_setting.VideoBillingModeTieredSeconds))
+		require.NoError(t, ensureTaskBillingConfigured(info, price, billing_setting.VideoBillingModeFixed))
+		require.NoError(t, ensureTaskBillingConfigured(info, price, billing_setting.VideoBillingModeTieredRequest))
+	}
+}

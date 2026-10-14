@@ -191,8 +191,6 @@ type VideosApiCreationVideoRequestOptions = {
 
 type XJZCreationVideoRequestOptions = {
   duration: number
-  ratio: CreationAspectRatio
-  resolution: string
   estimateSeconds: number
   [key: string]: unknown
 }
@@ -1083,7 +1081,9 @@ export function normalizeCreationVideoReferences(
     model
   )
   const supportsMultiMedia =
-    referenceMode === 'multimodal' && capability.referenceLimits.maxAudios > 0
+    referenceMode === 'multimodal' &&
+    (capability.referenceLimits.maxAudios > 0 ||
+      (capability.kind === 'xjz' && capability.referenceLimits.maxVideos > 0))
   const supportsImageAudio =
     referenceMode === 'image-audio' && capability.referenceLimits.maxAudios > 0
   const imageUrls =
@@ -1356,6 +1356,9 @@ export function getCreationVideoReferenceError(
     audioCount > 0 &&
     imageCount + normalized.videoUrls.length === 0
   ) {
+    return 'Audio reference requires at least one image reference.'
+  }
+  if (xjzSpec?.audioRequiresImage && audioCount > 0 && imageCount === 0) {
     return 'Audio reference requires at least one image reference.'
   }
   if (
@@ -1721,8 +1724,9 @@ export function getCreationVideoRequestOptions(
     if (!spec) throw new Error('Missing XJZ video model capability')
     const request: XJZCreationVideoRequestOptions = {
       duration: Number(normalizedOptions.duration),
-      ratio: normalizedOptions.aspectRatio ?? capability.aspectRatios[0],
-      resolution: spec.selectableResolution
+      [spec.ratioField ?? 'ratio']:
+        normalizedOptions.aspectRatio ?? capability.aspectRatios[0],
+      [spec.resolutionField ?? 'resolution']: spec.selectableResolution
         ? normalizedOptions.resolution
         : (spec.requestResolution ?? normalizedOptions.resolution),
       estimateSeconds: duration.estimateSeconds,
@@ -1732,16 +1736,19 @@ export function getCreationVideoRequestOptions(
         request[imageUrls.length === 1 ? 'image_url' : 'image_urls'] =
           imageUrls.length === 1 ? imageUrls[0] : imageUrls
       } else {
-        request[spec.imageField] = imageUrls
+        request[spec.imageField] =
+          spec.imageField === 'image_url' ? imageUrls[0] : imageUrls
       }
     }
     if (spec.videoField && videoUrls.length)
-      request[spec.videoField] = videoUrls
+      request[spec.videoField] =
+        spec.videoField === 'video_url' ? videoUrls[0] : videoUrls
     if (spec.audioField && audioUrls.length) {
       if (spec.audioField === 'audio_reference' && audioUrls.length === 1) {
         request.audio_url = audioUrls[0]
       } else {
-        request[spec.audioField] = audioUrls
+        request[spec.audioField] =
+          spec.audioField === 'audio_url' ? audioUrls[0] : audioUrls
       }
     }
     if (normalizedReferences.referenceMode === 'frames') {

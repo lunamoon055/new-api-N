@@ -59,9 +59,9 @@ function references(
 }
 
 describe('XJZ exact video models', () => {
-  it('routes all 13 API IDs through the standard video creation and polling path', () => {
+  it('routes all documented API IDs through the standard video creation and polling path', () => {
     const modelIds = Object.keys(XJZ_VIDEO_MODELS)
-    expect(modelIds).toHaveLength(13)
+    expect(modelIds).toHaveLength(38)
     for (const modelId of modelIds) {
       expect(getPlaygroundModelMode(modelId)).toBe('video')
       expect(getPlaygroundMediaEndpoint(modelId)).toBe('/api/creation/videos')
@@ -96,7 +96,9 @@ describe('XJZ exact video models', () => {
   })
 
   it('keeps the two similarly named 933 models on separate capabilities', () => {
-    expect(getXJZVideoModelSpec('特价sd2.0-720p-933-过脸')?.durations[0]).toBe('5')
+    expect(getXJZVideoModelSpec('特价sd2.0-720p-933-过脸')?.durations[0]).toBe(
+      '5'
+    )
     expect(getXJZVideoModelSpec('特价sd2.0-933-过脸')?.durations[0]).toBe('4')
   })
 

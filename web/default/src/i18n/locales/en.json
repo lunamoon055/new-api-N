@@ -4829,6 +4829,7 @@
     "Year": "Year",
     "years": "years",
     "Yes": "Yes",
+    "Yesterday": "Yesterday",
     "You are about to delete {{count}} API key(s).": "You are about to delete {{count}} API key(s).",
     "You are running the latest version ({{version}}).": "You are running the latest version ({{version}}).",
     "You can also type or edit the model name manually": "You can also type or edit the model name manually",

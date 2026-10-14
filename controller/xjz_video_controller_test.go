@@ -107,3 +107,30 @@ func TestXJZVideoCatalogDoesNotDisplaySelfUseFallbackAsPrice(t *testing.T) {
 	}, 1)
 	require.Nil(t, cost)
 }
+
+func TestXJZExpandedCatalogAndChannelTestParameters(t *testing.T) {
+	channel := &model.Channel{Type: constant.ChannelTypeOpenAI}
+	for name, spec := range common.XJZVideoSpecs {
+		t.Run(name, func(t *testing.T) {
+			mode, ok := getCreationModelMode(name, nil)
+			require.True(t, ok)
+			require.Equal(t, creationModeVideo, mode)
+			_, path, format := resolveChannelTestEndpoint(channel, name, "")
+			require.Equal(t, "/v1/videos", path)
+			require.Equal(t, types.RelayFormat(types.RelayFormatTask), format)
+			request := buildXJZVideoTestRequest(name)
+			parameters := common.GetVideoIntegrationParameters(name)
+			require.Contains(t, parameters.Durations, request.Duration)
+			if spec.RatioParameter() == "aspect_ratio" {
+				require.Equal(t, "16:9", request.AspectRatio)
+				require.Empty(t, request.Ratio)
+			} else {
+				require.Equal(t, "16:9", request.Ratio)
+				require.Empty(t, request.AspectRatio)
+			}
+			if spec.ResolutionParameter() == "size" {
+				require.Equal(t, spec.Resolution, request.Size)
+			}
+		})
+	}
+}
