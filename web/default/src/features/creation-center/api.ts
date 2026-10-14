@@ -215,7 +215,7 @@ function buildChatContent(prompt: string, assets: CreationAsset[]) {
 
 export async function getCreationVideoTask(params: {
   taskId: string
-  model: string
+  model: string | CreationModel
 }): Promise<CreationResult> {
   const path = getCreationVideoEndpoint(params.model)
   const response = await api.get(
@@ -225,12 +225,15 @@ export async function getCreationVideoTask(params: {
       unknown
     >
   )
-  return parseVideoResult(response.data, params.model)
+  return parseVideoResult(
+    response.data,
+    typeof params.model === 'string' ? params.model : params.model.id
+  )
 }
 
 export async function getCreationImageTask(params: {
   taskId: string
-  model: string
+  model: string | CreationModel
 }): Promise<CreationResult> {
   const path = usesAsyncCreationImageModel(params.model)
     ? '/api/creation/images/async-generations'
@@ -242,7 +245,10 @@ export async function getCreationImageTask(params: {
       unknown
     >
   )
-  return parseImageResult(response.data, params.model)
+  return parseImageResult(
+    response.data,
+    typeof params.model === 'string' ? params.model : params.model.id
+  )
 }
 
 export function getCreationErrorMessage(error: unknown): string {

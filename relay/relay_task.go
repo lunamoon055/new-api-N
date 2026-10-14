@@ -158,11 +158,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if adaptor == nil {
 		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("invalid api platform: %s", platform), "invalid_api_platform", http.StatusBadRequest)
 	}
-	// 异步图片和 XJZ 视频可使用公开别名：先解析本次渠道映射，再按实际上游模型校验能力。
+	// 任务模型可使用任意公开别名：先解析本次渠道映射，再按实际上游模型校验能力。
 	// 每次重试 InitChannelMeta 都重置快照，不能复用上一个渠道的映射结果。
-	imageModelMapped := strings.HasPrefix(info.RequestURLPath, "/v1/images/async-generations") &&
-		common.IsBaseURLHost(info.ChannelBaseUrl, common.LinkskyProviderHost)
-	taskModelMapped := imageModelMapped || common.IsBaseURLHost(info.ChannelBaseUrl, "api.xjzapi.cc")
+	taskModelMapped := info.OriginModelName != ""
 	if taskModelMapped {
 		info.UpstreamModelName = info.OriginModelName
 		if err := helper.ModelMappedHelper(c, info, nil); err != nil {

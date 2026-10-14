@@ -39,10 +39,31 @@ func CreationVideoRequestConvert() func(c *gin.Context) {
 	}
 }
 
+func CreationVideoGenerationsRequestConvert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		c.Request.URL.Path = "/pg/video/generations"
+		c.Set("relay_mode", relayconstant.RelayModeVideoSubmit)
+		c.Next()
+	}
+}
+
 func CreationVideoFetchConvert() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		taskID := c.Param("task_id")
 		c.Request.Method = http.MethodGet
+		c.Request.URL.Path = "/v1/videos/" + taskID
+		c.Set("task_id", taskID)
+		c.Set("relay_mode", relayconstant.RelayModeVideoFetchByID)
+		c.Next()
+	}
+}
+
+func CreationVideoGenerationsFetchConvert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		taskID := c.Param("task_id")
+		c.Request.Method = http.MethodGet
+		// Creation clients use the normalized video response for every
+		// submission protocol; the stored task selects its own adaptor.
 		c.Request.URL.Path = "/v1/videos/" + taskID
 		c.Set("task_id", taskID)
 		c.Set("relay_mode", relayconstant.RelayModeVideoFetchByID)

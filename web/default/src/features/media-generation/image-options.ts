@@ -47,6 +47,7 @@ type CreationImageMessageContent =
   | { type: 'image_url'; image_url: { url: string } }
 
 export type CreationImageRequestOptions =
+  | Record<string, unknown>
   | Record<string, never>
   | {
       output_resolution: string
@@ -181,6 +182,18 @@ function getModelMetadata(model?: CreationModelInput) {
   return typeof model === 'string' ? undefined : model?.metadata
 }
 
+function getMappedImageParameters(model?: CreationModelInput) {
+  if (
+    getModelMetadata(model)?.provider?.toLowerCase() === 'sanbao' ||
+    getAsyncImageCapability(model)
+  )
+    return undefined
+  return typeof model === 'object'
+    ? model.mapped_endpoints?.find((endpoint) => endpoint.kind === 'image')
+        ?.parameters
+    : undefined
+}
+
 function normalizeModelId(model?: CreationModelInput) {
   return getModelId(model).trim().toLowerCase()
 }
@@ -193,7 +206,14 @@ function getAsyncImageCapability(model?: CreationModelInput) {
 }
 
 export function usesAsyncCreationImageModel(model?: CreationModelInput) {
-  return !!getAsyncImageCapability(model)
+  const mapped =
+    typeof model === 'object'
+      ? model.mapped_endpoints?.find((endpoint) => endpoint.kind === 'image')
+      : undefined
+  return (
+    mapped?.path === '/v1/images/async-generations' ||
+    !!getAsyncImageCapability(model)
+  )
 }
 
 function isSanbaoImageModel(model?: CreationModelInput) {
@@ -220,6 +240,7 @@ function cleanAspectRatioOptions(values?: string[]) {
 
 export function supportsCreationImageReferences(model?: CreationModelInput) {
   return (
+    Boolean(getMappedImageParameters(model)?.image_field) ||
     usesAsyncCreationImageModel(model) ||
     normalizeModelId(model) === 'gpt-image2' ||
     isSanbaoImageModel(model)
@@ -230,6 +251,13 @@ export function getCreationImageReferenceLimits(
   model?: CreationModelInput
 ): CreationImageReferenceLimits {
   const metadata = getModelMetadata(model)
+  const mapped = getMappedImageParameters(model)
+  if (mapped)
+    return {
+      maxImages: mapped.max_images,
+      maxImageSizeMB: 20,
+      maxImageSizeBytes: CREATION_IMAGE_REFERENCE_MAX_BYTES,
+    }
   if (isSanbaoImageModel(model)) {
     const maxImageSizeMB = metadata?.max_image_size_mb ?? 20
     return {
@@ -257,6 +285,8 @@ export function getCreationImageAspectRatioOptions(
   model?: CreationModelInput
 ): CreationImageAspectRatio[] {
   const metadata = getModelMetadata(model)
+  const mapped = getMappedImageParameters(model)
+  if (mapped?.ratios?.length) return mapped.ratios
   if (isSanbaoImageModel(model)) {
     const values = cleanAspectRatioOptions(
       metadata?.aspect_ratios?.length
@@ -271,14 +301,21 @@ export function getCreationImageAspectRatioOptions(
 }
 
 export function getCreationImageResolutionOptions(model?: CreationModelInput) {
-  return getAsyncImageCapability(model)?.resolutions ?? []
+  return (
+    getMappedImageParameters(model)?.resolutions ??
+    getAsyncImageCapability(model)?.resolutions ??
+    []
+  )
 }
 
 export function normalizeCreationImageReferences(
   references?: Partial<CreationImageReferences>,
   model?: CreationModelInput
 ): CreationImageReferences {
-  if (!supportsCreationImageReferences(model)) {
+  if (
+    !supportsCreationImageReferences(model) &&
+    !getMappedImageParameters(model)
+  ) {
     return { ...EMPTY_CREATION_IMAGE_REFERENCES }
   }
   return {
@@ -290,7 +327,10 @@ export function normalizeCreationImageOptions(
   options?: Partial<CreationImageOptions>,
   model?: CreationModelInput
 ): CreationImageOptions {
-  if (!supportsCreationImageReferences(model)) {
+  if (
+    !supportsCreationImageReferences(model) &&
+    !getMappedImageParameters(model)
+  ) {
     return { ...DEFAULT_CREATION_IMAGE_OPTIONS }
   }
   const aspectRatioOptions = getCreationImageAspectRatioOptions(model)
@@ -309,6 +349,7 @@ export function normalizeCreationImageOptions(
   const outputResolutionOptions = getCreationImageResolutionOptions(model)
   const defaultOutputResolution =
     asyncCapability?.defaultResolution ??
+    getMappedImageParameters(model)?.resolutions?.[0] ??
     DEFAULT_CREATION_IMAGE_OPTIONS.outputResolution
   const outputResolution =
     outputResolutionOptions.length > 0 &&
@@ -331,7 +372,10 @@ export function getCreationImageReferenceError(
     if (isSanbaoImageModel(model)) {
       return 'Sanbao accepts too many reference images.'
     }
-    if (!usesAsyncCreationImageModel(model)) {
+    if (
+      !usesAsyncCreationImageModel(model) &&
+      !getMappedImageParameters(model)
+    ) {
       return 'Gpt-image2 accepts at most 6 reference images.'
     }
     return `This image model accepts at most ${limits.maxImages} reference images.`
@@ -371,13 +415,27 @@ export function getCreationImageRequestOptions(
   references: CreationImageReferences = EMPTY_CREATION_IMAGE_REFERENCES,
   imageOptions: Partial<CreationImageOptions> = {}
 ): CreationImageRequestOptions {
-  if (!supportsCreationImageReferences(model)) return {}
+  const mapped = getMappedImageParameters(model)
+  if (!supportsCreationImageReferences(model) && !mapped) return {}
 
   const normalizedOptions = normalizeCreationImageOptions(imageOptions, model)
   const normalized = normalizeCreationImageReferences(references, model)
   const imageUrls = normalized.imageUrls
     .map(getCreationReferenceURL)
     .filter(Boolean)
+  if (mapped) {
+    const request: Record<string, unknown> = {}
+    if (mapped.ratio_field)
+      request[mapped.ratio_field] = normalizedOptions.aspectRatio
+    if (mapped.resolution_field)
+      request[mapped.resolution_field] =
+        mapped.request_resolution ?? normalizedOptions.outputResolution
+    if (mapped.image_field && imageUrls.length)
+      request[mapped.image_field] = mapped.image_field.endsWith('_url')
+        ? imageUrls[0]
+        : imageUrls
+    return request
+  }
   if (isSanbaoImageModel(model)) {
     return {
       aspect_ratio: normalizedOptions.aspectRatio,

@@ -22,6 +22,9 @@ type ModelIntegrationParameters struct {
 	AudioNeedsImage    bool     `json:"audio_needs_image,omitempty"`
 	AudioRequiresImage bool     `json:"audio_requires_image,omitempty"`
 	AllowFrames        bool     `json:"allow_frames,omitempty"`
+	MaxImageSizeMB     int      `json:"max_image_size_mb,omitempty"`
+	MaxVideoSizeMB     int      `json:"max_video_size_mb,omitempty"`
+	MaxAudioSizeMB     int      `json:"max_audio_size_mb,omitempty"`
 }
 
 func integrationDurationRange(minimum, maximum int) []int {
@@ -34,6 +37,10 @@ func integrationDurationRange(minimum, maximum int) []int {
 
 func NormalizeGatewayVideoModelName(modelName string) string {
 	name := strings.ToLower(strings.TrimSpace(modelName))
+	// Classification only: keep the original public/upstream ID in requests.
+	if strings.HasPrefix(name, "seedance") {
+		name = strings.Join(strings.Fields(name), "")
+	}
 	for _, prefix := range []string{"特价/", "003系列/"} {
 		name = strings.TrimPrefix(name, prefix)
 	}
@@ -63,6 +70,7 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 			MinImages: spec.MinImages, MaxImages: spec.MaxImages, MaxVideos: spec.MaxVideos, MaxAudios: spec.MaxAudios,
 			AudioNeedsImage: spec.AudioNeedsImage, AllowFrames: spec.AllowFrames,
 			AudioRequiresImage: spec.AudioRequiresImage,
+			MaxImageSizeMB:     10, MaxVideoSizeMB: 10, MaxAudioSizeMB: 10,
 		}
 	}
 	name := NormalizeGatewayVideoModelName(modelName)
@@ -72,6 +80,8 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 		ImageField: "referenceImages", VideoField: "referenceVideos", AudioField: "referenceAudios", MaxImages: 9, MaxVideos: 3, MaxAudios: 3,
 	}
 	switch {
+	case name == "seedance2.0:x", name == "seedance2.0:x1":
+		p.Durations = integrationDurationRange(5, 15)
 	case name == "sd-2.5-c1", name == "seedance2.5-c", name == "seedance-2.5":
 		p.Durations = integrationDurationRange(4, 29)
 		if name == "sd-2.5-c1" {

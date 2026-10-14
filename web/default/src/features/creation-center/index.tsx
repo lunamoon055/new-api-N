@@ -1171,15 +1171,19 @@ export function CreationCenter() {
     }
     setRefreshingTask(true)
     try {
+      const taskModel =
+        catalogQuery.data?.data?.modes
+          .flatMap((group) => group.models)
+          .find((model) => model.id === result.model) ?? result.model
       const nextResult =
         result.mode === 'image'
           ? await getCreationImageTask({
               taskId: result.taskId,
-              model: result.model,
+              model: taskModel,
             })
           : await getCreationVideoTask({
               taskId: result.taskId,
-              model: result.model,
+              model: taskModel,
             })
       const enrichedResult = {
         ...nextResult,
@@ -1207,6 +1211,10 @@ export function CreationCenter() {
   }
 
   const selectHistoryItem = (item: CreationHistoryItem) => {
+    const historyModel =
+      catalogQuery.data?.data?.modes
+        .flatMap((group) => group.models)
+        .find((model) => model.id === item.model) ?? item.model
     setMode(item.mode)
     setSelectedByMode((current) => ({
       ...current,
@@ -1216,7 +1224,7 @@ export function CreationCenter() {
     setAssets(normalizeStoredCreationAssets(item.assets))
     setImageReferences(
       item.imageReferences
-        ? normalizeCreationImageReferences(item.imageReferences, item.model)
+        ? normalizeCreationImageReferences(item.imageReferences, historyModel)
         : {
             ...EMPTY_CREATION_IMAGE_REFERENCES,
             imageUrls: [],
@@ -1224,12 +1232,12 @@ export function CreationCenter() {
     )
     setImageOptions(
       item.imageOptions
-        ? normalizeCreationImageOptions(item.imageOptions, item.model)
+        ? normalizeCreationImageOptions(item.imageOptions, historyModel)
         : DEFAULT_CREATION_IMAGE_OPTIONS
     )
     setVideoReferences(
       item.videoReferences
-        ? normalizeCreationVideoReferences(item.videoReferences, item.model)
+        ? normalizeCreationVideoReferences(item.videoReferences, historyModel)
         : {
             ...EMPTY_CREATION_VIDEO_REFERENCES,
             imageUrls: [],
@@ -1240,7 +1248,7 @@ export function CreationCenter() {
     setResult(item.result)
     if (item.videoOptions) {
       setVideoOptions(
-        normalizeCreationVideoOptions(item.videoOptions, item.model)
+        normalizeCreationVideoOptions(item.videoOptions, historyModel)
       )
     }
     setInspectorView('task')

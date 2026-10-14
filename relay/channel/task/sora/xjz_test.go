@@ -62,7 +62,7 @@ func TestXJZVideoModelsUseVideosEndpointAndDocumentedDurations(t *testing.T) {
 		{"特价sd2.0-933-过脸", 4, "720p", ""},
 		{"MiniMaxH3", 4, "2K", ""},
 	}
-	require.Len(t, xjzVideoSpecs, 38)
+	require.Len(t, xjzVideoSpecs, 48)
 	for _, tc := range models {
 		t.Run(tc.name, func(t *testing.T) {
 			reference := tc.reference

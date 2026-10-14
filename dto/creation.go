@@ -1,18 +1,22 @@
 package dto
 
-import "github.com/QuantumNous/new-api/constant"
+import (
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+)
 
 type CreationModel struct {
-	ID                     string                  `json:"id"`
-	Description            string                  `json:"description,omitempty"`
-	ManualDescription      string                  `json:"manual_description,omitempty"`
-	Icon                   string                  `json:"icon,omitempty"`
-	Tags                   []string                `json:"tags,omitempty"`
-	VendorID               int                     `json:"vendor_id,omitempty"`
-	QuotaPerUnit           int                     `json:"quota_per_unit"`
-	Cost                   *CreationModelCost      `json:"cost,omitempty"`
-	Metadata               *CreationModelMetadata  `json:"metadata,omitempty"`
-	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
+	ID                     string                            `json:"id"`
+	Description            string                            `json:"description,omitempty"`
+	ManualDescription      string                            `json:"manual_description,omitempty"`
+	Icon                   string                            `json:"icon,omitempty"`
+	Tags                   []string                          `json:"tags,omitempty"`
+	VendorID               int                               `json:"vendor_id,omitempty"`
+	QuotaPerUnit           int                               `json:"quota_per_unit"`
+	Cost                   *CreationModelCost                `json:"cost,omitempty"`
+	Metadata               *CreationModelMetadata            `json:"metadata,omitempty"`
+	SupportedEndpointTypes []constant.EndpointType           `json:"supported_endpoint_types"`
+	MappedEndpoints        []common.ModelIntegrationEndpoint `json:"mapped_endpoints,omitempty"`
 }
 
 type CreationTaskError struct {

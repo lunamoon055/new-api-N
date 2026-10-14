@@ -73,18 +73,57 @@ test('mapped public model inherits the upstream endpoint while requests keep the
   assert.match(all, /"model": "Grok"/)
 })
 
-test('conflicting channel mappings list their routes without guessing a code sample', () => {
+test('multiple mapped protocols offer separate selectable examples', () => {
   const model = { model_name: 'alias', mapped_endpoints: [
     { type: 'openai-video', kind: 'video', method: 'POST', path: '/v1/videos' },
     { type: 'openai-video', kind: 'video', method: 'POST', path: '/v1/video/async-generations' },
   ] }
   const doc = getModelDoc(model, {})
-  assert.equal(doc.verified, false)
+  assert.equal(doc.verified, true)
   assert.equal(doc.alternatives.length, 2)
-  assert.equal(getCodeSample(model, doc, 'cURL'), '')
+  assert.match(getCodeSample(model, doc, 'cURL'), /\/v1\/videos/)
+  const selected = getModelDoc(model, {}, '/v1/video/async-generations')
+  assert.match(getCodeSample(model, selected, 'cURL'), /\/v1\/video\/async-generations/)
   const all = getAllModelDocs({ models: [model], endpoints: {} }, 'https://gateway.example.com')
   assert.match(all, /POST \/v1\/videos/)
   assert.match(all, /POST \/v1\/video\/async-generations/)
+  assert.equal((all.match(/^### cURL$/gm) || []).length, 2)
+  const mixed = {...model, mapped_endpoints: [
+    {type:'image-generation',kind:'image',path:'/v1/images/generations'},
+    {type:'openai',kind:'text',path:'/v1/chat/completions'},
+  ]}
+  assert.equal(getModelKind(mixed),'image')
+  assert.equal(getModelDoc(mixed,{},'/v1/chat/completions').kind,'text')
+})
+
+test('documented Seedance aliases use video when only generic channel metadata exists', () => {
+  for (const name of ['Seedance 2.0:X', 'Seedance 2.0:X1']) {
+    const model = {model_name: name, supported_endpoint_types: ['openai']}
+    assert.equal(getModelKind(model), 'video')
+    const doc = getModelDoc(model, {})
+    assert.equal(doc.path, '/v1/videos')
+    assert.equal(getRequestBody(model, doc).model, name)
+    assert.equal(getRequestBody(model, doc).duration, 5)
+    assert.doesNotMatch(getCodeSample(model, doc, 'cURL'), /chat\/completions|messages/)
+    const explicitlyMapped = {...model, mapped_endpoints: [{type:'openai', kind:'text', path:'/v1/chat/completions'}]}
+    assert.equal(getModelKind(explicitlyMapped), 'text')
+    assert.match(getCodeSample(explicitlyMapped, getModelDoc(explicitlyMapped, {}), 'cURL'), /chat\/completions/)
+  }
+})
+
+test('mapped native text protocols use their own payloads', () => {
+  for (const [type, path, field] of [
+    ['openai-response','/v1/responses','input'],
+    ['gemini','/v1beta/models/{model}:generateContent','contents'],
+    ['anthropic','/v1/messages','messages'],
+    ['embeddings','/v1/embeddings','input'],
+  ]) {
+    const model = {model_name:'public-alias',mapped_endpoints:[{type, path, kind:'text',method:'POST'}]}
+    const doc=getModelDoc(model,{})
+    assert.ok(getRequestBody(model,doc)[field])
+    assert.ok(getCodeSample(model,doc,'cURL'))
+    if (type==='anthropic') assert.equal(getRequestBody(model,doc).max_tokens,1024)
+  }
 })
 
 test('mapped image example does not invent upstream image options', () => {

@@ -30,12 +30,11 @@ export type XJZVideoModelSpec = {
   minImages?: number
   maxVideos: number
   maxAudios: number
-  imageField?: 'images' | 'reference_images' | 'image_urls' | 'image_url'
-  videoField?: 'reference_videos' | 'video_urls' | 'video_url'
-  audioField?:
-    'reference_audios' | 'audio_urls' | 'audio_reference' | 'audio_url'
-  ratioField?: 'aspect_ratio'
-  resolutionField?: 'size'
+  imageField?: string
+  videoField?: string
+  audioField?: string
+  ratioField?: string
+  resolutionField?: string
   audioRequiresImage?: boolean
   requestResolution?: string
   selectableResolution?: boolean
@@ -550,7 +549,21 @@ export const XJZ_VIDEO_MODELS: Record<string, XJZVideoModelSpec> = {
 export function getXJZVideoModelSpec(
   modelId: string
 ): XJZVideoModelSpec | undefined {
-  return Object.hasOwn(XJZ_VIDEO_MODELS, modelId)
-    ? XJZ_VIDEO_MODELS[modelId]
-    : undefined
+  if (Object.hasOwn(XJZ_VIDEO_MODELS, modelId)) return XJZ_VIDEO_MODELS[modelId]
+  if (Object.hasOwn(XJZ_VIDEO_ALIASES, modelId))
+    return XJZ_VIDEO_MODELS[XJZ_VIDEO_ALIASES[modelId]]
+  return undefined
+}
+
+export const XJZ_VIDEO_ALIASES: Record<string, string> = {
+  'sd2.5-全参过真人-30-10-10-B': 'sd2.5-全参过真人-30-10-10',
+  'sd2.0-全参过真人-720p-B': 'sd2.0-全参过真人-720p',
+  'grok-1.5-700-B': 'grok-1.5-700',
+  'dola-sd-2.5-B': 'dola-sd-2.5',
+  'dola-sd-2.0-900-B': 'dola-sd-2.0-900',
+  'dola-sd-2.0-B': 'dola-sd-2.0',
+  'sd-2.0-933-720-fast-原生真人-B': 'sd-2.0-933-720-fast-原生真人',
+  'gz稳定sd2.0-903-720P-C': 'gz稳定sd2.0-903-720P',
+  '特价sd2.0-720p-933-过脸-C': '特价sd2.0-720p-933-过脸',
+  '特价sd2.0-933-过脸-D': '特价sd2.0-933-过脸',
 }

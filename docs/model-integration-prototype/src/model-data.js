@@ -36,32 +36,44 @@ const exactVideoDetails = {
   'MiniMaxH3': { duration: 5, resolution: '2k' },
 }
 
+// These two documented Seedance aliases are video models even when an older
+// catalog falls back to the channel's generic chat protocol.
+const seedanceAliases = new Set(['Seedance 2.0:X', 'Seedance 2.0:X1'])
+const seedanceAliasParameters = {
+  durations: Array.from({ length: 11 }, (_, i) => i + 5), resolutions: ['720p'], ratios: ['16:9', '9:16', '1:1'],
+  duration_field: 'duration', ratio_field: 'ratio', resolution_field: 'resolution',
+  image_field: 'referenceImages', video_field: 'referenceVideos', audio_field: 'referenceAudios',
+  max_images: 9, max_videos: 3, max_audios: 3,
+}
+function getMappedEndpoints(model) {
+  return (model.mapped_endpoints || []).filter((endpoint) => endpoint?.path)
+}
+
 const likelyVideoName = /sd2|sd-2|seedance|h3|video|grok|dola|wan3|sora|veo|kling/i
 
 export function getModelKind(model) {
   const name = model.model_name || ''
   const types = model.supported_endpoint_types || []
-  const mapped = model.mapped_endpoints || []
-  if (mapped.length && mapped.every((endpoint) => endpoint.kind === mapped[0].kind)) return mapped[0].kind
-  if (mapped.length) return 'other'
+  const mapped = getMappedEndpoints(model)
+  if (mapped.length) return mapped[0].kind || 'other'
   if (imageNames.has(name) || types.includes('image-generation')) return 'image'
   if (gatewayVideo.has(name) || exactVideoDetails[name] || likelyVideoName.test(name)) return 'video'
   if (name.toLowerCase().includes('midjourney')) return 'other'
   return 'text'
 }
 
-export function getModelDoc(model, endpointMap) {
+export function getModelDoc(model, endpointMap, selectedPath) {
   const name = model.model_name || ''
   const kind = getModelKind(model)
-  const mapped = (model.mapped_endpoints || []).filter((endpoint) => endpoint?.path)
-  if (mapped.length > 1) {
-    return { kind, method: 'POST', path: '', source: '渠道映射', verified: false, alternatives: mapped }
-  }
-  if (mapped.length === 1) {
-    const endpoint = mapped[0]
+  const mapped = getMappedEndpoints(model)
+  if (mapped.length) {
+    const endpoint = mapped.find((entry) => entry.path === selectedPath) || mapped[0]
     const path = endpoint.path.replace('{model}', encodeURIComponent(name))
     return {
       kind: endpoint.kind,
+      type: endpoint.type,
+      selectionPath: endpoint.path,
+      ...(mapped.length > 1 ? { alternatives: mapped } : {}),
       method: endpoint.method || 'POST',
       path,
       queryPath: endpoint.query_path?.replace('{model}', encodeURIComponent(name)),
@@ -70,7 +82,7 @@ export function getModelDoc(model, endpointMap) {
       mapped: true,
       parameters: endpoint.parameters,
       sampleSupported: endpoint.type === 'image-generation' || endpoint.type === 'openai' ||
-        ['openai-video', 'video-videos', 'video-async', 'video-generations'].includes(endpoint.type),
+        ['openai-video', 'video-videos', 'video-async', 'video-generations', 'openai-response', 'openai-response-compact', 'anthropic', 'gemini', 'embeddings', 'jina-rerank'].includes(endpoint.type),
       details: endpoint.example_duration ? {
         duration: endpoint.example_duration,
         resolution: endpoint.example_resolution,
@@ -78,6 +90,7 @@ export function getModelDoc(model, endpointMap) {
       } : exactVideoDetails[name],
     }
   }
+  if (seedanceAliases.has(name)) return {kind: 'video', path: '/v1/videos', method: 'POST', queryPath: '/v1/videos/{task_id}', verified: true, source: '模型视频协议', parameters: seedanceAliasParameters}
   if (kind === 'image' && imageNames.has(name)) {
     return { kind, method: 'POST', path: '/v1/images/generations', source: '仓库接入文档', verified: true }
   }
@@ -123,7 +136,7 @@ export function getRequestBody(model, doc) {
     if (p.duration_field && p.durations?.length) body[p.duration_field] = doc.details?.duration || p.durations[0]
     if (p.ratio_field && p.ratios?.length) body[p.ratio_field] = p.ratios[0]
     if (p.resolution_field && p.resolutions?.length) body[p.resolution_field] = p.request_resolution || p.resolutions[0]
-    if (p.min_images && p.image_field) body[p.image_field] = ['https://cdn.example.com/reference.jpg']
+    if (p.min_images && p.image_field) body[p.image_field] = p.image_field.endsWith('_url') ? 'https://cdn.example.com/reference.jpg' : ['https://cdn.example.com/reference.jpg']
     return body
   }
   if (doc.kind === 'image') {
@@ -152,14 +165,23 @@ export function getRequestBody(model, doc) {
     }
     return body
   }
+  if (doc.type === 'openai-response' || doc.type === 'openai-response-compact') return {model: model.model_name, input: '你好，请用一句话介绍自己。'}
+  if (doc.type === 'gemini') return {contents: [{role: 'user', parts: [{text: '你好，请用一句话介绍自己。'}]}]}
+  if (doc.type === 'embeddings') return {model: model.model_name, input: '你好'}
+  if (doc.type === 'jina-rerank') return {model: model.model_name, query: '你好', documents: ['你好，世界']}
   return {
     model: model.model_name,
+    ...(doc.type === 'anthropic' ? {max_tokens: 1024} : {}),
     messages: [{ role: 'user', content: '你好，请用一句话介绍自己。' }],
   }
 }
 
 export function getRequestParams(doc) {
   if (!doc.verified || doc.sampleSupported === false) return []
+  if (doc.type === 'openai-response' || doc.type === 'openai-response-compact') return [['model', 'string', '是', '完整的模型 ID'], ['input', 'string / array', '是', '输入内容']]
+  if (doc.type === 'gemini') return [['contents', 'array', '是', 'role 与 parts 组成的输入内容']]
+  if (doc.type === 'embeddings') return [['model', 'string', '是', '完整的模型 ID'], ['input', 'string / array', '是', '待编码的文本']]
+  if (doc.type === 'jina-rerank') return [['model', 'string', '是', '完整的模型 ID'], ['query', 'string', '是', '查询内容'], ['documents', 'array', '是', '候选文档']]
   if (doc.parameters) {
     const p = doc.parameters
     const rows = [['model', 'string', '是', '从当前令牌的模型列表复制完整 ID'], ['prompt', 'string', '是', '希望生成的内容描述']]
@@ -167,7 +189,7 @@ export function getRequestParams(doc) {
     if (p.ratio_field) rows.push([p.ratio_field, 'string', '否', `支持比例：${(p.ratios || []).join('、')}`])
     if (p.resolution_field) rows.push([p.resolution_field, 'string', '按模型', `支持分辨率：${(p.resolutions || []).join('、')}`])
     for (const [field, count, label] of [[p.image_field, p.max_images, '图片'], [p.video_field, p.max_videos, '视频'], [p.audio_field, p.max_audios, '音频']]) {
-      if (field && count) rows.push([field, 'string[]', field === p.image_field && p.min_images ? '是' : '否', `最多 ${count} 个可公开访问的${label} URL`])
+      if (field && count) rows.push([field, field.endsWith('_url') ? 'string' : 'string[]', field === p.image_field && p.min_images ? '是' : '否', `最多 ${count} 个可公开访问的${label} URL`])
     }
     return rows
   }
@@ -205,13 +227,14 @@ export function getCodeSample(model, doc, language) {
     return [
       'import os',
       'import requests',
+      'import json',
       '',
       'base_url = os.environ["API_BASE_URL"]',
       'api_key = os.environ["API_KEY"]',
       'response = requests.post(',
       '    base_url + "' + doc.path + '",',
       '    headers={"Authorization": "Bearer " + api_key},',
-      '    json=' + json.replace(/\n/g, '\n    ') + ',',
+      '    json=json.loads(' + JSON.stringify(json) + '),',
       ')',
       'response.raise_for_status()',
       'print(response.json())',
@@ -244,6 +267,11 @@ export function getCodeSample(model, doc, language) {
 
 export function getResponseSample(doc) {
   if (!doc.verified || doc.sampleSupported === false) return ''
+  if (doc.type === 'gemini') return JSON.stringify({candidates: [{content: {role: 'model', parts: [{text: '你好！'}]}}]}, null, 2)
+  if (doc.type === 'openai-response' || doc.type === 'openai-response-compact') return JSON.stringify({id: 'resp_example', output: [{type: 'message', content: [{type: 'output_text', text: '你好！'}]}]}, null, 2)
+  if (doc.type === 'anthropic') return JSON.stringify({type: 'message', role: 'assistant', content: [{type: 'text', text: '你好！'}]}, null, 2)
+  if (doc.type === 'embeddings') return JSON.stringify({data: [{embedding: [0.1, 0.2], index: 0}]}, null, 2)
+  if (doc.type === 'jina-rerank') return JSON.stringify({results: [{index: 0, relevance_score: 0.9}]}, null, 2)
   if (doc.kind === 'image') {
     return JSON.stringify({ data: [{ url: 'https://example.com/generated-image.png' }] }, null, 2)
   }

@@ -187,16 +187,26 @@ func requestChannelFilter(c *gin.Context, modelName string) model.ChannelFilter 
 	if c == nil || c.Request == nil || c.Request.Method != http.MethodPost {
 		return nil
 	}
-	if strings.HasPrefix(c.Request.URL.Path, "/v1/images/async-generations") {
+	requestPath := c.Request.URL.Path
+	if strings.HasPrefix(requestPath, "/pg/") {
+		requestPath = "/v1/" + strings.TrimPrefix(requestPath, "/pg/")
+	}
+	if strings.HasPrefix(requestPath, "/v1/images/async-generations") {
 		return func(channel *model.Channel) bool {
 			return channel != nil && common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
 		}
 	}
-	if common.IsLinkskyAsyncImageModelName(modelName) &&
-		(strings.HasPrefix(c.Request.URL.Path, "/v1/images/generations") ||
-			strings.HasPrefix(c.Request.URL.Path, "/v1/images/edits")) {
+	if strings.HasPrefix(requestPath, "/v1/images/generations") ||
+		strings.HasPrefix(requestPath, "/v1/images/edits") {
 		return func(channel *model.Channel) bool {
-			return channel != nil && !common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
+			if channel == nil {
+				return false
+			}
+			upstream, _, err := common.ResolveModelMapping(modelName, channel.GetModelMapping())
+			if err != nil {
+				return false
+			}
+			return !common.IsLinkskyAsyncImageModelName(upstream) || !common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
 		}
 	}
 	return nil

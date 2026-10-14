@@ -90,6 +90,20 @@ func TestSyncImageRequestChannelFilterExcludesLinkskyForDocumentedModels(t *test
 	require.True(t, filter(&model.Channel{BaseURL: &otherURL}))
 }
 
+func TestImageRequestChannelFilterResolvesAliasesAndSessionPaths(t *testing.T) {
+	mapping := `{"public-alias":"middle","middle":"gpt-image-2"}`
+	linksky := &model.Channel{BaseURL: common.GetPointer("https://linksky.top"), ModelMapping: &mapping}
+	other := &model.Channel{BaseURL: common.GetPointer("https://other-provider.example"), ModelMapping: &mapping}
+	for _, path := range []string{"/v1/images/generations", "/pg/images/generations"} {
+		filter := requestChannelFilter(newDistributorTestContext(http.MethodPost, path, ""), "public-alias")
+		require.False(t, filter(linksky))
+		require.True(t, filter(other))
+	}
+	filter := requestChannelFilter(newDistributorTestContext(http.MethodPost, "/pg/images/async-generations", ""), "public-alias")
+	require.True(t, filter(linksky))
+	require.False(t, filter(other))
+}
+
 func TestAsyncImageVariantsKeepOtherProviderSyncRouting(t *testing.T) {
 	for _, name := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"} {
 		for _, path := range []string{"/v1/images/generations", "/v1/images/async-generations"} {
@@ -126,4 +140,19 @@ func TestCreationVideoSubmitUsesSessionBillingWithoutTokenQuota(t *testing.T) {
 	require.True(t, info.IsPlayground)
 	require.Equal(t, "/v1/videos", info.RequestURLPath)
 	require.Equal(t, relayconstant.RelayModeVideoSubmit, info.RelayMode)
+}
+
+func TestCreationVideoGenerationsUsesSessionBillingAndNormalizedFetch(t *testing.T) {
+	c := newDistributorTestContext(http.MethodPost, "/api/creation/video/generations", `{"model":"public-alias","prompt":"test"}`)
+	CreationVideoGenerationsRequestConvert()(c)
+	info, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
+	require.NoError(t, err)
+	require.True(t, info.IsPlayground)
+	require.Equal(t, "/v1/video/generations", info.RequestURLPath)
+	require.Equal(t, relayconstant.RelayModeVideoSubmit, info.RelayMode)
+	fetch := newDistributorTestContext(http.MethodGet, "/api/creation/video/generations/task_public", "")
+	fetch.Params = gin.Params{{Key: "task_id", Value: "task_public"}}
+	CreationVideoGenerationsFetchConvert()(fetch)
+	require.Equal(t, "/v1/videos/task_public", fetch.Request.URL.Path)
+	require.Equal(t, relayconstant.RelayModeVideoFetchByID, fetch.GetInt("relay_mode"))
 }

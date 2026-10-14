@@ -10,40 +10,17 @@ import (
 
 // PricingMappedEndpoint exposes the public gateway route inherited from a
 // channel's final mapped model without exposing the channel's mapping table.
-type PricingMappedEndpoint struct {
-	Type                 string                             `json:"type"`
-	Kind                 string                             `json:"kind"`
-	Path                 string                             `json:"path"`
-	Method               string                             `json:"method"`
-	QueryPath            string                             `json:"query_path,omitempty"`
-	QueryMethod          string                             `json:"query_method,omitempty"`
-	ExampleDuration      int                                `json:"example_duration,omitempty"`
-	ExampleResolution    string                             `json:"example_resolution,omitempty"`
-	ExampleImageRequired bool                               `json:"example_image_required,omitempty"`
-	Parameters           *common.ModelIntegrationParameters `json:"parameters,omitempty"`
-}
+type PricingMappedEndpoint = common.ModelIntegrationEndpoint
 
 func resolvePricingMappedModel(modelName string, rawMapping *string) (string, bool) {
 	if rawMapping == nil || strings.TrimSpace(*rawMapping) == "" {
 		return modelName, false
 	}
-	var mapping map[string]string
-	if err := common.UnmarshalJsonStr(*rawMapping, &mapping); err != nil {
+	resolved, mapped, err := common.ResolveModelMapping(modelName, *rawMapping)
+	if err != nil {
 		return modelName, false
 	}
-	current := modelName
-	visited := map[string]bool{current: true}
-	for {
-		next := strings.TrimSpace(mapping[current])
-		if next == "" || next == current {
-			return current, current != modelName
-		}
-		if visited[next] {
-			return modelName, false
-		}
-		visited[next] = true
-		current = next
-	}
+	return resolved, mapped
 }
 
 func pricingEndpointKind(endpointType string, path string) string {
@@ -144,6 +121,7 @@ func pricingVideoEndpoint(modelName string) *PricingMappedEndpoint {
 		strings.HasPrefix(name, "videos-"),
 		strings.HasPrefix(name, "sd2"),
 		strings.HasPrefix(name, "sd-2-"),
+		strings.HasPrefix(name, "sd-2.0-"),
 		strings.HasPrefix(name, "seedance2."),
 		strings.HasPrefix(name, "seedance-2."),
 		strings.HasPrefix(name, "wan3.0-video"),
@@ -177,30 +155,21 @@ func pricingVideoEndpoint(modelName string) *PricingMappedEndpoint {
 }
 
 func pricingXJZVideoExample(modelName string) (int, string, bool) {
-	switch strings.TrimSpace(modelName) {
-	case "特价dola2.5-900-720P-固定30s":
-		return 30, "720p", true
-	case "特价dola-sd2.0-900-720p":
-		return 5, "720p", true
-	case "TTP-grok":
-		return 6, "720p", false
-	case "gz稳定sd2.0-903-720P", "特价sd2.0-720p-933-过脸", "特价稳sd2.0-933-720p":
-		return 5, "720p", false
-	case "Xminimex-h3-2K-933":
-		return 5, "2k", false
-	case "特价稳sd-2.5-30s-720P可10图":
-		return 30, "720p", false
-	case "gz稳定sd2.5-720全参过脸", "特价sd2.0-933-过脸":
-		return 4, "720p", false
-	case "gz稳定sd2.5-480全参过脸":
-		return 4, "480p", false
-	case "gz稳定sd2.5-1080全参过脸":
-		return 4, "1080p", false
-	case "MiniMaxH3":
-		return 4, "2K", false
-	default:
-		return 0, "", false
+	spec := common.XJZVideoSpecs[strings.TrimSpace(modelName)]
+	duration, resolution := spec.MinDuration, spec.Resolution
+	if len(spec.Durations) > 0 {
+		duration = spec.Durations[0]
 	}
+	if spec.DefaultDuration > 0 {
+		duration = spec.DefaultDuration
+	}
+	if resolution == "" && len(spec.Resolutions) > 0 {
+		resolution = spec.Resolutions[0]
+	}
+	if spec.DefaultResolution != "" {
+		resolution = spec.DefaultResolution
+	}
+	return duration, resolution, spec.MinImages > 0
 }
 
 func getPricingIntegrationEndpoints(channelType int, modelName string, metadata map[string]*Model) []PricingMappedEndpoint {
@@ -209,6 +178,18 @@ func getPricingIntegrationEndpoints(channelType int, modelName string, metadata 
 
 func getPricingIntegrationEndpointsForModels(channelType int, modelName, originalModelName string, metadata map[string]*Model) []PricingMappedEndpoint {
 	if endpoints := mappedEndpointsFromMetadata(metadata[modelName]); len(endpoints) > 0 {
+		// A generic chat declaration must not mask an implemented video
+		// contract. Dedicated/custom endpoints remain authoritative.
+		if len(endpoints) == 1 && endpoints[0].Path == "/v1/chat/completions" {
+			if video := pricingVideoEndpoint(modelName); video != nil {
+				return []PricingMappedEndpoint{*video}
+			}
+			if !common.IsOpenAITextModel(modelName) && !common.IsImageGenerationModel(modelName) {
+				if video := pricingVideoEndpoint(originalModelName); video != nil {
+					return []PricingMappedEndpoint{*video}
+				}
+			}
+		}
 		for index := range endpoints {
 			if endpoints[index].Kind == "video" {
 				endpoints[index].Parameters = common.GetVideoIntegrationParameters(modelName)
@@ -225,18 +206,17 @@ func getPricingIntegrationEndpointsForModels(channelType int, modelName, origina
 	if endpoint := pricingVideoEndpoint(modelName); endpoint != nil {
 		return []PricingMappedEndpoint{*endpoint}
 	}
-	// An opaque upstream alias must not turn a known public video model into
-	// the OpenAI channel's default chat endpoint. Explicit upstream metadata
-	// and a recognized upstream protocol above still take precedence.
-	if originalModelName != modelName {
-		if endpoint := pricingVideoEndpoint(originalModelName); endpoint != nil {
-			return []PricingMappedEndpoint{*endpoint}
-		}
-	}
 	if parameters := common.GetImageIntegrationParameters(modelName); parameters != nil && channelType != constant.ChannelTypeGemini && channelType != constant.ChannelTypeVertexAi {
 		endpoint := makePricingMappedEndpoint(string(constant.EndpointTypeImageGeneration), common.EndpointInfo{Path: "/v1/images/generations", Method: "POST"})
 		endpoint.Parameters = parameters
 		return []PricingMappedEndpoint{*endpoint}
+	}
+	// Preserve a known public video contract only for an opaque upstream ID.
+	// Recognized upstream text/image protocols take precedence over its name.
+	if originalModelName != modelName && !common.IsOpenAITextModel(modelName) && !common.IsImageGenerationModel(modelName) {
+		if endpoint := pricingVideoEndpoint(originalModelName); endpoint != nil {
+			return []PricingMappedEndpoint{*endpoint}
+		}
 	}
 	var endpoints []PricingMappedEndpoint
 	for _, endpointType := range common.GetEndpointTypesByChannelType(channelType, modelName) {

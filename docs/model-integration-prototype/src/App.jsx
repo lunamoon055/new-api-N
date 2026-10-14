@@ -29,6 +29,7 @@ function Code({ value }) {
 export function App() {
   const { catalog, selectedName, setSelectedName, loading, error, updatedAt, loadCatalog } = useModelCatalog()
   const [language, setLanguage] = useState('cURL')
+  const [endpointPath, setEndpointPath] = useState('')
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -53,14 +54,14 @@ export function App() {
   }, [])
 
   const selectedModel = catalog.models.find((model) => model.model_name === selectedName)
-  const doc = selectedModel ? getModelDoc(selectedModel, catalog.endpoints) : null
+  const doc = selectedModel ? getModelDoc(selectedModel, catalog.endpoints, endpointPath) : null
   const code = selectedModel && doc ? getCodeSample(selectedModel, doc, language) : ''
   const responseCode = doc ? getResponseSample(doc) : ''
   const params = doc ? getRequestParams(doc) : []
   const filteredModels = useMemo(() => catalog.models.filter((model) => model.model_name.toLowerCase().includes(search.trim().toLowerCase())), [catalog.models, search])
   const categoryLabel = categories.find((category) => category.id === doc?.kind)?.label || '模型目录'
   function selectModel(name) {
-    setSelectedName(name); setSearch(''); setSearchOpen(false); setMenuOpen(false)
+    setEndpointPath(''); setSelectedName(name); setSearch(''); setSearchOpen(false); setMenuOpen(false)
     document.getElementById('guide')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   function toggleGroup(id) {
@@ -122,7 +123,7 @@ export function App() {
             <div className='endpoint-row'><span className='http-method'>{doc.method}</span><code>{doc.verified ? doc.path : doc.alternatives?.length ? '多个渠道接口' : '端点信息待核对'}</code>{doc.verified && <button className='small-copy' onClick={() => copy(doc.path, '接口路径')} aria-label='复制接口路径'><Copy size={15} /></button>}</div>
             <p>{doc.alternatives?.length ? '此模型关联多个接口，请按实际协议和使用的渠道选择。' : doc.verified ? (doc.kind === 'video' ? '创建请求仅代表任务已受理，需继续查询结果。' : '请求头需要携带 API 令牌进行鉴权。') : '当前模型缺少明确的专用端点文档，不自动生成调用示例。请核对模型详情与管理员配置。'}</p>
             <span className='source-note'>信息来源：{doc.source}</span>
-            {doc.alternatives?.length > 0 && <div className='unverified-note'>{doc.alternatives.map((endpoint) => <div key={endpoint.method + endpoint.path}><code>{endpoint.method || 'POST'} {endpoint.path}</code></div>)}</div>}
+            {doc.alternatives?.length > 0 && <label className='unverified-note'>选择调用接口 <select aria-label='选择调用接口' value={doc.selectionPath} onChange={(event) => setEndpointPath(event.target.value)}>{doc.alternatives.map((endpoint) => <option key={endpoint.method + endpoint.path} value={endpoint.path}>{endpoint.method || 'POST'} {endpoint.path}</option>)}</select></label>}
             {!doc.verified && doc.path && <div className='unverified-note'>站点目前声明 <code>{doc.path}</code>。此信息需要结合模型用途进一步确认。</div>}
             {doc.queryPath && <div className='query-endpoint'><span>查询任务</span><code>GET {doc.queryPath}</code><button className='small-copy' onClick={() => copy('curl "$API_BASE_URL' + doc.queryPath.replace('{task_id}', '$TASK_ID') + '" -H "Authorization: Bearer $API_KEY"', '查询示例')} aria-label='复制查询任务示例'><Copy size={14} /></button></div>}
           </section>

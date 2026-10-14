@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { PricingModel } from '@/features/pricing/types'
+
 export type CreationMode = 'chat' | 'image' | 'video'
 
 export type CreationModel = {
@@ -28,6 +30,7 @@ export type CreationModel = {
   cost?: CreationModelCost
   metadata?: CreationModelMetadata
   supported_endpoint_types: string[]
+  mapped_endpoints?: PricingModel['mapped_endpoints']
 }
 
 export type CreationModelMetadata = {
@@ -117,11 +120,7 @@ export type CreationCatalogResponse = {
 }
 
 export type CreationResultStatus =
-  | 'queued'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'unknown'
+  'queued' | 'processing' | 'completed' | 'failed' | 'unknown'
 
 export type CreationResult = {
   mode: CreationMode

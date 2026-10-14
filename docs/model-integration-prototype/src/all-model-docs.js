@@ -16,9 +16,14 @@ export function getAllModelDocs(catalog, baseUrl) {
     '以下示例根据接入文档生成，尚未进行真实上游调用验收。', '',
   ]
   for (const model of catalog.models) {
-    const doc = getModelDoc(model, catalog.endpoints)
+    const primaryDoc = getModelDoc(model, catalog.endpoints)
     lines.push(`## ${model.model_name}`, '')
     if (model.description) lines.push(model.description, '')
+    const docs = primaryDoc.alternatives?.length
+      ? primaryDoc.alternatives.map((endpoint) => getModelDoc({...model, mapped_endpoints: [endpoint]}, catalog.endpoints))
+      : [primaryDoc]
+    for (const doc of docs) {
+      if (docs.length > 1) lines.push(`### ${doc.method} ${doc.path}`, '')
     if (!doc.verified) {
       if (doc.alternatives?.length) {
         lines.push('该模型关联多个接口，请按实际协议和使用的渠道选择：')
@@ -49,6 +54,7 @@ export function getAllModelDocs(catalog, baseUrl) {
         '```', '', '创建请求仅表示任务已受理，保存 task_id 并查询完成或失败状态。', '')
     }
     lines.push('### 返回结构示意', '', '```json', getResponseSample(doc), '```', '')
+    }
   }
   lines.push('© 2026 New API · QuantumNous')
   return lines.join('\n')

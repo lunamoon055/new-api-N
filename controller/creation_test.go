@@ -61,6 +61,27 @@ func TestBuildCreationModelCatalogCategorizesModels(t *testing.T) {
 	require.Equal(t, []string{"First", "Second"}, creationVendorNames(catalog.Vendors))
 }
 
+func TestBuildCreationModelCatalogUsesMappedProtocolForOpaqueAliases(t *testing.T) {
+	parameters := &common.ModelIntegrationParameters{Durations: []int{30}, MaxImages: 10}
+	catalog := buildCreationModelCatalog([]model.Pricing{
+		{
+			ModelName:              "my-video",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+			MappedEndpoints:        []model.PricingMappedEndpoint{{Type: "openai-video", Kind: "video", Path: "/v1/video/generations", Method: "POST", Parameters: parameters}},
+		},
+		{
+			ModelName:              "my-image",
+			SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+			MappedEndpoints:        []model.PricingMappedEndpoint{{Type: "image-generation", Kind: "image", Path: "/v1/images/generations", Method: "POST"}},
+		},
+	}, nil, "")
+	require.Empty(t, catalog.Modes[0].Models)
+	require.Equal(t, []string{"my-image"}, creationModelIDs(catalog.Modes[1].Models))
+	require.Equal(t, "my-video", catalog.Modes[2].Models[0].ID)
+	require.Equal(t, "/v1/video/generations", catalog.Modes[2].Models[0].MappedEndpoints[0].Path)
+	require.Equal(t, parameters, catalog.Modes[2].Models[0].MappedEndpoints[0].Parameters)
+}
+
 func TestResolveCreationUsingGroupPrefersCurrentUserGroup(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
@@ -404,6 +425,7 @@ func TestBuildCreationModelCatalogUsesProviderMetadataForMode(t *testing.T) {
 			{
 				ModelName:              "sd2_full",
 				SupportedEndpointTypes: []constant.EndpointType{constant.EndpointTypeOpenAI},
+				MappedEndpoints:        []model.PricingMappedEndpoint{{Type: "openai", Kind: "text", Path: "/v1/chat/completions", Method: "POST"}},
 			},
 			{
 				ModelName:              "sanbao-poster",
@@ -437,6 +459,18 @@ func TestBuildCreationModelCatalogUsesProviderMetadataForMode(t *testing.T) {
 	require.NotNil(t, catalog.Modes[2].Models[0].Metadata)
 	require.Equal(t, "sanbao", catalog.Modes[2].Models[0].Metadata.Provider)
 	require.Equal(t, []string{"720p"}, catalog.Modes[2].Models[0].Metadata.Resolutions)
+}
+
+func TestSanbaoCreationModelMappingAliasesFollowFinalModel(t *testing.T) {
+	capabilities := map[string]dto.CreationModelMetadata{
+		"sd2_full": {Provider: "sanbao", ID: "sd2_full", Type: "video", Durations: []int{5, 10}},
+	}
+	mapping := `{"public-alias":"middle","middle":"sd2_full","cycle-a":"cycle-b","cycle-b":"cycle-a"}`
+	applySanbaoModelMappingAliases(capabilities, &model.Channel{ModelMapping: &mapping})
+	require.Equal(t, "public-alias", capabilities["public-alias"].ID)
+	require.Equal(t, "sd2_full", capabilities["public-alias"].UpstreamModelID)
+	require.Equal(t, []int{5, 10}, capabilities["public-alias"].Durations)
+	require.NotContains(t, capabilities, "cycle-a")
 }
 
 func TestParseSanbaoCreationModelCapabilitiesIndexesDisplayName(t *testing.T) {

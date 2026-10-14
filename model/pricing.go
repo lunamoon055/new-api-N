@@ -204,15 +204,11 @@ func updatePricing() {
 	//这里使用切片而不是Set，因为一个模型可能支持多个端点类型，并且第一个端点是优先使用端点
 	modelSupportEndpointsStr := make(map[string][]string)
 	mappedEndpointCandidates := make(map[string][]PricingMappedEndpoint)
-	modelsWithMapping := make(map[string]bool)
 
 	// 先根据已有能力填充原生端点
 	for _, ability := range enableAbilities {
 		endpoints := modelSupportEndpointsStr[ability.Model]
-		effectiveModel, mapped := resolvePricingMappedModel(ability.Model, ability.ModelMapping)
-		if mapped {
-			modelsWithMapping[ability.Model] = true
-		}
+		effectiveModel, _ := resolvePricingMappedModel(ability.Model, ability.ModelMapping)
 		effectiveEndpoints := getPricingIntegrationEndpointsForModels(ability.ChannelType, effectiveModel, ability.Model, metaMap)
 		for _, endpoint := range effectiveEndpoints {
 			mappedEndpointCandidates[ability.Model] = appendPricingEndpoint(
@@ -237,6 +233,16 @@ func updatePricing() {
 	// 再补充模型自定义端点：若配置有效则替换默认端点，不做合并
 	for modelName, meta := range metaMap {
 		if strings.TrimSpace(meta.Endpoints) == "" {
+			continue
+		}
+		if resolved := mappedEndpointCandidates[modelName]; len(resolved) > 0 {
+			endpoints := make([]string, 0, len(resolved))
+			for _, endpoint := range resolved {
+				if !common.StringsContains(endpoints, endpoint.Type) {
+					endpoints = append(endpoints, endpoint.Type)
+				}
+			}
+			modelSupportEndpointsStr[modelName] = endpoints
 			continue
 		}
 		var raw map[string]interface{}
@@ -318,11 +324,10 @@ func updatePricing() {
 			EnableGroup:            groups.Items(),
 			SupportedEndpointTypes: modelSupportEndpointTypes[model],
 		}
-		if modelsWithMapping[model] || common.GetVideoIntegrationParameters(model) != nil || common.GetImageIntegrationParameters(model) != nil {
-			if meta := metaMap[model]; meta == nil || strings.TrimSpace(meta.Endpoints) == "" {
-				pricing.MappedEndpoints = mappedEndpointCandidates[model]
-			}
-		}
+		// Publish a model-specific route for every enabled model, including
+		// explicit endpoint configuration. A global endpoint map cannot express
+		// different paths or mapped protocols under the same endpoint type.
+		pricing.MappedEndpoints = mappedEndpointCandidates[model]
 
 		// 补充模型元数据（描述、标签、供应商、状态）
 		if meta, ok := metaMap[model]; ok {

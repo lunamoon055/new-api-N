@@ -17,7 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { getXJZVideoModelSpec } from './xjz-video-models'
+import {
+  getXJZVideoModelSpec,
+  type XJZVideoModelSpec,
+} from './xjz-video-models'
+import type { PricingModel } from '@/features/pricing/types'
 
 export type CreationResolution = '480p' | '720p' | '1080p' | '2k' | '4k'
 export type CreationAspectRatio = string
@@ -78,6 +82,7 @@ export type CreationModelMetadataLike = {
 export type CreationModelLike = {
   id?: string
   metadata?: CreationModelMetadataLike
+  mapped_endpoints?: PricingModel['mapped_endpoints']
 }
 
 export type CreationModelInput = string | CreationModelLike | undefined
@@ -102,7 +107,8 @@ export type CreationVideoReferenceLimits = {
 }
 
 export type CreationVideoCapability = {
-  kind: 'sora2' | 'video2' | 'videos' | 'sanbao' | 'minimax-h3' | 'xjz'
+  kind:
+    'sora2' | 'video2' | 'videos' | 'sanbao' | 'minimax-h3' | 'xjz' | 'mapped'
   durations: string[]
   resolutions: CreationResolution[]
   aspectRatios: CreationAspectRatio[]
@@ -777,11 +783,25 @@ function getSanbaoVideoCapability(
 function getXJZVideoCapability(
   model?: CreationModelInput
 ): CreationVideoCapability | undefined {
-  const spec = getXJZVideoModelSpec(getModelId(model))
+  const spec = getVideoModelSpec(model)
   if (!spec) return undefined
-  const maxAssetBytes = 10 * 1024 * 1024
+  const isXJZ = Boolean(getXJZVideoModelSpec(getModelId(model)))
+  const p =
+    typeof model === 'object'
+      ? model.mapped_endpoints?.find((entry) => entry.kind === 'video')
+          ?.parameters
+      : undefined
+  const imageSizeMB =
+    p?.max_image_size_mb ??
+    (isXJZ ? 10 : VIDEO2_REFERENCE_LIMITS.maxImageSizeMB)
+  const videoSizeMB =
+    p?.max_video_size_mb ??
+    (isXJZ ? 10 : VIDEO2_REFERENCE_LIMITS.maxVideoSizeMB)
+  const audioSizeMB =
+    p?.max_audio_size_mb ??
+    (isXJZ ? 10 : VIDEO2_REFERENCE_LIMITS.maxAudioSizeMB)
   return {
-    kind: 'xjz',
+    kind: isXJZ ? 'xjz' : 'mapped',
     durations: spec.durations,
     resolutions: spec.resolutions,
     aspectRatios: spec.ratios,
@@ -793,13 +813,53 @@ function getXJZVideoCapability(
       maxImages: spec.maxImages,
       maxVideos: spec.maxVideos,
       maxAudios: spec.maxAudios,
-      maxImageSizeBytes: maxAssetBytes,
-      maxVideoSizeBytes: maxAssetBytes,
-      maxAudioSizeBytes: maxAssetBytes,
-      maxImageSizeMB: 10,
-      maxVideoSizeMB: 10,
-      maxAudioSizeMB: 10,
+      maxImageSizeBytes: imageSizeMB * 1024 * 1024,
+      maxVideoSizeBytes: videoSizeMB * 1024 * 1024,
+      maxAudioSizeBytes: audioSizeMB * 1024 * 1024,
+      maxImageSizeMB: imageSizeMB,
+      maxVideoSizeMB: videoSizeMB,
+      maxAudioSizeMB: audioSizeMB,
     },
+  }
+}
+
+function getVideoModelSpec(
+  model?: CreationModelInput
+): XJZVideoModelSpec | undefined {
+  const endpoint =
+    typeof model === 'object'
+      ? model.mapped_endpoints?.find((entry) => entry.kind === 'video')
+      : undefined
+  const p = endpoint?.parameters
+  if (!p?.durations?.length) return getXJZVideoModelSpec(getModelId(model))
+  const referenceModes: CreationVideoReferenceMode[] = p.min_images
+    ? []
+    : ['text']
+  if (p.max_images) referenceModes.push('image')
+  if (p.max_videos) referenceModes.push('video', 'multimodal')
+  else if (p.max_audios) referenceModes.push('image-audio')
+  if (p.allow_frames) referenceModes.push('frames')
+  return {
+    durations: p.durations.map(String),
+    resolutions: (p.resolutions ?? ['720p']).map((value) =>
+      value.toLowerCase()
+    ) as CreationResolution[],
+    ratios: p.ratios ?? ['16:9'],
+    referenceModes,
+    minImages: p.min_images,
+    maxImages: p.max_images,
+    maxVideos: p.max_videos,
+    maxAudios: p.max_audios,
+    imageField: p.image_field,
+    videoField: p.video_field,
+    audioField: p.audio_field,
+    ratioField: p.ratio_field,
+    resolutionField: p.resolution_field,
+    requestResolution: p.request_resolution,
+    selectableResolution: (p.resolutions?.length ?? 0) > 1,
+    audioNeedsVisualReference: p.audio_needs_image,
+    audioRequiresImage: p.audio_requires_image,
+    allowFrames: p.allow_frames,
   }
 }
 
@@ -833,6 +893,10 @@ export function isVideo2Model(model?: CreationModelInput) {
 }
 
 export function getCreationVideoCapabilities(model?: CreationModelInput) {
+  if (getModelMetadata(model)?.provider?.toLowerCase() === 'sanbao') {
+    const capability = getSanbaoVideoCapability(model)
+    if (capability) return capability
+  }
   const xjzCapability = getXJZVideoCapability(model)
   if (xjzCapability) return xjzCapability
   const sanbaoCapability = getSanbaoVideoCapability(model)
@@ -859,7 +923,7 @@ export function getCreationPromptMaxLength(model?: CreationModelInput) {
 
 export function getCreationResolutionOptions(model?: CreationModelInput) {
   const capability = getCreationVideoCapabilities(model)
-  if (capability?.kind === 'xjz') {
+  if (capability?.kind === 'xjz' || capability?.kind === 'mapped') {
     return capability.resolutions.map(getResolutionOption)
   }
   if (capability?.kind === 'sanbao' && capability.resolutions.length) {
@@ -887,7 +951,7 @@ export function getCreationResolutionOptions(model?: CreationModelInput) {
 
 export function getCreationDurationOptions(model?: CreationModelInput) {
   const capability = getCreationVideoCapabilities(model)
-  if (capability?.kind === 'xjz') {
+  if (capability?.kind === 'xjz' || capability?.kind === 'mapped') {
     return capability.durations.map(getDurationOption)
   }
   if (capability?.kind === 'sanbao' && capability.durations.length) {
@@ -956,7 +1020,8 @@ export function getCreationVideoOptionsError(
     if (
       capability?.kind === 'sanbao' ||
       capability?.kind === 'minimax-h3' ||
-      capability?.kind === 'xjz'
+      capability?.kind === 'xjz' ||
+      capability?.kind === 'mapped'
     ) {
       return 'This model does not support the selected duration.'
     }
@@ -1083,7 +1148,8 @@ export function normalizeCreationVideoReferences(
   const supportsMultiMedia =
     referenceMode === 'multimodal' &&
     (capability.referenceLimits.maxAudios > 0 ||
-      (capability.kind === 'xjz' && capability.referenceLimits.maxVideos > 0))
+      ((capability.kind === 'xjz' || capability.kind === 'mapped') &&
+        capability.referenceLimits.maxVideos > 0))
   const supportsImageAudio =
     referenceMode === 'image-audio' && capability.referenceLimits.maxAudios > 0
   const imageUrls =
@@ -1345,8 +1411,8 @@ export function getCreationVideoReferenceError(
   const audioCount = normalized.audioUrls.length
   const referenceLimits = capability.referenceLimits
   const xjzSpec =
-    capability.kind === 'xjz'
-      ? getXJZVideoModelSpec(getModelId(model))
+    capability.kind === 'xjz' || capability.kind === 'mapped'
+      ? getVideoModelSpec(model)
       : undefined
   if (xjzSpec?.minImages && imageCount < xjzSpec.minImages) {
     return 'Image reference mode requires at least one image reference.'
@@ -1394,7 +1460,7 @@ export function getCreationVideoReferenceError(
     return 'Sora2 accepts at most 1 reference image.'
   }
   if (imageCount > referenceLimits.maxImages) {
-    if (capability.kind === 'xjz') {
+    if (capability.kind === 'xjz' || capability.kind === 'mapped') {
       return 'Videos API accepts too many reference assets.'
     }
     if (capability.kind === 'sanbao') {
@@ -1418,7 +1484,7 @@ export function getCreationVideoReferenceError(
     return 'Video2 accepts at most 4 image references.'
   }
   if (normalized.videoUrls.length > referenceLimits.maxVideos) {
-    if (capability.kind === 'xjz') {
+    if (capability.kind === 'xjz' || capability.kind === 'mapped') {
       return 'Videos API accepts too many reference assets.'
     }
     if (capability.kind === 'sanbao') {
@@ -1439,7 +1505,7 @@ export function getCreationVideoReferenceError(
     return 'Video2 accepts at most 3 video references.'
   }
   if (audioCount > referenceLimits.maxAudios) {
-    if (capability.kind === 'xjz') {
+    if (capability.kind === 'xjz' || capability.kind === 'mapped') {
       return 'Videos API accepts too many reference assets.'
     }
     if (capability.kind === 'videos') {
@@ -1719,8 +1785,8 @@ export function getCreationVideoRequestOptions(
     .map(getCreationReferenceURL)
     .filter(Boolean)
 
-  if (capability.kind === 'xjz') {
-    const spec = getXJZVideoModelSpec(getModelId(model))
+  if (capability.kind === 'xjz' || capability.kind === 'mapped') {
+    const spec = getVideoModelSpec(model)
     if (!spec) throw new Error('Missing XJZ video model capability')
     const request: XJZCreationVideoRequestOptions = {
       duration: Number(normalizedOptions.duration),
@@ -1732,7 +1798,7 @@ export function getCreationVideoRequestOptions(
       estimateSeconds: duration.estimateSeconds,
     }
     if (spec.imageField && imageUrls.length) {
-      if (spec.allowFrames) {
+      if (spec.allowFrames && spec.imageField === 'image_urls') {
         request[imageUrls.length === 1 ? 'image_url' : 'image_urls'] =
           imageUrls.length === 1 ? imageUrls[0] : imageUrls
       } else {
@@ -1744,7 +1810,11 @@ export function getCreationVideoRequestOptions(
       request[spec.videoField] =
         spec.videoField === 'video_url' ? videoUrls[0] : videoUrls
     if (spec.audioField && audioUrls.length) {
-      if (spec.audioField === 'audio_reference' && audioUrls.length === 1) {
+      if (
+        spec.allowFrames &&
+        spec.audioField === 'audio_reference' &&
+        audioUrls.length === 1
+      ) {
         request.audio_url = audioUrls[0]
       } else {
         request[spec.audioField] =

@@ -297,6 +297,15 @@ func CreationRelayVideo(c *gin.Context) {
 	RelayTask(c)
 }
 
+func CreationRelayVideoGenerations(c *gin.Context) {
+	if newAPIError := setupCreationRelayContext(c, "creation-video"); newAPIError != nil {
+		respondCreationRelayError(c, newAPIError)
+		return
+	}
+	c.Request.URL.Path = "/pg/video/generations"
+	RelayTask(c)
+}
+
 func CreationRelayImageTask(c *gin.Context) {
 	if newAPIError := setupCreationRelayContext(c, "creation-image"); newAPIError != nil {
 		respondCreationRelayError(c, newAPIError)
@@ -463,10 +472,12 @@ func buildCreationModelCatalogWithCategoriesAndMetadata(
 		mode, hasManualMode := getManualCreationModelMode(item.ModelName, manualCategories)
 		ok := hasManualMode
 		if !hasManualMode {
-			if common.IsXJZVideoModel(item.ModelName) {
-				mode, ok = creationModeVideo, true
-			} else if providerMode, hasProviderMode := getCreationModelModeFromProviderMetadata(providerMeta); hasProviderMode {
+			if providerMode, hasProviderMode := getCreationModelModeFromProviderMetadata(providerMeta); hasProviderMode {
 				mode, ok = providerMode, true
+			} else if mappedMode, hasMappedMode := getMappedCreationModelMode(item.MappedEndpoints); hasMappedMode {
+				mode, ok = mappedMode, true
+			} else if common.IsXJZVideoModel(item.ModelName) {
+				mode, ok = creationModeVideo, true
 			} else {
 				mode, ok = getCreationModelMode(item.ModelName, item.SupportedEndpointTypes)
 			}
@@ -508,6 +519,7 @@ func buildCreationModelCatalogWithCategoriesAndMetadata(
 			Cost:                   cost,
 			Metadata:               responseMetadata,
 			SupportedEndpointTypes: item.SupportedEndpointTypes,
+			MappedEndpoints:        item.MappedEndpoints,
 		})
 		if item.VendorID != 0 {
 			usedVendorIDs[item.VendorID] = struct{}{}
@@ -835,10 +847,9 @@ func applySanbaoModelMappingAliases(capabilities map[string]dto.CreationModelMet
 		common.SysLog(fmt.Sprintf("parse Sanbao model mapping failed: channel_id=%d err=%v", channel.Id, err))
 		return
 	}
-	for alias, upstream := range parsed {
-		alias = strings.TrimSpace(alias)
-		upstream = strings.TrimSpace(upstream)
-		if alias == "" || upstream == "" {
+	for alias := range parsed {
+		upstream, mapped, err := common.ResolveModelMapping(alias, rawMapping)
+		if strings.TrimSpace(alias) == "" || err != nil || !mapped {
 			continue
 		}
 		metadata, ok := capabilities[normalizeCreationModelMetadataKey(upstream)]
@@ -1244,6 +1255,28 @@ func getCreationModelMode(modelName string, endpoints []constant.EndpointType) (
 	case hasVideo:
 		return creationModeVideo, true
 	case hasChat:
+		return creationModeChat, true
+	default:
+		return "", false
+	}
+}
+
+func getMappedCreationModelMode(endpoints []common.ModelIntegrationEndpoint) (string, bool) {
+	if len(endpoints) == 0 {
+		return "", false
+	}
+	kind := endpoints[0].Kind
+	for _, endpoint := range endpoints {
+		if endpoint.Kind != kind {
+			return "", false
+		}
+	}
+	switch kind {
+	case "video":
+		return creationModeVideo, true
+	case "image":
+		return creationModeImage, true
+	case "text":
 		return creationModeChat, true
 	default:
 		return "", false

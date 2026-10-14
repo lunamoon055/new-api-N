@@ -25,17 +25,29 @@ import {
 } from './session'
 import { getXJZVideoModelSpec } from '@/features/media-generation/xjz-video-models'
 import type { CreationModel } from './types'
+import type { CreationModelInput } from '@/features/media-generation/video-options'
 
 export type CreationVideoSubmitRequest = {
   endpoint:
     | '/api/creation/video/async-generations'
     | '/api/creation/videos'
+    | '/api/creation/video/generations'
     | '/pg/chat/completions'
   payload: Record<string, unknown>
   transport: 'async-video' | 'prompt'
 }
 
-export function getCreationVideoEndpoint(modelId: string) {
+export function getCreationVideoEndpoint(model: CreationModelInput) {
+  const mapped =
+    typeof model === 'object'
+      ? model.mapped_endpoints?.find((endpoint) => endpoint.kind === 'video')
+      : undefined
+  if (mapped?.path === '/v1/videos') return '/api/creation/videos'
+  if (mapped?.path === '/v1/video/generations')
+    return '/api/creation/video/generations'
+  if (mapped?.path === '/v1/video/async-generations')
+    return '/api/creation/video/async-generations'
+  const modelId = typeof model === 'string' ? model : (model?.id ?? '')
   return getXJZVideoModelSpec(modelId)
     ? '/api/creation/videos'
     : '/api/creation/video/async-generations'
@@ -75,7 +87,7 @@ export function buildCreationVideoSubmitRequest(params: {
   }
   if (!capability) {
     return {
-      endpoint: '/api/creation/video/async-generations',
+      endpoint: getCreationVideoEndpoint(params.model),
       payload: basePayload,
       transport: 'async-video',
     }
@@ -89,7 +101,7 @@ export function buildCreationVideoSubmitRequest(params: {
   const { estimateSeconds: _estimateSeconds, ...requestPayload } =
     requestOptions
   return {
-    endpoint: getCreationVideoEndpoint(params.model.id),
+    endpoint: getCreationVideoEndpoint(params.model),
     payload: {
       ...basePayload,
       ...requestPayload,

@@ -54,6 +54,32 @@ func TestMappedPricingEndpointFollowsFinalUpstreamModel(t *testing.T) {
 	require.Equal(t, "output_resolution", imageEndpoint.Parameters.ResolutionField)
 }
 
+func TestEveryXJZVideoCanBeMappedToAnArbitraryPublicAlias(t *testing.T) {
+	for target, spec := range common.XJZVideoSpecs {
+		t.Run(target, func(t *testing.T) {
+			endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, target, "opaque public ID", nil)
+			require.Len(t, endpoints, 1)
+			require.Equal(t, "video", endpoints[0].Kind)
+			require.Equal(t, "/v1/videos", endpoints[0].Path)
+			require.Equal(t, spec.ImageField, endpoints[0].Parameters.ImageField)
+			require.Contains(t, endpoints[0].Parameters.Durations, endpoints[0].ExampleDuration)
+			require.NotEmpty(t, endpoints[0].ExampleResolution)
+		})
+	}
+}
+
+func TestSpacedSeedanceAliasesOverrideOnlyGenericChatFallback(t *testing.T) {
+	for _, name := range []string{"Seedance 2.0:X", "Seedance 2.0:X1"} {
+		metadata := map[string]*Model{"opaque-provider-id": {Endpoints: `{"openai":{"path":"/v1/chat/completions"}}`}}
+		endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "opaque-provider-id", name, metadata)
+		require.Equal(t, "video", endpoints[0].Kind)
+		require.Equal(t, "/v1/videos", endpoints[0].Path)
+		require.Equal(t, 5, endpoints[0].Parameters.Durations[0])
+		metadata["opaque-provider-id"].Endpoints = `{"openai-video":{"path":"/v1/video/generations"}}`
+		require.Equal(t, "/v1/video/generations", getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "opaque-provider-id", name, metadata)[0].Path)
+	}
+}
+
 func TestPricingIntegrationParametersIncludeMappedLimitsWithoutUpstreamNames(t *testing.T) {
 	endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "TTP-grok", "Grok", nil)
 	require.Len(t, endpoints, 1)
@@ -182,6 +208,10 @@ func TestOpaqueMappedVideoPreservesPublicProtocolAndExplicitMetadata(t *testing.
 	endpoints = getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "gpt-4o", "public-chat", nil)
 	require.Equal(t, "text", endpoints[0].Kind)
 	require.Equal(t, "/v1/chat/completions", endpoints[0].Path)
+	endpoints = getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "gpt-4o", "Seedance2.5-c", nil)
+	require.Equal(t, "text", endpoints[0].Kind)
+	endpoints = getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "gpt-image-2", "Seedance2.5-c", nil)
+	require.Equal(t, "image", endpoints[0].Kind)
 	endpoints = getPricingIntegrationEndpoints(constant.ChannelTypeOpenAI, "wan3.0-1080p", nil)
 	require.Equal(t, "/v1/video/async-generations", endpoints[0].Path)
 }
