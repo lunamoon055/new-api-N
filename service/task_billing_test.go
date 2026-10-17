@@ -43,6 +43,8 @@ func TestMain(m *testing.M) {
 		&model.Task{},
 		&model.TaskBillingEvent{},
 		&model.User{},
+		&model.AgentApplication{},
+		&model.ReferralReward{},
 		&model.Token{},
 		&model.Log{},
 		&model.Channel{},
@@ -66,6 +68,8 @@ func truncate(t *testing.T) {
 		model.DB.Exec("DELETE FROM tasks")
 		model.DB.Exec("DELETE FROM task_billing_events")
 		model.DB.Exec("DELETE FROM users")
+		model.DB.Exec("DELETE FROM agent_applications")
+		model.DB.Exec("DELETE FROM referral_rewards")
 		model.DB.Exec("DELETE FROM tokens")
 		model.DB.Exec("DELETE FROM logs")
 		model.DB.Exec("DELETE FROM channels")

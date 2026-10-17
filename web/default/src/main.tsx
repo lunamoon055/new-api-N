@@ -64,7 +64,15 @@ const queryClient = new QueryClient({
     },
     mutations: {
       onError: (error) => {
-        handleServerError(error)
+        // The API interceptor already shows a toast for ordinary Axios failures.
+        // Handle only requests that opted out, and non-Axios failures, here.
+        if (
+          !(error instanceof AxiosError) ||
+          (error.config as { skipErrorHandler?: boolean } | undefined)
+            ?.skipErrorHandler
+        ) {
+          handleServerError(error)
+        }
 
         if (error instanceof AxiosError) {
           if (error.response?.status === 304) {

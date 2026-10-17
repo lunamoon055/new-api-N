@@ -122,6 +122,13 @@ func ApplyTaskBilling(
 			}
 		}
 		if expectedStatus == TaskBillingStatusFinalizePending {
+			if nextStatus == TaskBillingStatusRefunded {
+				if err := tx.Model(&ReferralReward{}).
+					Where("task_record_id = ? AND status != ?", task.ID, ReferralRewardReversed).
+					Updates(map[string]any{"status": ReferralRewardReversed, "reversed_at": common.GetTimestamp()}).Error; err != nil {
+					return err
+				}
+			}
 			if err := applyTaskBillingUsageDelta(tx, task.UserId, task.ChannelId, delta); err != nil {
 				return err
 			}

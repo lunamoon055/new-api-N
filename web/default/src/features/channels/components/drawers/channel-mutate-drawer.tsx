@@ -150,6 +150,7 @@ import {
   collectNewDisallowedStatusCodeRedirects,
 } from '../../lib/status-code-risk-guard'
 import type { Channel } from '../../types'
+import { getChannelGroupOptions } from '../../lib/channel-utils'
 import { useChannels } from '../channels-provider'
 import { CodexOAuthDialog } from '../dialogs/codex-oauth-dialog'
 import { FetchModelsDialog } from '../dialogs/fetch-models-dialog'
@@ -447,13 +448,12 @@ export function ChannelMutateDrawer({
 
   // Transform groups to multi-select options
   const groupOptions = useMemo(() => {
-    if (!groupsData?.data) return []
-    const allGroups = new Set([...groupsData.data, ...(currentGroups || [])])
-    return Array.from(allGroups).map((group) => ({
-      value: group,
-      label: group,
-    }))
-  }, [groupsData, currentGroups])
+    return getChannelGroupOptions(
+      groupsData?.data,
+      channelData?.data?.group ?? currentRow?.group,
+      currentGroups
+    )
+  }, [groupsData, channelData, currentRow, currentGroups])
 
   // Parse current models as array
   const currentModelsArray = useMemo(
@@ -3381,7 +3381,9 @@ export function ChannelMutateDrawer({
         redirectSourceModels={redirectModelKeyList}
         customFetcher={!isEditing ? createModeFetcher : undefined}
         existingModelsOverride={
-          !isEditing ? parseModelsString(form.getValues('models') || '') : undefined
+          !isEditing
+            ? parseModelsString(form.getValues('models') || '')
+            : undefined
         }
       />
 

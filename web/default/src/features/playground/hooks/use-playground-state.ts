@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useCallback } from 'react'
+import { useAuthStore } from '@/stores/auth-store'
 import { DEFAULT_CONFIG, DEFAULT_PARAMETER_ENABLED } from '../constants'
 import {
   loadConfig,
@@ -38,10 +39,15 @@ import type {
  * Main state management hook for playground
  */
 export function usePlaygroundState() {
+  const userGroup = useAuthStore((state) => state.auth.user?.group)
   // Load initial state from localStorage
   const [config, setConfig] = useState<PlaygroundConfig>(() => {
     const savedConfig = loadConfig()
-    return { ...DEFAULT_CONFIG, ...savedConfig }
+    return {
+      ...DEFAULT_CONFIG,
+      group: userGroup || DEFAULT_CONFIG.group,
+      ...savedConfig,
+    }
   })
 
   const [parameterEnabled, setParameterEnabled] = useState<ParameterEnabled>(
@@ -113,11 +119,15 @@ export function usePlaygroundState() {
 
   // Reset config to defaults
   const resetConfig = useCallback(() => {
-    setConfig(DEFAULT_CONFIG)
+    const defaults = {
+      ...DEFAULT_CONFIG,
+      group: userGroup || DEFAULT_CONFIG.group,
+    }
+    setConfig(defaults)
     setParameterEnabled(DEFAULT_PARAMETER_ENABLED)
-    saveConfig(DEFAULT_CONFIG)
+    saveConfig(defaults)
     saveParameterEnabled(DEFAULT_PARAMETER_ENABLED)
-  }, [])
+  }, [userGroup])
 
   return {
     // State

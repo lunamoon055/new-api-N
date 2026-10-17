@@ -33,6 +33,9 @@ import {
   CreditCard,
   ListTodo,
   Settings,
+  Share2,
+  UserRoundCheck,
+  HandCoins,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
@@ -114,6 +117,11 @@ export function useSidebarData(): SidebarData {
             url: '/profile',
             icon: User,
           },
+          {
+            title: t('Promotion and Agents'),
+            url: '/agents',
+            icon: Share2,
+          },
         ],
       },
       {
@@ -134,6 +142,16 @@ export function useSidebarData(): SidebarData {
             title: t('Users'),
             url: '/users',
             icon: Users,
+          },
+          {
+            title: t('Agent applications'),
+            url: '/agent-applications',
+            icon: UserRoundCheck,
+          },
+          {
+            title: t('Reward settlement'),
+            url: '/agent-rewards',
+            icon: HandCoins,
           },
           {
             title: t('Redemption Codes'),

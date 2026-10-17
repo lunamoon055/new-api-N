@@ -252,6 +252,25 @@ export function parseGroupsList(groups: string): string[] {
   })
 }
 
+/** Keep saved channel groups available after a selected chip is removed. */
+export function getChannelGroupOptions(
+  availableGroups: string[] = [],
+  savedGroups = '',
+  selectedGroups: string[] = []
+): Array<{ value: string; label: string }> {
+  const groups = new Set(
+    [
+      'default',
+      ...availableGroups,
+      ...parseGroupsList(savedGroups),
+      ...selectedGroups,
+    ]
+      .map((group) => group.trim())
+      .filter(Boolean)
+  )
+  return Array.from(groups, (group) => ({ value: group, label: group }))
+}
+
 /**
  * Format models array back to string
  */

@@ -42,6 +42,7 @@ import type { Message, PlaygroundModelInfo } from '../types'
 import {
   buildPlaygroundReferences,
   getPlaygroundIntegration,
+  getPlaygroundIntegrations,
   resolveIntegrationChoice,
   type PlaygroundReferenceSelection,
 } from './model-integration'
@@ -185,6 +186,32 @@ export type PlaygroundMediaResult = {
   mediaUrl?: string
 }
 
+export function getPlaygroundImageEndpointChoices(
+  info?: PlaygroundModelInfo
+): PlaygroundImageEndpoint[] {
+  const endpoints = getPlaygroundIntegrations(info)
+    .filter(
+      (endpoint) =>
+        endpoint.kind === 'image' &&
+        /\/images\/(async-generations|generations)$/.test(endpoint.path ?? '')
+    )
+    .map<'async' | 'sync'>((endpoint) =>
+      endpoint.path?.endsWith('/async-generations') ? 'async' : 'sync'
+    )
+  // New models without a published image contract can still be tested manually.
+  if (endpoints.length === 0) return ['auto', 'sync', 'async']
+  return ['auto', ...new Set(endpoints)]
+}
+
+export function resolvePlaygroundImageEndpoint(
+  selection: PlaygroundImageEndpoint,
+  info?: PlaygroundModelInfo
+): PlaygroundImageEndpoint {
+  return getPlaygroundImageEndpointChoices(info).includes(selection)
+    ? selection
+    : 'auto'
+}
+
 const VIDEO_MODEL_NAMES = new Set([
   'video-2.0',
   'video-2.0-fast',
@@ -278,6 +305,7 @@ export function getPlaygroundMediaEndpoint(
   info?: PlaygroundModelInfo
 ): string | null {
   const resolvedMode = resolvePlaygroundMode(model, mode, info)
+  imageEndpoint = resolvePlaygroundImageEndpoint(imageEndpoint, info)
   const integration = getPlaygroundIntegration(info)
   if (integration?.kind === resolvedMode) {
     if (resolvedMode === 'image' && imageEndpoint === 'auto') {
@@ -324,15 +352,26 @@ export function buildPlaygroundMediaRequest(
   if (resolvedMode === 'chat') return null
 
   const prompt = getLatestUserPrompt(messages)
-  const integration = getPlaygroundIntegration(info)
+  const endpoint = getPlaygroundMediaEndpoint(
+    model,
+    mode,
+    imageEndpoint,
+    'auto',
+    info
+  )
+  const integration = getPlaygroundIntegration(
+    info,
+    resolvedMode === 'image'
+      ? endpoint?.replace('/api/creation/', '/v1/')
+      : undefined
+  )
   const parameters =
     integration?.kind === resolvedMode ? integration.parameters : undefined
   if (parameters) {
     const payload: Record<string, unknown> = { ...extraBody }
     const imageIsAsync =
       resolvedMode === 'image' &&
-      getPlaygroundMediaEndpoint(model, mode, imageEndpoint, 'auto', info) ===
-        API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
+      endpoint === API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
     const contract = imageIsAsync
       ? {
           ...parameters,
@@ -385,9 +424,7 @@ export function buildPlaygroundMediaRequest(
     return { ...payload, model, prompt }
   }
   if (resolvedMode === 'image') {
-    const isAsync =
-      getPlaygroundMediaEndpoint(model, mode, imageEndpoint, 'auto', info) ===
-      API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
+    const isAsync = endpoint === API_ENDPOINTS.IMAGE_ASYNC_GENERATIONS
     if (isAsync) {
       return {
         ...getCreationImageRequestOptions(

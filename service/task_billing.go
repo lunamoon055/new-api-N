@@ -236,6 +236,9 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 		logger.LogWarn(ctx, fmt.Sprintf("退还资金来源失败 task %s: %s", task.TaskID, err.Error()))
 		return
 	}
+	if err := model.ReverseReferralRewardForTask(task.ID); err != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("冲销任务 %s 推广奖励失败: %s", task.TaskID, err.Error()))
+	}
 
 	// 2. 记录日志
 	other := taskBillingOther(task)

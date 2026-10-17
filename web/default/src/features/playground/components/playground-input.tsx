@@ -62,6 +62,7 @@ import { Label } from '@/components/ui/label'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  getPlaygroundImageEndpointChoices,
   getPlaygroundVideoChoices,
   resolvePlaygroundMode,
   resolvePlaygroundVideoSelection,
@@ -154,6 +155,7 @@ export function PlaygroundInput({
     disabled || isModelLoading || models.length === 0
   const isGroupSelectDisabled = disabled || groups.length === 0
   const resolvedMode = resolvePlaygroundMode(modelValue, mode, modelInfo)
+  const imageEndpointChoices = getPlaygroundImageEndpointChoices(modelInfo)
   const videoChoices = getPlaygroundVideoChoices(modelValue, modelInfo)
   const xjzVideoSpec = getXJZVideoModelSpec(modelValue)
   const selectedVideo = resolvePlaygroundVideoSelection(
@@ -232,10 +234,16 @@ export function PlaygroundInput({
               <SelectContent>
                 <SelectGroup>
                   <SelectItem value='auto'>{t('Auto detect')}</SelectItem>
-                  <SelectItem value='sync'>{t('Image Generation')}</SelectItem>
-                  <SelectItem value='async'>
-                    {t('Async Image Generation')}
-                  </SelectItem>
+                  {imageEndpointChoices.includes('sync') && (
+                    <SelectItem value='sync'>
+                      {t('Image Generation')}
+                    </SelectItem>
+                  )}
+                  {imageEndpointChoices.includes('async') && (
+                    <SelectItem value='async'>
+                      {t('Async Image Generation')}
+                    </SelectItem>
+                  )}
                 </SelectGroup>
               </SelectContent>
             </Select>

@@ -17,7 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, it } from 'bun:test'
-import { supportsChannelConnectionTest } from '../src/features/channels/lib/channel-utils'
+import {
+  supportsChannelConnectionTest,
+  getChannelGroupOptions,
+} from '../src/features/channels/lib/channel-utils'
 
 describe('supportsChannelConnectionTest', () => {
   it('rejects Sora async video channels', () => {
@@ -26,5 +29,30 @@ describe('supportsChannelConnectionTest', () => {
 
   it('keeps OpenAI channels testable', () => {
     expect(supportsChannelConnectionTest(1)).toBe(true)
+  })
+})
+
+describe('channel group options', () => {
+  it('can re-add default and saved custom groups after removing their chips', () => {
+    const options = getChannelGroupOptions(
+      ['vip', '默认'],
+      'default,SVIP,legacy',
+      ['vip']
+    )
+    expect(options.map((option) => option.value)).toEqual([
+      'default',
+      'vip',
+      '默认',
+      'legacy',
+      'SVIP',
+    ])
+    expect(getChannelGroupOptions().map((option) => option.value)).toEqual([
+      'default',
+    ])
+    expect(
+      getChannelGroupOptions([' vip ', 'vip', ''], '', ['SVIP']).map(
+        (option) => option.value
+      )
+    ).toEqual(['default', 'vip', 'SVIP'])
   })
 })

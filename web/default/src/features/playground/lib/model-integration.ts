@@ -28,27 +28,55 @@ export function getPlaygroundGroupModels(models: ModelOption[], group: string) {
   })
 }
 
-export function getPlaygroundIntegration(info?: PlaygroundModelInfo) {
+export function resolvePlaygroundGroup(
+  groups: Array<{ value: string }>,
+  models: ModelOption[] | undefined,
+  currentGroup: string,
+  userGroup?: string
+): string {
+  const allowed = new Set(groups.map((group) => group.value))
+  const hasModels = (group: string) =>
+    models === undefined || getPlaygroundGroupModels(models, group).length > 0
+  if (allowed.has(currentGroup) && hasModels(currentGroup)) return currentGroup
+
+  const candidates = [userGroup, ...groups.map((group) => group.value)].filter(
+    (group): group is string => !!group && allowed.has(group)
+  )
+  return (
+    candidates.find(hasModels) ??
+    (allowed.has(currentGroup) ? currentGroup : (candidates[0] ?? currentGroup))
+  )
+}
+
+export function getPlaygroundIntegrations(info?: PlaygroundModelInfo) {
   const mapped = info?.model.mapped_endpoints
   // Mapped routes already account for upstream protocol and retain public IDs.
-  if (mapped?.length) {
-    return (
-      mapped.find(
-        (endpoint) => endpoint.kind === 'image' || endpoint.kind === 'video'
-      ) ?? mapped[0]
-    )
-  }
-  for (const type of info?.model.supported_endpoint_types ?? []) {
+  if (mapped?.length) return mapped
+  return (info?.model.supported_endpoint_types ?? []).flatMap((type) => {
     const endpoint = info?.endpoints[type]
-    if (!endpoint?.path) continue
-    const kind = endpoint.path.includes('/images/')
-      ? 'image'
-      : endpoint.path.includes('/video')
-        ? 'video'
-        : 'text'
-    return { ...endpoint, type, kind, parameters: undefined }
-  }
-  return undefined
+    if (!endpoint?.path) return []
+    let kind: 'text' | 'image' | 'video' = 'text'
+    if (endpoint.path.includes('/images/')) kind = 'image'
+    else if (endpoint.path.includes('/video')) kind = 'video'
+    return [{ ...endpoint, type, kind, parameters: undefined }]
+  })
+}
+
+export function getPlaygroundIntegration(
+  info?: PlaygroundModelInfo,
+  preferredPath?: string
+) {
+  const integrations = getPlaygroundIntegrations(info)
+  const preferred = integrations.find(
+    (endpoint) => endpoint.path === preferredPath
+  )
+  if (preferred) return preferred
+  if (!info?.model.mapped_endpoints?.length) return integrations[0]
+  return (
+    integrations.find(
+      (endpoint) => endpoint.kind === 'image' || endpoint.kind === 'video'
+    ) ?? integrations[0]
+  )
 }
 
 export type PlaygroundReferenceSelection = {

@@ -24,9 +24,15 @@ import { PlaygroundInput } from './components/playground-input'
 import { usePlaygroundState, useChatHandler } from './hooks'
 import { createUserMessage, createLoadingAssistantMessage } from './lib'
 import type { Message as MessageType } from './types'
-import { getPlaygroundGroupModels } from './lib/model-integration'
+import {
+  getPlaygroundGroupModels,
+  resolvePlaygroundGroup,
+} from './lib/model-integration'
+import { useAuthStore } from '@/stores/auth-store'
+import { resolvePlaygroundImageEndpoint } from './lib/media-routing'
 
 export function Playground() {
+  const userGroup = useAuthStore((state) => state.auth.user?.group)
   const {
     config,
     parameterEnabled,
@@ -41,12 +47,19 @@ export function Playground() {
   } = usePlaygroundState()
 
   const availableModels = getPlaygroundGroupModels(models, config.group)
+  const modelInfo = models.find(
+    (model) => model.value === config.model
+  )?.modelInfo
+  const imageEndpoint = resolvePlaygroundImageEndpoint(
+    config.imageEndpoint,
+    modelInfo
+  )
 
   const { sendChat, stopGeneration, isGenerating, canStop } = useChatHandler({
     config: {
       ...config,
-      modelInfo: models.find((model) => model.value === config.model)
-        ?.modelInfo,
+      modelInfo,
+      imageEndpoint,
     },
     parameterEnabled,
     onMessageUpdate: updateMessages,
@@ -68,6 +81,13 @@ export function Playground() {
     queryKey: ['playground-groups'],
     queryFn: getUserGroups,
   })
+
+  // Recover persisted endpoint overrides when the current channel contract changes.
+  useEffect(() => {
+    if (imageEndpoint !== config.imageEndpoint) {
+      updateConfig('imageEndpoint', imageEndpoint)
+    }
+  }, [imageEndpoint, config.imageEndpoint, updateConfig])
 
   // Update models when data changes
   useEffect(() => {
@@ -96,14 +116,16 @@ export function Playground() {
 
     setGroups(groupsData)
 
-    const hasCurrentGroup = groupsData.some((g) => g.value === config.group)
-    if (!hasCurrentGroup && groupsData.length > 0) {
-      const fallback =
-        groupsData.find((g) => g.value === 'default')?.value ??
-        groupsData[0].value
-      updateConfig('group', fallback)
+    const nextGroup = resolvePlaygroundGroup(
+      groupsData,
+      modelsData,
+      config.group,
+      userGroup
+    )
+    if (nextGroup !== config.group) {
+      updateConfig('group', nextGroup)
     }
-  }, [groupsData, setGroups, config.group, updateConfig])
+  }, [groupsData, modelsData, setGroups, config.group, userGroup, updateConfig])
 
   const handleSendMessage = (text: string) => {
     const userMessage = createUserMessage(text)
@@ -207,7 +229,7 @@ export function Playground() {
           isModelLoading={isLoadingModels}
           modelValue={config.model}
           mode={config.mode}
-          imageEndpoint={config.imageEndpoint}
+          imageEndpoint={imageEndpoint}
           videoEndpoint={config.videoEndpoint}
           videoAspectRatio={config.videoAspectRatio}
           videoDuration={config.videoDuration}

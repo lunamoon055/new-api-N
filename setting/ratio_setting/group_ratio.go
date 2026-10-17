@@ -65,10 +65,19 @@ func GetGroupRatioSetting() *GroupRatioSetting {
 }
 
 func GetGroupRatioCopy() map[string]float64 {
-	return groupRatioMap.ReadAll()
+	groups := groupRatioMap.ReadAll()
+	// Registration and inherited token groups use this built-in identifier.
+	// A custom ratio list must not make it disappear from group selectors.
+	if _, ok := groups["default"]; !ok {
+		groups["default"] = 1
+	}
+	return groups
 }
 
 func ContainsGroupRatio(name string) bool {
+	if name == "default" {
+		return true
+	}
 	_, ok := groupRatioMap.Get(name)
 	return ok
 }
@@ -84,7 +93,9 @@ func UpdateGroupRatioByJSONString(jsonStr string) error {
 func GetGroupRatio(name string) float64 {
 	ratio, ok := groupRatioMap.Get(name)
 	if !ok {
-		common.SysLog("group ratio not found: " + name)
+		if name != "default" {
+			common.SysLog("group ratio not found: " + name)
+		}
 		return 1
 	}
 	return ratio

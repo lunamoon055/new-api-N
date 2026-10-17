@@ -297,11 +297,28 @@ func (channel *Channel) GetGroups() []string {
 	if channel.Group == "" {
 		return []string{}
 	}
-	groups := strings.Split(strings.Trim(channel.Group, ","), ",")
-	for i, group := range groups {
-		groups[i] = strings.TrimSpace(group)
+	groups := make([]string, 0)
+	seen := make(map[string]bool)
+	for _, group := range strings.Split(channel.Group, ",") {
+		group = strings.TrimSpace(group)
+		if group != "" && !seen[group] {
+			groups = append(groups, group)
+			seen[group] = true
+		}
 	}
 	return groups
+}
+
+func (channel *Channel) normalizeGroups() error {
+	if channel.Group == "" {
+		return nil // Omitted group keeps the existing create/update semantics.
+	}
+	groups := channel.GetGroups()
+	if len(groups) == 0 {
+		return errors.New("channel group cannot be empty")
+	}
+	channel.Group = strings.Join(groups, ",")
+	return nil
 }
 
 func (channel *Channel) GetOtherInfo() map[string]interface{} {
@@ -427,6 +444,11 @@ func BatchInsertChannels(channels []Channel) error {
 	if len(channels) == 0 {
 		return nil
 	}
+	for i := range channels {
+		if err := channels[i].normalizeGroups(); err != nil {
+			return err
+		}
+	}
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return tx.Error
@@ -514,16 +536,21 @@ func (channel *Channel) GetStatusCodeMapping() string {
 }
 
 func (channel *Channel) Insert() error {
-	var err error
-	err = DB.Create(channel).Error
-	if err != nil {
+	if err := channel.normalizeGroups(); err != nil {
 		return err
 	}
-	err = channel.AddAbilities(nil)
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(channel).Error; err != nil {
+			return err
+		}
+		return channel.AddAbilities(tx)
+	})
 }
 
 func (channel *Channel) Update() error {
+	if err := channel.normalizeGroups(); err != nil {
+		return err
+	}
 	// If this is a multi-key channel, recalculate MultiKeySize based on the current key list to avoid inconsistency after editing keys
 	if channel.ChannelInfo.IsMultiKey {
 		var keyStr string
@@ -562,14 +589,15 @@ func (channel *Channel) Update() error {
 			}
 		}
 	}
-	var err error
-	err = DB.Model(channel).Updates(channel).Error
-	if err != nil {
-		return err
-	}
-	DB.Model(channel).First(channel, "id = ?", channel.Id)
-	err = channel.UpdateAbilities(nil)
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(channel).Updates(channel).Error; err != nil {
+			return err
+		}
+		if err := tx.First(channel, "id = ?", channel.Id).Error; err != nil {
+			return err
+		}
+		return channel.UpdateAbilities(tx)
+	})
 }
 
 func (channel *Channel) UpdateResponseTime(responseTime int64) {
@@ -784,6 +812,9 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 	if group != nil && *group != "" {
 		shouldReCreateAbilities = true
 		updateData.Group = *group
+		if err := updateData.normalizeGroups(); err != nil {
+			return err
+		}
 	}
 	if priority != nil {
 		updateData.Priority = priority

@@ -72,7 +72,7 @@ export function AffiliateRewardsCard({
             </h3>
             <p className='text-muted-foreground line-clamp-1 text-xs'>
               {t(
-                'Earn rewards when your referrals add funds. Transfer accumulated rewards to your balance anytime.'
+                'Existing invitation credits are shown here. Agent rewards are managed in Promotion and Agents.'
               )}
             </p>
           </div>
