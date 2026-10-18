@@ -720,7 +720,14 @@ func attachTaskPromptFromRequest(c *gin.Context, task *model.Task) {
 // respondTaskError translates video-task failures before returning them to downstream clients.
 func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
 	if isVideoTaskErrorRequest(c) {
-		service.LocalizeVideoTaskError(taskErr)
+		originModel := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
+		mapping := common.GetContextKeyString(c, constant.ContextKeyChannelModelMapping)
+		upstreamModel, mapped, err := common.ResolveModelMapping(originModel, mapping)
+		if err == nil && mapped {
+			service.LocalizeVideoTaskError(taskErr, upstreamModel)
+		} else {
+			service.LocalizeVideoTaskError(taskErr)
+		}
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
 }

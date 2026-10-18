@@ -829,6 +829,7 @@ func taskModel2Dto(task *model.Task, includePrivateDetails bool) *dto.TaskDto {
 	}
 	properties := task.Properties
 	if !includePrivateDetails {
+		properties.UpstreamModelName = ""
 		properties.InputImages = nil
 		properties.InputVideos = nil
 		properties.InputAudios = nil
@@ -901,11 +902,14 @@ func normalizeOpenAIVideoErrorResponse(body []byte, task *model.Task) []byte {
 	if strings.TrimSpace(rawMessage) == "" {
 		rawMessage = task.FailReason
 	}
-	translated := service.TranslateVideoTaskError(rawMessage, code, 0)
+	translated := service.TranslateVideoTaskError(rawMessage, code, 0, task.Properties.UpstreamModelName)
 	if response.Error == nil {
 		response.Error = &dto.OpenAIVideoError{}
 	}
 	response.Error.Message = translated.Message
+	if task.Properties.OriginModelName != "" {
+		response.Model = task.Properties.OriginModelName
+	}
 	normalized, err := common.Marshal(response)
 	if err != nil {
 		return body

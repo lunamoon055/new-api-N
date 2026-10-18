@@ -262,6 +262,36 @@ func TestNormalizeOpenAIVideoErrorResponsePassesThroughDetailedMessage(t *testin
 	require.NotContains(t, response.Error.Message, "上游视频服务")
 }
 
+func TestTaskFailureResponsesHideUpstreamModelOutsideRootDiagnostics(t *testing.T) {
+	upstream := "优质特价/sd2.5(稳定版30图原生不卡脸5/10/30秒)"
+	raw := "模型通道不可用：模型 " + upstream + " 在当前令牌分组中没有可用渠道 (request id: upstream-private-id)"
+	task := &model.Task{
+		Platform: constant.TaskPlatform("37"), Status: model.TaskStatusFailure,
+		FailReason: raw, Data: []byte(`{"message":"legacy error"}`),
+		Properties:  model.Properties{OriginModelName: "Seedance-public", UpstreamModelName: upstream},
+		PrivateData: model.TaskPrivateData{UpstreamError: raw},
+	}
+	publicDto := TaskModel2Dto(task)
+	publicPayload, err := common.Marshal(publicDto)
+	require.NoError(t, err)
+	require.NotContains(t, string(publicPayload), upstream)
+	require.NotContains(t, string(publicPayload), "upstream-private-id")
+	require.Contains(t, string(publicPayload), "Seedance-public")
+	rootDto := TaskModel2DtoWithInputMaterials(task)
+	require.Contains(t, rootDto.RawFailReason, upstream)
+	require.NotContains(t, rootDto.FailReason, upstream)
+	require.Equal(t, upstream, task.Properties.UpstreamModelName, "response redaction must not mutate stored model mappings")
+
+	for _, reason := range []string{raw, "模型 " + upstream + " 的参考图片数量超过 30 张，请减少图片后重试"} {
+		body, err := common.Marshal(dto.OpenAIVideo{ID: "task_public", Model: upstream, Status: dto.VideoStatusFailed, Error: &dto.OpenAIVideoError{Message: reason}})
+		require.NoError(t, err)
+		response := normalizeOpenAIVideoErrorResponse(body, task)
+		require.NotContains(t, string(response), upstream)
+		require.NotContains(t, string(response), "upstream-private-id")
+		require.Contains(t, string(response), `"model":"Seedance-public"`)
+	}
+}
+
 func TestIsTaskSubmitSuccessStatusAcceptsAny2xx(t *testing.T) {
 	require.True(t, isTaskSubmitSuccessStatus(http.StatusOK))
 	require.True(t, isTaskSubmitSuccessStatus(http.StatusCreated))

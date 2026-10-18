@@ -270,7 +270,18 @@ func sanitizeTaskRawError(rawMessage string) string {
 
 // TranslateVideoTaskError preserves readable provider explanations and
 // converts short error codes or known generic failures into stable text.
-func TranslateVideoTaskError(rawMessage string, code string, statusCode int) TaskErrorTranslation {
+// Known upstream model IDs are private even when a useful explanation is kept.
+func TranslateVideoTaskError(rawMessage string, code string, statusCode int, upstreamModelNames ...string) TaskErrorTranslation {
+	translated := translateVideoTaskError(rawMessage, code, statusCode)
+	for _, name := range upstreamModelNames {
+		if name = strings.TrimSpace(name); name != "" {
+			translated.Message = strings.ReplaceAll(translated.Message, name, "当前模型")
+		}
+	}
+	return translated
+}
+
+func translateVideoTaskError(rawMessage string, code string, statusCode int) TaskErrorTranslation {
 	text := taskErrorSearchText(rawMessage, code, statusCode)
 	chineseMessage := extractChineseTaskErrorMessage(rawMessage)
 	detailedMessage := extractDetailedTaskErrorMessage(rawMessage)
@@ -304,6 +315,14 @@ func TranslateVideoTaskError(rawMessage string, code string, statusCode int) Tas
 		"credit balance is too low",
 	):
 		return taskErrorTranslation("积分不足，请联系管理员", "credits", false)
+	// Provider gateways can include their own model IDs, groups and request IDs
+	// in routing errors. Classify them before the readable-Chinese fallback.
+	case containsAny(text,
+		"模型通道不可用", "没有可用渠道", "无可用渠道",
+		"no available channel", "no available channels", "no_available_channel",
+		"invalid_channel_id", "task_channel_disable", "channel_no_available_key", "get_channel_failed",
+	):
+		return taskErrorTranslation("当前模型服务暂不可用，请稍后重试或联系管理员。", "configuration", true)
 	case chineseMessage != "":
 		return taskErrorTranslation(chineseMessage, "upstream_message", false)
 
@@ -371,8 +390,6 @@ func TranslateVideoTaskError(rawMessage string, code string, statusCode int) Tas
 		return taskErrorTranslation("任务状态查询失败，请稍后重试。", "task", true)
 	case containsAny(text, "not_implemented", "invalid_api_platform"):
 		return taskErrorTranslation("当前模型暂不支持该操作，请联系管理员。", "configuration", false)
-	case containsAny(text, "invalid_channel_id", "task_channel_disable", "channel_no_available_key", "get_channel_failed"):
-		return taskErrorTranslation("当前视频渠道暂不可用，请稍后重试或联系管理员。", "configuration", true)
 	case containsAny(text, "model_price_error", "invalid_billing_config"):
 		return taskErrorTranslation("模型计费配置异常，请联系管理员。", "configuration", false)
 	case containsAny(text, "an error occurred", "generate error"):
@@ -396,7 +413,7 @@ func TranslateVideoTaskError(rawMessage string, code string, statusCode int) Tas
 
 // LocalizeVideoTaskError mutates a TaskError just before persistence/response.
 // RawMessage remains server-only and Data contains only safe structured hints.
-func LocalizeVideoTaskError(taskError *dto.TaskError) {
+func LocalizeVideoTaskError(taskError *dto.TaskError, upstreamModelNames ...string) {
 	if taskError == nil {
 		return
 	}
@@ -405,7 +422,7 @@ func LocalizeVideoTaskError(taskError *dto.TaskError) {
 		rawMessage = taskError.Message
 	}
 	taskError.RawMessage = sanitizeTaskRawError(rawMessage)
-	translated := TranslateVideoTaskError(rawMessage, taskError.Code, taskError.StatusCode)
+	translated := TranslateVideoTaskError(rawMessage, taskError.Code, taskError.StatusCode, upstreamModelNames...)
 	taskError.Message = translated.Message
 	taskError.Data = dto.TaskErrorPublicData{
 		Category:  translated.Category,
@@ -416,10 +433,10 @@ func LocalizeVideoTaskError(taskError *dto.TaskError) {
 // SetVideoTaskFailure stores the translated message publicly and the masked
 // upstream error in TaskPrivateData for super-administrator diagnostics.
 func SetVideoTaskFailure(task *model.Task, rawMessage string, code string, statusCode int) TaskErrorTranslation {
-	translated := TranslateVideoTaskError(rawMessage, code, statusCode)
 	if task == nil {
-		return translated
+		return TranslateVideoTaskError(rawMessage, code, statusCode)
 	}
+	translated := TranslateVideoTaskError(rawMessage, code, statusCode, task.Properties.UpstreamModelName)
 	task.FailReason = translated.Message
 	task.PrivateData.UpstreamError = sanitizeTaskRawError(rawMessage)
 	return translated
@@ -459,15 +476,20 @@ func VideoTaskFailureMessages(task *model.Task) (userMessage string, rawMessage 
 		rawMessage = extractTaskFailureDataMessage(task.Data)
 	}
 	if rawMessage != "" {
-		translated := TranslateVideoTaskError(rawMessage, "", 0)
+		translated := TranslateVideoTaskError(rawMessage, "", 0, task.Properties.UpstreamModelName)
 		return translated.Message, rawMessage
 	}
 
+	translated := TranslateVideoTaskError(task.FailReason, "", 0, task.Properties.UpstreamModelName)
 	if containsHan(task.FailReason) && !looksLikeStructuredTaskError(task.FailReason) {
 		// Historical localized failures did not retain the upstream response.
+		// Still normalize routing diagnostics and remove known model IDs when
+		// the historical reason actually contains a provider explanation.
+		if translated.Message != task.FailReason {
+			return translated.Message, sanitizeTaskRawError(task.FailReason)
+		}
 		return task.FailReason, ""
 	}
 	rawMessage = sanitizeTaskRawError(task.FailReason)
-	translated := TranslateVideoTaskError(rawMessage, "", 0)
 	return translated.Message, rawMessage
 }

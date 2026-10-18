@@ -156,3 +156,27 @@ func TestRespondTaskErrorPassesThroughDetailedVideoError(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), "请求参数无效")
 	require.Equal(t, "fail_to_fetch_task", response["code"])
 }
+
+func TestRespondTaskErrorDoesNotExposeMappedUpstreamModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, channelError := range []bool{true, false} {
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/video/async-generations", nil)
+		upstream := "优质特价/sd2.5(稳定版30图原生不卡脸5/10/30秒)"
+		mapping, err := common.Marshal(map[string]string{"Seedance-public": "middle-alias", "middle-alias": upstream})
+		require.NoError(t, err)
+		ctx.Set("original_model", "Seedance-public")
+		ctx.Set("model_mapping", string(mapping))
+		raw := "模型 " + upstream + " 的参考图片数量超过 30 张，请减少图片后重试"
+		if channelError {
+			raw = "模型通道不可用：模型 " + upstream + " 在当前令牌分组中没有可用渠道 (request id: upstream-private-id)"
+		}
+		taskErr := service.TaskErrorWrapper(errors.New(raw), "fail_to_fetch_task", http.StatusBadRequest)
+		respondTaskError(ctx, taskErr)
+		require.Equal(t, http.StatusBadRequest, recorder.Code)
+		require.NotContains(t, recorder.Body.String(), upstream)
+		require.NotContains(t, recorder.Body.String(), "upstream-private-id")
+		require.Contains(t, taskErr.RawMessage, upstream)
+	}
+}
