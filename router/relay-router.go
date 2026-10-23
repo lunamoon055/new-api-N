@@ -40,6 +40,9 @@ func SetRelayRouter(router *gin.Engine) {
 			}
 		})
 	}
+	pricingRouter := router.Group("/v1/pricing")
+	pricingRouter.Use(middleware.RouteTag("relay"), middleware.TokenAuth(), middleware.GlobalAPIRateLimit())
+	pricingRouter.GET("", controller.GetModelPricing)
 
 	geminiRouter := router.Group("/v1beta/models")
 	geminiRouter.Use(middleware.RouteTag("relay"))

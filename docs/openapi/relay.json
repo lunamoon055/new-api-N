@@ -71,6 +71,169 @@
     }
   ],
   "paths": {
+    "/v1/pricing": {
+      "get": {
+        "summary": "获取全部模型价格",
+        "operationId": "getModelPricing",
+        "description": "使用下游 API Key 读取该 Key 可访问的全部已启用模型的本站价格，覆盖文本、嵌入、重排序、图片、音频及视频。金额为未乘分组和请求参数倍率的基价。未定价模型 price_configured=false；免费模型配置为 true 且价格为 0。表达式系数始终保留 USD 语义。模型目录最多缓存 60 秒。详见 docs/downstream-pricing-api.md。",
+        "tags": [
+          "获取模型列表"
+        ],
+        "parameters": [
+          {
+            "name": "currency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "USD",
+                "CNY"
+              ],
+              "default": "USD"
+            },
+            "description": "返回币种；CNY 使用站内 USDExchangeRate 换算。"
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "精确的本站公开模型 ID；省略时返回全部有权限的模型。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "模型价格目录；不存在或无权限的精确查询返回空 data 数组。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "list"
+                      ]
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "base_currency": {
+                      "type": "string"
+                    },
+                    "exchange_rate": {
+                      "type": "number"
+                    },
+                    "price_scope": {
+                      "type": "string",
+                      "enum": [
+                        "base"
+                      ]
+                    },
+                    "token_group": {
+                      "type": "string"
+                    },
+                    "group_ratio": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "model_name": {
+                            "type": "string"
+                          },
+                          "price_configured": {
+                            "type": "boolean"
+                          },
+                          "price_unit": {
+                            "type": "string",
+                            "enum": [
+                              "million_tokens",
+                              "request",
+                              "second",
+                              "request_multiplier",
+                              "expression",
+                              "unconfigured"
+                            ]
+                          },
+                          "model_price": {
+                            "type": "number"
+                          },
+                          "input_price": {
+                            "type": "number"
+                          },
+                          "output_price": {
+                            "type": "number"
+                          },
+                          "video_billing_mode": {
+                            "type": "string"
+                          },
+                          "video_resolution_prices": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "number"
+                            }
+                          },
+                          "billing_mode": {
+                            "type": "string"
+                          },
+                          "billing_expr": {
+                            "type": "string"
+                          },
+                          "expression_currency": {
+                            "type": "string"
+                          },
+                          "enable_groups": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "currency 参数无效"
+          },
+          "401": {
+            "description": "缺少 API Key，Key 无效、被禁用、已过期或额度耗尽"
+          },
+          "403": {
+            "description": "用户被禁用或 Key 无权访问指定分组/IP"
+          },
+          "429": {
+            "description": "超过 API 请求频率限制"
+          },
+          "503": {
+            "description": "站内币种或额度换算配置无效"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/models": {
       "get": {
         "summary": "获取模型列表",
