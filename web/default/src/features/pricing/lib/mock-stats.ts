@@ -510,6 +510,10 @@ export type SupportedParameter = {
   enumValues?: string[]
   descriptionKey: string
   required?: boolean
+  notes?: Array<{
+    key: string
+    values?: Record<string, string | number>
+  }>
 }
 
 const COMMON_CHAT_PARAMS: SupportedParameter[] = [

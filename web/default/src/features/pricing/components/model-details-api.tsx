@@ -54,6 +54,10 @@ import {
 import { replaceModelInPath } from '../lib/model-helpers'
 import { inferApiInfo } from '../lib/model-metadata'
 import { getModelEndpointPreset } from '../lib/model-endpoint-presets'
+import {
+  buildVideoSupportedParameters,
+  isVideoModel,
+} from '../lib/video-parameters'
 import type { PricingEndpoint, PricingModel } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -515,7 +519,7 @@ function buildVideoSample(lang: Lang, ctx: SampleContext): string {
     modelLower.startsWith('004系列/')
 
   // 构建请求体
-  const body: Record<string, any> = {
+  const body: Record<string, unknown> = {
     model: ctx.modelName,
     prompt,
   }
@@ -634,27 +638,29 @@ function CodeSamplesSection(props: {
   const endpoints = useMemo(() => {
     const mapped = props.model.mapped_endpoints || []
     if (mapped.length) {
-      return mapped.map((endpoint): DisplayEndpoint => ({
-        type: endpoint.type,
-        labelKey: '',
-        kind:
-          endpoint.kind === 'video' || endpoint.kind === 'image'
-            ? endpoint.kind
+      return mapped.map(
+        (endpoint): DisplayEndpoint => ({
+          type: endpoint.type,
+          labelKey: '',
+          kind:
+            endpoint.kind === 'video' || endpoint.kind === 'image'
+              ? endpoint.kind
+              : undefined,
+          isMapped: true,
+          path: replaceModelInPath(endpoint.path, props.model.model_name || ''),
+          method: endpoint.method || 'POST',
+          queryPath: endpoint.query_path
+            ? replaceModelInPath(
+                endpoint.query_path,
+                props.model.model_name || ''
+              )
             : undefined,
-        isMapped: true,
-        path: replaceModelInPath(endpoint.path, props.model.model_name || ''),
-        method: endpoint.method || 'POST',
-        queryPath: endpoint.query_path
-          ? replaceModelInPath(
-              endpoint.query_path,
-              props.model.model_name || ''
-            )
-          : undefined,
-        queryMethod: endpoint.query_method,
-        exampleDuration: endpoint.example_duration,
-        exampleResolution: endpoint.example_resolution,
-        exampleImageRequired: endpoint.example_image_required,
-      }))
+          queryMethod: endpoint.query_method,
+          exampleDuration: endpoint.example_duration,
+          exampleResolution: endpoint.example_resolution,
+          exampleImageRequired: endpoint.example_image_required,
+        })
+      )
     }
     const types = props.model.supported_endpoint_types || []
     const preset = getModelEndpointPreset(props.model.model_name)
@@ -741,7 +747,9 @@ function CodeSamplesSection(props: {
   const [lang, setLang] = useState<Lang>('curl')
 
   const activeEndpoint = useMemo(() => {
-    return endpoints.find((e) => endpointKey(e) === endpointType) ?? endpoints[0]
+    return (
+      endpoints.find((e) => endpointKey(e) === endpointType) ?? endpoints[0]
+    )
   }, [endpointType, endpoints])
 
   if (endpoints.length === 0 || !activeEndpoint) {
@@ -767,7 +775,10 @@ function CodeSamplesSection(props: {
 
       <div className='flex flex-wrap items-center gap-2'>
         {endpoints.length > 1 && (
-          <Tabs value={endpointKey(activeEndpoint)} onValueChange={setEndpointType}>
+          <Tabs
+            value={endpointKey(activeEndpoint)}
+            onValueChange={setEndpointType}
+          >
             <TabsList className='bg-muted/40 h-8 p-0.5'>
               {endpoints.map((ep) => (
                 <TabsTrigger
@@ -775,7 +786,9 @@ function CodeSamplesSection(props: {
                   value={endpointKey(ep)}
                   className='h-7 px-2.5 text-xs'
                 >
-                  {ep.isMapped ? ep.path : (ep.labelKey && t(ep.labelKey)) || ep.type}
+                  {ep.isMapped
+                    ? ep.path
+                    : (ep.labelKey && t(ep.labelKey)) || ep.type}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -870,9 +883,13 @@ function CodeSamplesSection(props: {
 
 function SupportedParametersSection(props: { model: PricingModel }) {
   const { t } = useTranslation()
-  const params = useMemo(
-    () => buildSupportedParameters(props.model),
+  const videoParameters = useMemo(
+    () => buildVideoSupportedParameters(props.model),
     [props.model]
+  )
+  const params = useMemo(
+    () => videoParameters?.parameters ?? buildSupportedParameters(props.model),
+    [props.model, videoParameters]
   )
 
   if (params.length === 0) return null
@@ -880,6 +897,13 @@ function SupportedParametersSection(props: { model: PricingModel }) {
   return (
     <section>
       <SectionTitle icon={Sigma}>{t('Supported parameters')}</SectionTitle>
+      {videoParameters && !videoParameters.hasDetails && (
+        <p className='text-muted-foreground mb-3 text-xs'>
+          {t(
+            'Detailed video parameters have not been published for this model.'
+          )}
+        </p>
+      )}
       <div className='border-border/60 overflow-hidden rounded-lg border'>
         <Table>
           <TableHeader>
@@ -925,6 +949,11 @@ function SupportedParametersSection(props: { model: PricingModel }) {
                 </TableCell>
                 <TableCell className='text-muted-foreground py-2 align-top text-xs'>
                   {t(p.descriptionKey)}
+                  {p.notes?.map((note) => (
+                    <p key={note.key} className='mt-1'>
+                      {t(note.key, note.values)}
+                    </p>
+                  ))}
                 </TableCell>
               </TableRow>
             ))}
@@ -1173,7 +1202,7 @@ export function ModelDetailsApi(props: {
       <CodeSamplesSection model={props.model} endpointMap={props.endpointMap} />
       <AuthSection />
       <SupportedParametersSection model={props.model} />
-      <RateLimitsSection model={props.model} />
+      {!isVideoModel(props.model) && <RateLimitsSection model={props.model} />}
     </div>
   )
 }

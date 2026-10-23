@@ -66,6 +66,8 @@ func GetPerfMetrics(c *gin.Context) {
 	}
 
 	result.Groups = filterActiveGroups(result.Groups)
+	result.Summary = perfmetrics.SummarizeGroups(result.Groups)
+	result.SummarySeries = perfmetrics.SummarizeGroupSeries(result.Groups)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

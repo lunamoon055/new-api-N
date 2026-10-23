@@ -39,12 +39,23 @@ type GroupResult struct {
 	SuccessRate  float64       `json:"success_rate"`
 	AvgTps       float64       `json:"avg_tps"`
 	Series       []BucketPoint `json:"series"`
+	totals       counters
+	buckets      map[int64]counters
 }
 
 type QueryResult struct {
-	ModelName    string        `json:"model_name"`
-	SeriesSchema string        `json:"series_schema"`
-	Groups       []GroupResult `json:"groups"`
+	ModelName     string         `json:"model_name"`
+	SeriesSchema  string         `json:"series_schema"`
+	Groups        []GroupResult  `json:"groups"`
+	Summary       *MetricSummary `json:"summary,omitempty"`
+	SummarySeries []BucketPoint  `json:"summary_series,omitempty"`
+}
+
+// MetricSummary is weighted by completed requests, without publishing volumes.
+type MetricSummary struct {
+	AvgLatencyMs int64   `json:"avg_latency_ms"`
+	SuccessRate  float64 `json:"success_rate"`
+	AvgTps       float64 `json:"avg_tps"`
 }
 
 type ModelSummary struct {

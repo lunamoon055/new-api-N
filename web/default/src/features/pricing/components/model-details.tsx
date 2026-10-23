@@ -81,6 +81,7 @@ import { ModelDetailsApi, ModelDetailsProviderInfo } from './model-details-api'
 import { ModelDescriptionEditor } from './model-description-editor'
 import { ModalityIcons } from './model-details-modalities'
 import { ModelDetailsPerformance } from './model-details-performance'
+import { isVideoModel } from '../lib/video-parameters'
 import { ModelDetailsQuickStats } from './model-details-quick-stats'
 
 // ----------------------------------------------------------------------------
@@ -208,20 +209,24 @@ function OverviewMetric(props: {
 
 function OverviewSummaryGrid(props: { model: PricingModel }) {
   const { t } = useTranslation()
+  const videoModel = isVideoModel(props.model)
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics', props.model.model_name],
     queryFn: () => getPerfMetrics(props.model.model_name, 24),
     staleTime: 60 * 1000,
+    refetchInterval: videoModel ? 30_000 : false,
   })
 
   const groups = metricsQuery.data?.data.groups ?? []
+  const videoSummary = videoModel ? metricsQuery.data?.data.summary : undefined
   const successRates = groups
     .map((group) => group.success_rate)
     .filter((rate) => Number.isFinite(rate))
-  const successRate =
+  const groupSuccessRate =
     successRates.length > 0
       ? successRates.reduce((sum, rate) => sum + rate, 0) / successRates.length
       : Number.NaN
+  const successRate = videoSummary?.success_rate ?? groupSuccessRate
   let successIntent: 'default' | 'warning' | 'success' = 'warning'
   if (successRate >= 99.9) {
     successIntent = 'success'
@@ -238,24 +243,32 @@ function OverviewSummaryGrid(props: { model: PricingModel }) {
   const latencyValues = groups
     .map((group) => group.avg_latency_ms)
     .filter((value) => value > 0)
-  const avgLatency =
+  const groupAvgLatency =
     latencyValues.length > 0
       ? Math.round(
           latencyValues.reduce((sum, value) => sum + value, 0) /
             latencyValues.length
         )
       : 0
+  const avgLatency = videoSummary?.avg_latency_ms ?? groupAvgLatency
 
   return (
-    <div className='bg-muted/20 grid overflow-hidden rounded-lg border sm:grid-cols-3 sm:divide-x'>
+    <div
+      className={cn(
+        'bg-muted/20 grid overflow-hidden rounded-lg border sm:divide-x',
+        videoModel ? 'sm:grid-cols-2' : 'sm:grid-cols-3'
+      )}
+    >
+      {!videoModel && (
+        <OverviewMetric
+          icon={Timer}
+          label='TPS'
+          value={formatThroughput(avgTps)}
+        />
+      )}
       <OverviewMetric
         icon={Timer}
-        label='TPS'
-        value={formatThroughput(avgTps)}
-      />
-      <OverviewMetric
-        icon={Timer}
-        label={t('Average latency')}
+        label={videoModel ? t('Average task duration') : t('Average latency')}
         value={formatLatency(avgLatency)}
       />
       <OverviewMetric

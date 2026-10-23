@@ -53,6 +53,7 @@ function formatDayLabel(date: string): string {
 
 export function LatencyTrendChart(props: {
   series: LatencyTimePoint[]
+  metricLabel?: string
   className?: string
 }) {
   const { t } = useTranslation()
@@ -85,7 +86,7 @@ export function LatencyTrendChart(props: {
           title: { value: (d: { time: string }) => d.time },
           content: [
             {
-              key: t('Average TTFT'),
+              key: props.metricLabel ?? t('Average TTFT'),
               value: (d: { ttft: number }) => `${Math.round(d.ttft)} ms`,
             },
           ],
@@ -109,7 +110,7 @@ export function LatencyTrendChart(props: {
         },
       ],
     }
-  }, [props.series, t])
+  }, [props.series, props.metricLabel, t])
 
   if (props.series.length === 0) {
     return (
@@ -147,6 +148,7 @@ export function LatencyTrendChart(props: {
 
 export function UptimeTrendChart(props: {
   series: UptimeDayPoint[]
+  taskMetrics?: boolean
   className?: string
 }) {
   const { t } = useTranslation()
@@ -189,17 +191,22 @@ export function UptimeTrendChart(props: {
           title: { value: (d: { date: string }) => d.date },
           content: [
             {
-              key: t('Uptime'),
+              key: props.taskMetrics ? t('Success rate') : t('Uptime'),
               value: (d: { uptime: number }) => `${d.uptime.toFixed(2)}%`,
             },
             {
               key: t('Incidents'),
               value: (d: { incidents: number }) => `${d.incidents}`,
             },
-            {
-              key: t('Outage'),
-              value: (d: { outage: number }) => `${d.outage} ${t('minutes')}`,
-            },
+            ...(!props.taskMetrics
+              ? [
+                  {
+                    key: t('Outage'),
+                    value: (d: { outage: number }) =>
+                      `${d.outage} ${t('minutes')}`,
+                  },
+                ]
+              : []),
           ],
         },
       },
@@ -214,7 +221,7 @@ export function UptimeTrendChart(props: {
         },
         {
           orient: 'left',
-          min: 95,
+          min: props.taskMetrics ? 0 : 95,
           max: 100,
           label: {
             formatMethod: (val: number | string) => `${val}%`,
@@ -224,7 +231,7 @@ export function UptimeTrendChart(props: {
         },
       ],
     }
-  }, [props.series, t])
+  }, [props.series, props.taskMetrics, t])
 
   if (props.series.length === 0) {
     return (

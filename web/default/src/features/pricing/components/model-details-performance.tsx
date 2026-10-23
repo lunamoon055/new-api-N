@@ -39,6 +39,7 @@ import {
 import type { PerformanceGroup } from '@/features/performance-metrics/types'
 import { type UptimeDayPoint } from '../lib/mock-stats'
 import type { PricingModel } from '../types'
+import { isVideoModel } from '../lib/video-parameters'
 import { LatencyTrendChart, UptimeTrendChart } from './model-details-charts'
 import { UptimeSparkline } from './model-details-uptime-sparkline'
 
@@ -83,13 +84,16 @@ type PerformanceRow = {
   avg_tps: number
 }
 
-function toLatencySeries(groups: PerformanceGroup[]) {
+function toLatencySeries(
+  groups: Pick<PerformanceGroup, 'series'>[],
+  field: 'avg_ttft_ms' | 'avg_latency_ms' = 'avg_ttft_ms'
+) {
   const byTs = new Map<number, number[]>()
   for (const group of groups) {
     for (const point of group.series) {
-      if (point.avg_ttft_ms <= 0) continue
+      if (point[field] <= 0) continue
       const current = byTs.get(point.ts) ?? []
-      current.push(point.avg_ttft_ms)
+      current.push(point[field])
       byTs.set(point.ts, current)
     }
   }
@@ -105,7 +109,9 @@ function toLatencySeries(groups: PerformanceGroup[]) {
     }))
 }
 
-function toUptimeSeries(groups: PerformanceGroup[]): UptimeDayPoint[] {
+function toUptimeSeries(
+  groups: Pick<PerformanceGroup, 'series'>[]
+): UptimeDayPoint[] {
   const byTs = new Map<number, { rates: number[]; incidents: number }>()
   for (const group of groups) {
     for (const point of group.series) {
@@ -156,10 +162,12 @@ function average(
 
 export function ModelDetailsPerformance(props: { model: PricingModel }) {
   const { t } = useTranslation()
+  const videoModel = isVideoModel(props.model)
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics', props.model.model_name],
     queryFn: () => getPerfMetrics(props.model.model_name, 24),
     staleTime: 60 * 1000,
+    refetchInterval: videoModel ? 30_000 : false,
   })
   const groups = useMemo(
     () => metricsQuery.data?.data.groups ?? [],
@@ -176,8 +184,23 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
       })),
     [groups]
   )
-  const latencySeries = useMemo(() => toLatencySeries(groups), [groups])
-  const uptimeSeries = useMemo(() => toUptimeSeries(groups), [groups])
+  const summarySeries = metricsQuery.data?.data.summary_series
+  const trendGroups = useMemo(
+    () =>
+      videoModel && summarySeries?.length
+        ? [{ series: summarySeries }]
+        : groups,
+    [videoModel, summarySeries, groups]
+  )
+  const latencySeries = useMemo(
+    () =>
+      toLatencySeries(
+        trendGroups,
+        videoModel ? 'avg_latency_ms' : 'avg_ttft_ms'
+      ),
+    [trendGroups, videoModel]
+  )
+  const uptimeSeries = useMemo(() => toUptimeSeries(trendGroups), [trendGroups])
   const uptimeByGroup = useMemo<Record<string, UptimeDayPoint[]>>(() => {
     const map: Record<string, UptimeDayPoint[]> = {}
     for (const group of groups) {
@@ -201,15 +224,18 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
     tpsValues.length > 0
       ? tpsValues.reduce((sum, value) => sum + value, 0) / tpsValues.length
       : 0
-  const avgLatency = average(performances, 'avg_latency_ms')
+  const videoSummary = videoModel ? metricsQuery.data?.data.summary : undefined
+  const avgLatency =
+    videoSummary?.avg_latency_ms ?? average(performances, 'avg_latency_ms')
   const successRates = performances
     .map((perf) => perf.success_rate)
     .filter((value) => Number.isFinite(value))
-  const successRate =
+  const groupSuccessRate =
     successRates.length > 0
       ? successRates.reduce((sum, value) => sum + value, 0) /
         successRates.length
       : 0
+  const successRate = videoSummary?.success_rate ?? groupSuccessRate
   const incidentCount = uptimeSeries.reduce((s, p) => s + p.incidents, 0)
   let intent: 'default' | 'warning' | 'success' = 'warning'
   if (successRate >= 99.9) {
@@ -223,16 +249,30 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
 
   return (
     <div className='flex flex-col gap-4'>
-      <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
+      {videoModel && (
+        <p className='text-muted-foreground text-xs'>
+          {t(
+            'Video metrics use the final task status and the time from submission to completion. Pending tasks are excluded.'
+          )}
+        </p>
+      )}
+      <div
+        className={cn(
+          'grid grid-cols-1 gap-2',
+          videoModel ? 'sm:grid-cols-2' : 'sm:grid-cols-3'
+        )}
+      >
+        {!videoModel && (
+          <StatCard
+            icon={Timer}
+            label='TPS'
+            value={formatThroughput(avgTps)}
+            hint={t('Sustained tokens per second')}
+          />
+        )}
         <StatCard
           icon={Timer}
-          label='TPS'
-          value={formatThroughput(avgTps)}
-          hint={t('Sustained tokens per second')}
-        />
-        <StatCard
-          icon={Timer}
-          label={t('Average latency')}
+          label={videoModel ? t('Average task duration') : t('Average latency')}
           value={formatLatency(avgLatency)}
         />
         <StatCard
@@ -254,21 +294,31 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
         <SectionHeader
           icon={HeartPulse}
           title={t('Per-group performance')}
-          description={t('Average latency, TTFT, TPS, and success rate')}
+          description={
+            videoModel
+              ? t('Average task duration and completion success rate')
+              : t('Average latency, TTFT, TPS, and success rate')
+          }
         />
         <div className='overflow-x-auto rounded-lg border'>
           <Table className='text-sm'>
             <TableHeader>
               <TableRow className='hover:bg-transparent'>
                 <TableHead className={headerCellClass}>{t('Group')}</TableHead>
+                {!videoModel && (
+                  <>
+                    <TableHead className={`${headerCellClass} text-right`}>
+                      TPS
+                    </TableHead>
+                    <TableHead className={`${headerCellClass} text-right`}>
+                      {t('Average TTFT')}
+                    </TableHead>
+                  </>
+                )}
                 <TableHead className={`${headerCellClass} text-right`}>
-                  TPS
-                </TableHead>
-                <TableHead className={`${headerCellClass} text-right`}>
-                  {t('Average TTFT')}
-                </TableHead>
-                <TableHead className={`${headerCellClass} text-right`}>
-                  {t('Average latency')}
+                  {videoModel
+                    ? t('Average task duration')
+                    : t('Average latency')}
                 </TableHead>
                 <TableHead
                   className={`${headerCellClass} min-w-[180px] text-left`}
@@ -283,12 +333,16 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
                   <TableCell className='py-2.5'>
                     <GroupBadge group={perf.group} size='sm' />
                   </TableCell>
-                  <TableCell className='py-2.5 text-right font-mono'>
-                    {formatThroughput(perf.avg_tps)}
-                  </TableCell>
-                  <TableCell className='py-2.5 text-right font-mono'>
-                    {formatLatency(perf.avg_ttft_ms)}
-                  </TableCell>
+                  {!videoModel && (
+                    <>
+                      <TableCell className='py-2.5 text-right font-mono'>
+                        {formatThroughput(perf.avg_tps)}
+                      </TableCell>
+                      <TableCell className='py-2.5 text-right font-mono'>
+                        {formatLatency(perf.avg_ttft_ms)}
+                      </TableCell>
+                    </>
+                  )}
                   <TableCell className='text-muted-foreground py-2.5 text-right font-mono'>
                     {formatLatency(perf.avg_latency_ms)}
                   </TableCell>
@@ -309,15 +363,24 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
         <SectionHeader
           icon={Timer}
           title={t('Latency trend (last 24h)')}
-          description={t('Average TTFT')}
+          description={
+            videoModel ? t('Average task duration') : t('Average TTFT')
+          }
         />
-        <LatencyTrendChart series={latencySeries} />
+        <LatencyTrendChart
+          series={latencySeries}
+          metricLabel={videoModel ? t('Average task duration') : undefined}
+        />
       </section>
 
       <section>
         <SectionHeader
           icon={HeartPulse}
-          title={t('Availability (last 24h)')}
+          title={
+            videoModel
+              ? t('Task success rate (last 24h)')
+              : t('Availability (last 24h)')
+          }
           description={
             incidentCount > 0
               ? t(
@@ -339,7 +402,7 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
             ) : null
           }
         />
-        <UptimeTrendChart series={uptimeSeries} />
+        <UptimeTrendChart series={uptimeSeries} taskMetrics={videoModel} />
       </section>
     </div>
   )

@@ -91,6 +91,11 @@ func Query(params QueryParams) (QueryResult, error) {
 	if err != nil {
 		return QueryResult{}, err
 	}
+	videoRows, err := model.GetVideoTaskPerfMetrics(params.Model, params.Group, nil, startTs, endTs, perf_metrics_setting.GetBucketSeconds())
+	if err != nil {
+		return QueryResult{}, err
+	}
+	rows = append(rows, videoRows...)
 	for _, row := range rows {
 		mergeCounters(merged, bucketKey{
 			model:    row.ModelName,
@@ -147,6 +152,17 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 			outputTokens:   row.OutputTokens,
 			generationMs:   row.GenerationMs,
 		}
+	}
+	videoRows, err := model.GetVideoTaskPerfMetrics("", "", groups, startTs, endTs, perf_metrics_setting.GetBucketSeconds())
+	if err != nil {
+		return SummaryAllResult{}, err
+	}
+	for _, row := range videoRows {
+		total := totals[row.ModelName]
+		total.requestCount += row.RequestCount
+		total.successCount += row.SuccessCount
+		total.totalLatencyMs += row.TotalLatencyMs
+		totals[row.ModelName] = total
 	}
 
 	hotBuckets.Range(func(key, value any) bool {
@@ -283,14 +299,59 @@ func buildQueryResult(modelName string, merged map[bucketKey]counters) QueryResu
 			SuccessRate:  successRate(total),
 			AvgTps:       avgTps(total),
 			Series:       series,
+			totals:       total,
+			buckets:      buckets,
 		})
 	}
 
-	return QueryResult{
+	result := QueryResult{
 		ModelName:    modelName,
 		SeriesSchema: seriesSchema,
 		Groups:       results,
 	}
+	result.Summary = SummarizeGroups(results)
+	result.SummarySeries = SummarizeGroupSeries(results)
+	return result
+}
+
+// SummarizeGroups must run after applying the caller's visible-group filter.
+func SummarizeGroups(groups []GroupResult) *MetricSummary {
+	overall := counters{}
+	for _, group := range groups {
+		overall.requestCount += group.totals.requestCount
+		overall.successCount += group.totals.successCount
+		overall.totalLatencyMs += group.totals.totalLatencyMs
+		overall.outputTokens += group.totals.outputTokens
+		overall.generationMs += group.totals.generationMs
+	}
+	if overall.requestCount == 0 {
+		return nil
+	}
+	return &MetricSummary{
+		AvgLatencyMs: avg(overall.totalLatencyMs, overall.requestCount),
+		SuccessRate:  successRate(overall),
+		AvgTps:       avgTps(overall),
+	}
+}
+
+// SummarizeGroupSeries weights every point by its underlying task count.
+func SummarizeGroupSeries(groups []GroupResult) []BucketPoint {
+	merged := map[bucketKey]counters{}
+	for _, group := range groups {
+		for ts, value := range group.buckets {
+			mergeCounters(merged, bucketKey{bucketTs: ts}, value)
+		}
+	}
+	timestamps := make([]int64, 0, len(merged))
+	for key := range merged {
+		timestamps = append(timestamps, key.bucketTs)
+	}
+	sort.Slice(timestamps, func(i, j int) bool { return timestamps[i] < timestamps[j] })
+	series := make([]BucketPoint, 0, len(timestamps))
+	for _, ts := range timestamps {
+		series = append(series, bucketPoint(ts, merged[bucketKey{bucketTs: ts}]))
+	}
+	return series
 }
 
 func bucketPoint(ts int64, value counters) BucketPoint {

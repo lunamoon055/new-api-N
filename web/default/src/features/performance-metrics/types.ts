@@ -40,6 +40,12 @@ export type PerformanceMetricsData = {
     model_name: string
     series_schema?: string
     groups: PerformanceGroup[]
+    summary_series?: PerformanceSeriesPoint[]
+    summary?: {
+      avg_latency_ms: number
+      success_rate: number
+      avg_tps: number
+    }
   }
 }
 
