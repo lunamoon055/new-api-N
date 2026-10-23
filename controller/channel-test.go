@@ -90,6 +90,9 @@ type channelTestLabRequest struct {
 
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
 	normalized := strings.TrimSpace(endpointType)
+	if channel != nil && channel.Type == constant.ChannelTypeZongheng {
+		return string(constant.EndpointTypeOpenAIVideo)
+	}
 	if common.IsXJZVideoModel(modelName) {
 		return string(constant.EndpointTypeOpenAIVideo)
 	}
@@ -1449,6 +1452,9 @@ func buildChannelTestRequest(model string, endpointType string, channel *model.C
 
 func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool) any {
 	testResponsesInput := json.RawMessage(`[{"role":"user","content":"hi"}]`)
+	if channel != nil && channel.Type == constant.ChannelTypeZongheng {
+		return relaycommon.TaskSubmitReq{Model: model, Prompt: "a mountain at sunrise"}
+	}
 	if common.IsXJZVideoModel(model) {
 		return buildXJZVideoTestRequest(model)
 	}

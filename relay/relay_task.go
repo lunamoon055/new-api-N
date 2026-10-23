@@ -308,6 +308,12 @@ func ensureTaskBillingConfigured(info *relaycommon.RelayInfo, priceData types.Pr
 	if info == nil {
 		return nil
 	}
+	if info.ChannelMeta != nil && info.ChannelType == constant.ChannelTypeZongheng {
+		if priceData.UsePrice || ratio_setting.HasConfiguredModelRatio(info.OriginModelName) {
+			return nil
+		}
+		return fmt.Errorf("模型 %s 未配置价格或倍率，请按完整模型名配置定价后再使用", info.OriginModelName)
+	}
 	xjzModel := info.OriginModelName
 	if info.ChannelMeta != nil && common.IsXJZVideoModel(info.UpstreamModelName) {
 		xjzModel = info.UpstreamModelName

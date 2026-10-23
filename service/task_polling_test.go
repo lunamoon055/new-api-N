@@ -22,6 +22,7 @@ type sunoPollingTestAdaptor struct {
 
 type videoPollingHTTPErrorAdaptor struct {
 	parseCalled bool
+	fetchCalled bool
 }
 
 type videoPollingUnknownStatusAdaptor struct{}
@@ -46,6 +47,7 @@ func (a *videoPollingUnknownStatusAdaptor) AdjustBillingOnComplete(*model.Task, 
 func (a *videoPollingHTTPErrorAdaptor) Init(_ *relaycommon.RelayInfo) {}
 
 func (a *videoPollingHTTPErrorAdaptor) FetchTask(string, string, map[string]any, string) (*http.Response, error) {
+	a.fetchCalled = true
 	return &http.Response{
 		StatusCode: http.StatusBadGateway,
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"temporary gateway error"}}`)),

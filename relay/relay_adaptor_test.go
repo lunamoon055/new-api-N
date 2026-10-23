@@ -14,3 +14,9 @@ func TestGetTaskAdaptorReturnsSanbaoAdaptor(t *testing.T) {
 	require.NotNil(t, adaptor)
 	require.Equal(t, "sanbao", adaptor.GetChannelName())
 }
+
+func TestGetTaskAdaptorReturnsZonghengAdaptor(t *testing.T) {
+	adaptor := GetTaskAdaptor(constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeZongheng)))
+	require.NotNil(t, adaptor)
+	require.Equal(t, "zongheng", adaptor.GetChannelName())
+}

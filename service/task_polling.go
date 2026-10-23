@@ -428,6 +428,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		logger.LogError(ctx, fmt.Sprintf("Task %s not found in taskM", taskId))
 		return fmt.Errorf("task %s not found", taskId)
 	}
+	if ch.Type == constant.ChannelTypeZongheng && task.PrivateData.NextPollAt > time.Now().Unix() {
+		return nil
+	}
 	key := ch.Key
 
 	privateData := task.PrivateData
@@ -472,6 +475,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	task.Data = redactVideoResponseBody(responseBody)
+	if ch.Type == constant.ChannelTypeZongheng {
+		SetZonghengNextPoll(task, time.Now().Unix())
+	}
 
 	logger.LogDebug(ctx, "updateVideoSingleTask parsed status: %s", taskResult.Status)
 

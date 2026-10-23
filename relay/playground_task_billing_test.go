@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"github.com/QuantumNous/new-api/constant"
 	"testing"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -97,4 +98,10 @@ func TestNewXJZPerCallPricesCannotUsePerSecondBilling(t *testing.T) {
 		require.NoError(t, ensureTaskBillingConfigured(info, price, billing_setting.VideoBillingModeFixed))
 		require.NoError(t, ensureTaskBillingConfigured(info, price, billing_setting.VideoBillingModeTieredRequest))
 	}
+}
+
+func TestZonghengBillingUsesItsChannelContract(t *testing.T) {
+	info := &relaycommon.RelayInfo{OriginModelName: "特价sd2.0-933-过脸", ChannelMeta: &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeZongheng}}
+	require.Error(t, ensureTaskBillingConfigured(info, types.PriceData{}, billing_setting.VideoBillingModeDynamic))
+	require.NoError(t, ensureTaskBillingConfigured(info, types.PriceData{UsePrice: true, ModelPrice: 0.25}, billing_setting.VideoBillingModeDynamic))
 }

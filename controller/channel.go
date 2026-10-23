@@ -1014,6 +1014,19 @@ func FetchModels(c *gin.Context) {
 	// remove line breaks and extra spaces.
 	key := strings.TrimSpace(req.Key)
 	key = strings.Split(key, "\n")[0]
+	if req.Type == constant.ChannelTypeZongheng {
+		models, err := service.FetchZonghengVideoModels(c.Request.Context(), baseURL, key, "")
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		ids := make([]string, 0, len(models))
+		for _, item := range models {
+			ids = append(ids, item.ID)
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": ids})
+		return
+	}
 
 	if req.Type == constant.ChannelTypeOllama {
 		models, err := ollama.FetchOllamaModels(baseURL, key)

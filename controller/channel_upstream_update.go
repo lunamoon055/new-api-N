@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -263,6 +264,21 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 	baseURL := constant.ChannelBaseURLs[channel.Type]
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
+	}
+	if channel.Type == constant.ChannelTypeZongheng {
+		key, _, apiErr := channel.GetNextEnabledKey()
+		if apiErr != nil {
+			return nil, apiErr
+		}
+		models, err := service.FetchZonghengVideoModels(context.Background(), baseURL, strings.TrimSpace(key), channel.GetSetting().Proxy)
+		if err != nil {
+			return nil, err
+		}
+		ids := make([]string, 0, len(models))
+		for _, item := range models {
+			ids = append(ids, item.ID)
+		}
+		return normalizeModelNames(ids), nil
 	}
 
 	if channel.Type == constant.ChannelTypeOllama {

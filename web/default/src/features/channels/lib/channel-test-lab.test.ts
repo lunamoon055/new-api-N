@@ -25,6 +25,23 @@ import {
   type ChannelTestEndpointType,
 } from './channel-test-lab'
 
+describe('Zongheng video channel', () => {
+  test('uses the video endpoint and live defaults for arbitrary public model IDs', () => {
+    const channel = { type: 59 }
+    assert.equal(
+      resolveChannelTestEndpointType('auto', 'sora2', channel),
+      'openai-video'
+    )
+    assert.deepEqual(
+      getChannelTestPreviewPayload('openai-video', '公开视频:ID', channel),
+      {
+        model: '公开视频:ID',
+        prompt: 'a mountain at sunrise',
+      }
+    )
+  })
+})
+
 describe('Sanbao channel test templates', () => {
   test('provides an editable Sanbao image generation template', () => {
     const endpointType = 'sanbao-image' as ChannelTestEndpointType

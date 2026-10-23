@@ -295,3 +295,18 @@ func TestPricingPublishesMappedRouteUnderPublicModelName(t *testing.T) {
 	require.Contains(t, string(encoded), `"mapped_endpoints"`)
 	require.False(t, strings.Contains(string(encoded), "TTP-grok"))
 }
+
+func TestZonghengPricingOverridesModelNameHeuristics(t *testing.T) {
+	for _, name := range []string{"XXseadanco2.0M", "kling-video-v3", "TTP-grok"} {
+		endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeZongheng, name, "alias", nil)
+		require.Len(t, endpoints, 1)
+		require.Equal(t, "/v1/videos", endpoints[0].Path)
+		require.Equal(t, "/v1/videos/{task_id}", endpoints[0].QueryPath)
+		require.NotNil(t, endpoints[0].Parameters)
+		require.True(t, endpoints[0].Parameters.OmitRatio)
+		require.Equal(t, "reference_videos", endpoints[0].Parameters.VideoField)
+	}
+	require.Nil(t, common.GetVideoIntegrationParameters("XXseadanco2.0M"))
+	other := getPricingIntegrationEndpoints(constant.ChannelTypeOpenAI, "kling-video-v3", nil)
+	require.Equal(t, "/v1/video/async-generations", other[0].Path)
+}

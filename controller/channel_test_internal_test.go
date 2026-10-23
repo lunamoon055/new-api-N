@@ -153,6 +153,18 @@ func TestResolveChannelTestEndpointUsesSanbaoImageTemplate(t *testing.T) {
 	require.Equal(t, types.RelayFormat(types.RelayFormatTask), relayFormat)
 }
 
+func TestZonghengTestRequestUsesOnlyItsLiveModelDefaults(t *testing.T) {
+	channel := &model.Channel{Type: constant.ChannelTypeZongheng}
+	endpoint, path, format := resolveChannelTestEndpoint(channel, "sora2", "")
+	require.Equal(t, string(constant.EndpointTypeOpenAIVideo), endpoint)
+	require.Equal(t, "/v1/videos", path)
+	require.Equal(t, types.RelayFormat(types.RelayFormatTask), format)
+	req := buildTestRequest("特价sd2.0-933-过脸", endpoint, channel, false).(relaycommon.TaskSubmitReq)
+	require.Zero(t, req.Duration)
+	require.Empty(t, req.Size)
+	require.Empty(t, req.Resolution)
+}
+
 func TestResolveChannelTestEndpointUsesSanbaoVideoTemplate(t *testing.T) {
 	channel := &model.Channel{
 		Type:   constant.ChannelTypeSanbao,

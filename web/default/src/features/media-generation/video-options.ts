@@ -844,7 +844,7 @@ function getVideoModelSpec(
     resolutions: (p.resolutions ?? ['720p']).map((value) =>
       value.toLowerCase()
     ) as CreationResolution[],
-    ratios: p.ratios ?? ['16:9'],
+    ratios: p.omit_ratio ? [] : (p.ratios ?? ['16:9']),
     referenceModes,
     minImages: p.min_images,
     maxImages: p.max_images,

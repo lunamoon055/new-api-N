@@ -169,6 +169,13 @@ func VideoProxy(c *gin.Context) {
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy request")
 		return
 	}
+	if channel.Type == constant.ChannelTypeZongheng {
+		for _, name := range []string{"Range", "If-Range"} {
+			if value := c.Request.Header.Get(name); value != "" {
+				req.Header.Set(name, value)
+			}
+		}
+	}
 
 	resp, err := service.DoSSRFProtectedRequest(client, req)
 	if err != nil {

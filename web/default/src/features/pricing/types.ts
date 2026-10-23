@@ -90,6 +90,7 @@ export type PricingModel = {
 
 /** Public model-specific request contract shared with relay validation. */
 export type IntegrationParameters = {
+  omit_ratio?: boolean
   durations?: number[]
   resolutions?: string[]
   ratios?: string[]

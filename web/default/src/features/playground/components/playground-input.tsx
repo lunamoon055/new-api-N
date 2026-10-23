@@ -288,31 +288,36 @@ export function PlaygroundInput({
                 </SelectContent>
               </Select>
             </div>
-            <Field className='w-auto min-w-28 gap-1.5'>
-              <FieldLabel htmlFor='playground-video-ratio'>
-                {t('Aspect ratio')}
-              </FieldLabel>
-              <Select
-                value={selectedVideo.aspectRatio}
-                onValueChange={(value) => {
-                  if (value) onVideoAspectRatioChange(value)
-                }}
-                disabled={disabled}
-              >
-                <SelectTrigger id='playground-video-ratio' className='min-w-28'>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {videoChoices.aspectRatios.map((ratio) => (
-                      <SelectItem key={ratio} value={ratio}>
-                        {ratio}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
+            {videoChoices.aspectRatios.length > 0 && (
+              <Field className='w-auto min-w-28 gap-1.5'>
+                <FieldLabel htmlFor='playground-video-ratio'>
+                  {t('Aspect ratio')}
+                </FieldLabel>
+                <Select
+                  value={selectedVideo.aspectRatio}
+                  onValueChange={(value) => {
+                    if (value) onVideoAspectRatioChange(value)
+                  }}
+                  disabled={disabled}
+                >
+                  <SelectTrigger
+                    id='playground-video-ratio'
+                    className='min-w-28'
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {videoChoices.aspectRatios.map((ratio) => (
+                        <SelectItem key={ratio} value={ratio}>
+                          {ratio}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
             {videoChoices.resolutions.length > 0 && (
               <Field className='w-auto min-w-28 gap-1.5'>
                 <FieldLabel htmlFor='playground-video-resolution'>

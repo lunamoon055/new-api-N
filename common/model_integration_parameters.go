@@ -5,6 +5,7 @@ import "strings"
 // ModelIntegrationParameters describes public request fields, never channel IDs
 // or upstream mapping tables. The same XJZ spec also validates relay requests.
 type ModelIntegrationParameters struct {
+	OmitRatio          bool     `json:"omit_ratio,omitempty"`
 	Durations          []int    `json:"durations,omitempty"`
 	Resolutions        []string `json:"resolutions,omitempty"`
 	Ratios             []string `json:"ratios,omitempty"`

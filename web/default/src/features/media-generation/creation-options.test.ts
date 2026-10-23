@@ -69,6 +69,55 @@ const sanbaoVideoModel = {
   },
 }
 
+describe('Zongheng video capabilities', () => {
+  test('omits unpublished ratios and uses the provider reference fields', () => {
+    const model = {
+      id: 'XXseadanco2.0M',
+      mapped_endpoints: [
+        {
+          type: 'openai-video',
+          kind: 'video' as const,
+          path: '/v1/videos',
+          method: 'POST',
+          parameters: {
+            durations: [5, 10, 15],
+            resolutions: ['720p'],
+            omit_ratio: true,
+            duration_field: 'duration',
+            ratio_field: 'ratio',
+            resolution_field: 'resolution',
+            image_field: 'images',
+            video_field: 'reference_videos',
+            audio_field: 'reference_audios',
+            max_images: 9,
+            max_videos: 3,
+            max_audios: 3,
+          },
+        },
+      ],
+    }
+    assert.deepEqual(getCreationVideoCapabilities(model)?.aspectRatios, [])
+    const request = getCreationVideoRequestOptions(
+      { duration: '10', resolution: '720p', aspectRatio: '16:9' },
+      model,
+      {
+        referenceMode: 'multimodal',
+        imageUrls: [{ url: 'https://example.com/ref.png' }],
+        videoUrls: [{ url: 'https://example.com/ref.mp4' }],
+        audioUrls: [],
+        audioUrl: '',
+        startImageUrl: '',
+        endImageUrl: '',
+      }
+    )
+    const payload = JSON.parse(JSON.stringify(request))
+    assert.equal(payload.duration, 10)
+    assert.equal(payload.ratio, undefined)
+    assert.deepEqual(payload.images, ['https://example.com/ref.png'])
+    assert.deepEqual(payload.reference_videos, ['https://example.com/ref.mp4'])
+  })
+})
+
 describe('Sanbao creation model options', () => {
   test('uses Sanbao image metadata for aspect ratios, limits, and request fields', () => {
     assert.deepEqual(getCreationImageAspectRatioOptions(sanbaoImageModel), [

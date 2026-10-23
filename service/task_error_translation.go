@@ -282,6 +282,9 @@ func TranslateVideoTaskError(rawMessage string, code string, statusCode int, ups
 }
 
 func translateVideoTaskError(rawMessage string, code string, statusCode int) TaskErrorTranslation {
+	if code == "upstream_capabilities_unavailable" {
+		return taskErrorTranslation("读取上游模型能力失败，请稍后重试；如持续失败，请联系管理员。", "upstream_service", true)
+	}
 	text := taskErrorSearchText(rawMessage, code, statusCode)
 	chineseMessage := extractChineseTaskErrorMessage(rawMessage)
 	detailedMessage := extractDetailedTaskErrorMessage(rawMessage)

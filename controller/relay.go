@@ -655,6 +655,9 @@ func completePersistentTaskSubmission(c *gin.Context, relayInfo *relaycommon.Rel
 		task.BillingStatus = model.TaskBillingStatusSettled
 	}
 	task.Data = result.TaskData
+	if relayInfo.ChannelType == constant.ChannelTypeZongheng {
+		service.SetZonghengNextPoll(task, common.GetTimestamp())
+	}
 	task.Action = relayInfo.Action
 
 	won, err := task.UpdateWithSnapshot(snapshot)

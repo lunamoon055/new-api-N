@@ -77,7 +77,9 @@ export function getPlaygroundVideoChoices(
   const parameters = getPlaygroundIntegration(info)?.parameters
   if (parameters?.durations?.length) {
     return {
-      aspectRatios: parameters.ratios ?? FALLBACK_VIDEO_RATIOS,
+      aspectRatios: parameters.omit_ratio
+        ? []
+        : (parameters.ratios ?? FALLBACK_VIDEO_RATIOS),
       durations: parameters.durations.map(String),
       resolutions: parameters.resolutions ?? [],
     }
@@ -129,7 +131,7 @@ export function resolvePlaygroundVideoSelection(
   const resolved = {
     aspectRatio: choices.aspectRatios.includes(selection.aspectRatio)
       ? selection.aspectRatio
-      : choices.aspectRatios[0],
+      : (choices.aspectRatios[0] ?? ''),
     duration: choices.durations.includes(preferredDuration)
       ? preferredDuration
       : choices.durations[0],
@@ -397,7 +399,11 @@ export function buildPlaygroundMediaRequest(
       payload[parameters.duration_field] = Number(
         (selection as PlaygroundVideoSelection).duration
       )
-    if (parameters.ratio_field && selection.aspectRatio)
+    if (
+      !parameters.omit_ratio &&
+      parameters.ratio_field &&
+      selection.aspectRatio
+    )
       payload[parameters.ratio_field] = selection.aspectRatio
     if (parameters.resolution_field && selection.resolution)
       payload[contract.resolution_field ?? parameters.resolution_field] =

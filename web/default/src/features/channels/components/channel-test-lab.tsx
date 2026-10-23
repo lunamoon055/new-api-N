@@ -187,7 +187,8 @@ export function ChannelTestLab() {
   const selectedTemplate = getChannelTestTemplate(resolvedEndpointType)
   const defaultPayload = getChannelTestPreviewPayload(
     resolvedEndpointType,
-    effectiveModel
+    effectiveModel,
+    selectedChannel
   )
   const defaultTemplateText = formatJson(defaultPayload)
   const activeRequestTemplateText = templateDirty
@@ -612,7 +613,9 @@ export function ChannelTestLab() {
                     variant='ghost'
                     size='sm'
                     onClick={() =>
-                      void copyToClipboard(result.response.data?.upstream_url ?? '')
+                      void copyToClipboard(
+                        result.response.data?.upstream_url ?? ''
+                      )
                     }
                   >
                     <Clipboard className='mr-2 size-4' />
@@ -632,7 +635,9 @@ export function ChannelTestLab() {
                     variant='ghost'
                     size='sm'
                     onClick={() =>
-                      void copyToClipboard(result.response.data?.upstream_request ?? '')
+                      void copyToClipboard(
+                        result.response.data?.upstream_request ?? ''
+                      )
                     }
                   >
                     <Clipboard className='mr-2 size-4' />
@@ -654,7 +659,9 @@ export function ChannelTestLab() {
                       size='sm'
                       onClick={() =>
                         void copyToClipboard(
-                          formatJson(result.response.data?.upstream_headers ?? {})
+                          formatJson(
+                            result.response.data?.upstream_headers ?? {}
+                          )
                         )
                       }
                     >
@@ -677,7 +684,9 @@ export function ChannelTestLab() {
                       variant='ghost'
                       size='sm'
                       onClick={() =>
-                        void copyToClipboard(result.response.data?.upstream_response ?? '')
+                        void copyToClipboard(
+                          result.response.data?.upstream_response ?? ''
+                        )
                       }
                     >
                       <Clipboard className='mr-2 size-4' />

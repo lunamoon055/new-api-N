@@ -136,6 +136,7 @@ func (m Properties) Value() (driver.Value, error) {
 }
 
 type TaskPrivateData struct {
+	NextPollAt       int64  `json:"next_poll_at,omitempty"` // Provider-requested poll delay, persisted in the existing JSON column.
 	Key              string `json:"key,omitempty"`
 	UpstreamTaskID   string `json:"upstream_task_id,omitempty"`  // 上游真实 task ID
 	UpstreamEndpoint string `json:"upstream_endpoint,omitempty"` // 提交时实际使用的上游任务端点
@@ -535,6 +536,7 @@ func (Task *Task) Insert() error {
 }
 
 type taskSnapshot struct {
+	NextPollAt         int64
 	Status             TaskStatus
 	Progress           string
 	StartTime          int64
@@ -552,7 +554,7 @@ type taskSnapshot struct {
 }
 
 func (s taskSnapshot) Equal(other taskSnapshot) bool {
-	return s.Status == other.Status &&
+	return s.NextPollAt == other.NextPollAt && s.Status == other.Status &&
 		s.Progress == other.Progress &&
 		s.StartTime == other.StartTime &&
 		s.FinishTime == other.FinishTime &&
@@ -570,6 +572,7 @@ func (s taskSnapshot) Equal(other taskSnapshot) bool {
 
 func (t *Task) Snapshot() taskSnapshot {
 	return taskSnapshot{
+		NextPollAt:         t.PrivateData.NextPollAt,
 		Status:             t.Status,
 		Progress:           t.Progress,
 		StartTime:          t.StartTime,

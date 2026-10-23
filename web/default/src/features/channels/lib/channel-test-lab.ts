@@ -326,6 +326,7 @@ export function resolveChannelTestEndpointType(
   model: string,
   channel?: ChannelTestChannelLike
 ): ChannelTestEndpointType {
+  if (channel?.type === 59) return 'openai-video'
   if (isSanbaoChannel(channel) && !isSanbaoEndpoint(endpointType)) {
     if (
       endpointType === 'auto' ||
@@ -361,8 +362,12 @@ export function resolveChannelTestEndpointType(
 
 export function getChannelTestPreviewPayload(
   endpointType: ChannelTestEndpointType,
-  model: string
+  model: string,
+  channel?: ChannelTestChannelLike
 ) {
+  if (channel?.type === 59) {
+    return { model: model.trim() || '<model>', prompt: 'a mountain at sunrise' }
+  }
   if (endpointType === 'openai-video' && isVideosApiTestModel(model)) {
     return {
       model: model.trim() || '<model>',
