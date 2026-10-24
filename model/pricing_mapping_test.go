@@ -275,14 +275,21 @@ func TestPricingPublishesMappedRouteUnderPublicModelName(t *testing.T) {
 	require.NoError(t, database.Create(&Channel{Id: 43, Type: constant.ChannelTypeOpenAI, ModelMapping: &mapping}).Error)
 	require.NoError(t, database.Create(&Ability{Model: "Grok", Group: "default", ChannelId: 43, Enabled: true}).Error)
 	require.NoError(t, database.Create(&Ability{Model: "TTP-grok", Group: "default", ChannelId: 43, Enabled: true}).Error)
+	require.NoError(t, database.Create(&Channel{Id: 60, Type: constant.ChannelTypeV6K}).Error)
+	require.NoError(t, database.Create(&Ability{Model: "v6k-test-unpriced", Group: "default", ChannelId: 60, Enabled: true}).Error)
 	updatePricing()
-	require.Len(t, pricingMap, 2)
+	require.Len(t, pricingMap, 3)
 	byName := make(map[string]Pricing, len(pricingMap))
 	for _, pricing := range pricingMap {
 		byName[pricing.ModelName] = pricing
 	}
 	public := byName["Grok"]
 	original := byName["TTP-grok"]
+	require.Nil(t, public.PriceConfigured) // Preserve the existing catalog contract.
+	v6k := byName["v6k-test-unpriced"]
+	require.NotNil(t, v6k.PriceConfigured)
+	require.False(t, *v6k.PriceConfigured)
+	require.Equal(t, "dynamic", v6k.VideoBillingMode)
 	require.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAIVideo}, public.SupportedEndpointTypes)
 	require.Equal(t, original.SupportedEndpointTypes, public.SupportedEndpointTypes)
 	require.Len(t, public.MappedEndpoints, 1)
@@ -309,4 +316,16 @@ func TestZonghengPricingOverridesModelNameHeuristics(t *testing.T) {
 	require.Nil(t, common.GetVideoIntegrationParameters("XXseadanco2.0M"))
 	other := getPricingIntegrationEndpoints(constant.ChannelTypeOpenAI, "kling-video-v3", nil)
 	require.Equal(t, "/v1/video/async-generations", other[0].Path)
+}
+
+func TestV6KPricingUsesUnifiedVideoContractAndExactModelHints(t *testing.T) {
+	for _, name := range []string{"kling-v3", "grok--1.5", "TTseadanco 2.0 Fast/480", "dola2.0"} {
+		endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeV6K, name, "public-alias", nil)
+		require.Len(t, endpoints, 1)
+		require.Equal(t, "/v1/videos", endpoints[0].Path)
+		require.Equal(t, "/v1/videos/{task_id}", endpoints[0].QueryPath)
+		require.Equal(t, "seconds", endpoints[0].Parameters.DurationField)
+		require.Equal(t, "videos", endpoints[0].Parameters.VideoField)
+		require.Equal(t, "audios", endpoints[0].Parameters.AudioField)
+	}
 }

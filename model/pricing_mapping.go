@@ -177,6 +177,11 @@ func getPricingIntegrationEndpoints(channelType int, modelName string, metadata 
 }
 
 func getPricingIntegrationEndpointsForModels(channelType int, modelName, originalModelName string, metadata map[string]*Model) []PricingMappedEndpoint {
+	if channelType == constant.ChannelTypeV6K {
+		endpoint := makePricingMappedEndpoint(string(constant.EndpointTypeOpenAIVideo), common.EndpointInfo{Path: "/v1/videos", Method: "POST", QueryPath: "/v1/videos/{task_id}", QueryMethod: "GET"})
+		endpoint.Parameters = common.GetV6KVideoParameters(modelName)
+		return []PricingMappedEndpoint{*endpoint}
+	}
 	if channelType == constant.ChannelTypeZongheng {
 		endpoint := makePricingMappedEndpoint(string(constant.EndpointTypeOpenAIVideo), common.EndpointInfo{Path: "/v1/videos", Method: "POST", QueryPath: "/v1/videos/{task_id}", QueryMethod: "GET"})
 		endpoint.Parameters = common.GetZonghengVideoParameters(modelName)

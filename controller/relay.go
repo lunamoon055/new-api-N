@@ -630,6 +630,9 @@ func completePersistentTaskSubmission(c *gin.Context, relayInfo *relaycommon.Rel
 	task.ChannelId = relayInfo.ChannelId
 	task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
 	task.PrivateData.UpstreamEndpoint = relayInfo.UpstreamEndpoint
+	if relayInfo.ChannelType == constant.ChannelTypeV6K {
+		task.PrivateData.Key = relayInfo.ApiKey
+	}
 	task.PrivateData.BillingSource = relayInfo.BillingSource
 	task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 	task.PrivateData.TokenId = relayInfo.TokenId
@@ -657,6 +660,9 @@ func completePersistentTaskSubmission(c *gin.Context, relayInfo *relaycommon.Rel
 	task.Data = result.TaskData
 	if relayInfo.ChannelType == constant.ChannelTypeZongheng {
 		service.SetZonghengNextPoll(task, common.GetTimestamp())
+	}
+	if relayInfo.ChannelType == constant.ChannelTypeV6K {
+		service.SetV6KNextPoll(task, common.GetTimestamp())
 	}
 	task.Action = relayInfo.Action
 
@@ -744,6 +750,9 @@ func isVideoTaskErrorRequest(c *gin.Context) bool {
 }
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError, retryTimes int) bool {
+	if c.GetBool("v6k_submission_attempted") {
+		return false
+	}
 	if taskErr == nil {
 		return false
 	}

@@ -73,15 +73,21 @@ const FALLBACK_VIDEO_SIZES: Record<string, string> = {
 export function getPlaygroundVideoChoices(
   model: string,
   info?: PlaygroundModelInfo
-) {
+): {
+  aspectRatios: string[]
+  durations: string[]
+  resolutions: string[]
+  manualDuration?: boolean
+} {
   const parameters = getPlaygroundIntegration(info)?.parameters
-  if (parameters?.durations?.length) {
+  if (parameters) {
     return {
       aspectRatios: parameters.omit_ratio
         ? []
         : (parameters.ratios ?? FALLBACK_VIDEO_RATIOS),
-      durations: parameters.durations.map(String),
+      durations: parameters.durations?.map(String) ?? [],
       resolutions: parameters.resolutions ?? [],
+      manualDuration: !parameters.durations?.length,
     }
   }
   const capability = getCreationVideoCapabilities(model)
@@ -128,13 +134,15 @@ export function resolvePlaygroundVideoSelection(
   const choices = getPlaygroundVideoChoices(model, info)
   const preferredDuration =
     selection.duration || DEFAULT_CREATION_VIDEO_OPTIONS.duration
+  let duration = choices.durations[0]
+  if (choices.manualDuration) duration = preferredDuration || '5'
+  else if (choices.durations.includes(preferredDuration))
+    duration = preferredDuration
   const resolved = {
     aspectRatio: choices.aspectRatios.includes(selection.aspectRatio)
       ? selection.aspectRatio
       : (choices.aspectRatios[0] ?? ''),
-    duration: choices.durations.includes(preferredDuration)
-      ? preferredDuration
-      : choices.durations[0],
+    duration,
   }
   const spec = getXJZVideoModelSpec(model)
   if (

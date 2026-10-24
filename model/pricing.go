@@ -23,6 +23,7 @@ type Pricing struct {
 	QuotaType              int                     `json:"quota_type"`
 	ModelRatio             float64                 `json:"model_ratio"`
 	ModelPrice             float64                 `json:"model_price"`
+	PriceConfigured        *bool                   `json:"price_configured,omitempty"`
 	OwnerBy                string                  `json:"owner_by"`
 	CompletionRatio        float64                 `json:"completion_ratio"`
 	CacheRatio             *float64                `json:"cache_ratio,omitempty"`
@@ -204,9 +205,13 @@ func updatePricing() {
 	//这里使用切片而不是Set，因为一个模型可能支持多个端点类型，并且第一个端点是优先使用端点
 	modelSupportEndpointsStr := make(map[string][]string)
 	mappedEndpointCandidates := make(map[string][]PricingMappedEndpoint)
+	v6kVideoModels := make(map[string]bool)
 
 	// 先根据已有能力填充原生端点
 	for _, ability := range enableAbilities {
+		if ability.ChannelType == constant.ChannelTypeV6K {
+			v6kVideoModels[ability.Model] = true
+		}
 		endpoints := modelSupportEndpointsStr[ability.Model]
 		effectiveModel, _ := resolvePricingMappedModel(ability.Model, ability.ModelMapping)
 		effectiveEndpoints := getPricingIntegrationEndpointsForModels(ability.ChannelType, effectiveModel, ability.Model, metaMap)
@@ -378,6 +383,10 @@ func updatePricing() {
 				pricing.VideoBillingMode = videoBillingMode
 				pricing.VideoResolutionPrices = resolutionPrices
 			}
+		}
+		if v6kVideoModels[model] {
+			pricing.VideoBillingMode = billing_setting.GetVideoBillingMode(model)
+			pricing.PriceConfigured = common.GetPointer(findPrice || ratio_setting.HasConfiguredModelRatio(model) || pricing.BillingExpr != "")
 		}
 		pricingMap = append(pricingMap, pricing)
 	}

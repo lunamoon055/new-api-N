@@ -52,6 +52,7 @@ export function replaceModelInPath(path: string, modelName: string): string {
  */
 export function isTokenBasedModel(model: PricingModel): boolean {
   return (
+    model.price_configured !== false &&
     model.quota_type === QUOTA_TYPE_VALUES.TOKEN &&
     !isVideoResolutionTierModel(model)
   )

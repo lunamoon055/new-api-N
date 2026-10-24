@@ -133,6 +133,19 @@ func VideoProxy(c *gin.Context) {
 		if authorization := videoProxyAuthorizationHeader(videoURL, baseURL, credential); authorization != "" {
 			req.Header.Set("Authorization", authorization)
 		}
+	case constant.ChannelTypeV6K:
+		if c.Request.Method == http.MethodHead {
+			req.Method = http.MethodHead
+		}
+		baseURL = service.NormalizeV6KBaseURL(channel.GetBaseURL())
+		videoURL = strings.TrimSpace(task.GetResultURL())
+		if videoURL == "" || isTaskProxyURL(videoURL, task.TaskID) {
+			videoURL = baseURL + "/v1/videos/" + url.PathEscape(task.GetUpstreamTaskID()) + "/content"
+		}
+		credential := strings.TrimSpace(task.PrivateData.Key)
+		if authorization := videoProxyAuthorizationHeader(videoURL, baseURL, credential); authorization != "" {
+			req.Header.Set("Authorization", authorization)
+		}
 	default:
 		// Video URL is stored in PrivateData.ResultURL (fallback to FailReason for old data)
 		videoURL = task.GetResultURL()
@@ -169,7 +182,7 @@ func VideoProxy(c *gin.Context) {
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to create proxy request")
 		return
 	}
-	if channel.Type == constant.ChannelTypeZongheng {
+	if channel.Type == constant.ChannelTypeZongheng || channel.Type == constant.ChannelTypeV6K {
 		for _, name := range []string{"Range", "If-Range"} {
 			if value := c.Request.Header.Get(name); value != "" {
 				req.Header.Set(name, value)
@@ -196,6 +209,9 @@ func VideoProxy(c *gin.Context) {
 	applyVideoProxyPrivateCacheHeaders(c.Writer.Header())
 	applyVideoProxyDownloadHeaders(c.Writer.Header(), taskID)
 	c.Writer.WriteHeader(resp.StatusCode)
+	if c.Request.Method == http.MethodHead {
+		return
+	}
 	if _, err = io.Copy(c.Writer, resp.Body); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to stream video content: %s", err.Error()))
 	}

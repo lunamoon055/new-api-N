@@ -428,7 +428,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		logger.LogError(ctx, fmt.Sprintf("Task %s not found in taskM", taskId))
 		return fmt.Errorf("task %s not found", taskId)
 	}
-	if ch.Type == constant.ChannelTypeZongheng && task.PrivateData.NextPollAt > time.Now().Unix() {
+	if (ch.Type == constant.ChannelTypeZongheng || ch.Type == constant.ChannelTypeV6K) && task.PrivateData.NextPollAt > time.Now().Unix() {
 		return nil
 	}
 	key := ch.Key
@@ -439,14 +439,23 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 	resp, err := adaptor.FetchTask(baseURL, key, buildVideoTaskFetchBody(task), proxy)
 	if err != nil {
+		if ch.Type == constant.ChannelTypeV6K {
+			scheduleV6KPollRetry(task, "")
+		}
 		return fmt.Errorf("fetchTask failed for task %s: %w", taskId, err)
 	}
 	defer resp.Body.Close()
 	responseBody, err := common.ReadResponseBodyWithLimit(resp.Body, common.MaxUpstreamResponseBodyBytes)
 	if err != nil {
+		if ch.Type == constant.ChannelTypeV6K {
+			scheduleV6KPollRetry(task, "")
+		}
 		return fmt.Errorf("read response failed for task %s: %w", taskId, err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		if ch.Type == constant.ChannelTypeV6K {
+			scheduleV6KPollRetry(task, resp.Header.Get("Retry-After"))
+		}
 		// A polling transport/API error is not a terminal generation result. The
 		// upstream job may still be running or already completed, so keep the local
 		// task pending and retry on the next cycle. Only a parsed task-level failed
@@ -471,12 +480,18 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		taskResult.Reason = t.FailReason
 		task.Data = t.Data
 	} else if taskResult, err = adaptor.ParseTaskResult(responseBody); err != nil {
+		if ch.Type == constant.ChannelTypeV6K {
+			scheduleV6KPollRetry(task, "")
+		}
 		return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
 	}
 
 	task.Data = redactVideoResponseBody(responseBody)
 	if ch.Type == constant.ChannelTypeZongheng {
 		SetZonghengNextPoll(task, time.Now().Unix())
+	}
+	if ch.Type == constant.ChannelTypeV6K {
+		SetV6KNextPoll(task, time.Now().Unix())
 	}
 
 	logger.LogDebug(ctx, "updateVideoSingleTask parsed status: %s", taskResult.Status)
@@ -622,7 +637,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 func taskVideoMediaDownloadOptions(channelType int, baseURL, key, proxy string) MediaDownloadOptions {
 	options := MediaDownloadOptions{Proxy: strings.TrimSpace(proxy)}
-	if channelType != constant.ChannelTypeOpenAI && channelType != constant.ChannelTypeSora {
+	if channelType != constant.ChannelTypeOpenAI && channelType != constant.ChannelTypeSora && channelType != constant.ChannelTypeV6K {
 		return options
 	}
 

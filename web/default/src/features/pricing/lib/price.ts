@@ -165,6 +165,10 @@ export function getVideoResolutionTierShortUnitLabelKey(
   return model.video_billing_mode === 'tiered_seconds' ? 'seconds' : 'times'
 }
 
+export function getMediaPriceShortUnitLabelKey(model: PricingModel): string {
+  return model.video_billing_mode === 'dynamic' ? 'seconds' : 'times'
+}
+
 export function getVideoResolutionTierModeLabelKey(
   model: PricingModel
 ): string {
@@ -343,6 +347,7 @@ export function formatFixedPrice(
   usdExchangeRate = 1,
   groupRatio: Record<string, number>
 ): string {
+  if (model.price_configured === false) return '—'
   if (model.quota_type !== QUOTA_TYPE_VALUES.REQUEST) {
     return '-'
   }
@@ -373,6 +378,7 @@ export function formatRequestPrice(
   priceRate = 1,
   usdExchangeRate = 1
 ): string {
+  if (model.price_configured === false) return '—'
   if (model.quota_type !== QUOTA_TYPE_VALUES.REQUEST) {
     return '-'
   }

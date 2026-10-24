@@ -25,6 +25,24 @@ import {
   type ChannelTestEndpointType,
 } from './channel-test-lab'
 
+describe('V6K video channel', () => {
+  test('uses the unified endpoint and fixed documented duration', () => {
+    const channel = { type: 60 }
+    assert.equal(
+      resolveChannelTestEndpointType('auto', 'kling-v3', channel),
+      'openai-video'
+    )
+    assert.deepEqual(
+      getChannelTestPreviewPayload('openai-video', 'dola2.0', channel),
+      {
+        model: 'dola2.0',
+        prompt: 'a mountain at sunrise',
+        seconds: 15,
+      }
+    )
+  })
+})
+
 describe('Zongheng video channel', () => {
   test('uses the video endpoint and live defaults for arbitrary public model IDs', () => {
     const channel = { type: 59 }

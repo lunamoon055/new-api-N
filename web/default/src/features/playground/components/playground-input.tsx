@@ -59,7 +59,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
-import { Field, FieldLabel } from '@/components/ui/field'
+import { Field, FieldLabel, FieldDescription } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import {
   getPlaygroundImageEndpointChoices,
@@ -354,29 +355,49 @@ export function PlaygroundInput({
               <FieldLabel htmlFor='playground-video-duration'>
                 {t('Video duration')}
               </FieldLabel>
-              <Select
-                value={selectedVideo.duration}
-                onValueChange={(value) => {
-                  if (value) onVideoDurationChange(value)
-                }}
-                disabled={disabled}
-              >
-                <SelectTrigger
-                  id='playground-video-duration'
-                  className='min-w-28'
+              {videoChoices.manualDuration ? (
+                <>
+                  <Input
+                    id='playground-video-duration'
+                    type='number'
+                    min={1}
+                    max={3600}
+                    step={1}
+                    value={selectedVideo.duration}
+                    onChange={(event) =>
+                      onVideoDurationChange(event.target.value)
+                    }
+                    disabled={disabled}
+                  />
+                  <FieldDescription>
+                    {t('Enter a duration supported by this model')}
+                  </FieldDescription>
+                </>
+              ) : (
+                <Select
+                  value={selectedVideo.duration}
+                  onValueChange={(value) => {
+                    if (value) onVideoDurationChange(value)
+                  }}
+                  disabled={disabled}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {videoChoices.durations.map((duration) => (
-                      <SelectItem key={duration} value={duration}>
-                        {duration} {t('seconds')}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    id='playground-video-duration'
+                    className='min-w-28'
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {videoChoices.durations.map((duration) => (
+                        <SelectItem key={duration} value={duration}>
+                          {duration} {t('seconds')}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              )}
             </Field>
           </>
         )}

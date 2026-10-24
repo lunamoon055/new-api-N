@@ -6,6 +6,9 @@ import {
 import { filterByQuotaType } from '../src/features/pricing/lib/filters'
 import { isTokenBasedModel } from '../src/features/pricing/lib/model-helpers'
 import {
+  formatFixedPrice,
+  formatRequestPrice,
+  getMediaPriceShortUnitLabelKey,
   getVideoResolutionTierPriceEntries,
   getVideoResolutionTierShortUnitLabelKey,
   isVideoResolutionTierModel,
@@ -33,6 +36,38 @@ const tieredVideoModel: PricingModel = {
 }
 
 describe('pricing video resolution tier helpers', () => {
+  it('labels duration billing by second and preserves legacy request units', () => {
+    expect(
+      getMediaPriceShortUnitLabelKey({
+        ...tieredVideoModel,
+        video_billing_mode: 'dynamic',
+      })
+    ).toBe('seconds')
+    expect(
+      getMediaPriceShortUnitLabelKey({
+        ...tieredVideoModel,
+        video_billing_mode: 'fixed',
+      })
+    ).toBe('times')
+    expect(
+      getMediaPriceShortUnitLabelKey({
+        ...tieredVideoModel,
+        video_billing_mode: undefined,
+      })
+    ).toBe('times')
+  })
+
+  it('does not publish the token fallback or a free price for an unconfigured video', () => {
+    const unconfigured: PricingModel = {
+      ...tieredVideoModel,
+      video_billing_mode: 'fixed',
+      price_configured: false,
+    }
+    expect(isTokenBasedModel(unconfigured)).toBe(false)
+    expect(formatRequestPrice(unconfigured)).toBe('—')
+    expect(formatFixedPrice(unconfigured, 'default', false, 1, 1, {})).toBe('—')
+  })
+
   it('treats video resolution tier models as non-token pricing', () => {
     expect(isVideoResolutionTierModel(tieredVideoModel)).toBe(true)
     expect(isTokenBasedModel(tieredVideoModel)).toBe(false)

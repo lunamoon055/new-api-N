@@ -50,7 +50,7 @@ import {
   formatThroughput,
   formatUptimePct,
 } from '@/features/performance-metrics/lib/format'
-import { DEFAULT_TOKEN_UNIT, QUOTA_TYPE_VALUES } from '../constants'
+import { DEFAULT_TOKEN_UNIT } from '../constants'
 import { usePricingData } from '../hooks/use-pricing-data'
 import {
   getDynamicPriceEntries,
@@ -64,6 +64,7 @@ import { inferModelMetadata } from '../lib/model-metadata'
 import {
   formatFixedPrice,
   formatGroupPrice,
+  getMediaPriceShortUnitLabelKey,
   getVideoResolutionTierPriceEntries,
   getVideoResolutionTierShortUnitLabelKey,
   isVideoResolutionTierModel,
@@ -298,11 +299,12 @@ function ModelHeader(props: { model: PricingModel }) {
     Boolean(model.billing_expr) &&
     getDynamicPricingTiers(model).length === 0
   const isVideoTier = isVideoResolutionTierModel(model)
-  const pricingTypeLabel = isVideoTier
-    ? t('Video')
-    : model.quota_type === QUOTA_TYPE_VALUES.TOKEN
-      ? t('Token-based')
-      : t('Per Request')
+  let pricingTypeLabel = t('Per Request')
+  if (isVideoTier || model.video_billing_mode === 'dynamic') {
+    pricingTypeLabel = t('Video')
+  } else if (isTokenBasedModel(model)) {
+    pricingTypeLabel = t('Token-based')
+  }
 
   return (
     <header className='pb-4'>
@@ -545,7 +547,9 @@ function PriceSection(props: {
         <SectionTitle>{t('Base Price')}</SectionTitle>
         <div className='flex items-baseline justify-between'>
           <span className='text-muted-foreground text-sm'>
-            {t('Per request')}
+            {props.model.video_billing_mode === 'dynamic'
+              ? t('per second')
+              : t('Per request')}
           </span>
           <span className='text-foreground font-mono text-sm font-semibold tabular-nums'>
             {formatFixedPrice(
@@ -557,7 +561,7 @@ function PriceSection(props: {
               baseGroupRatioMap
             )}
             <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
-              /{t('times')}
+              /{t(getMediaPriceShortUnitLabelKey(props.model))}
             </span>
           </span>
         </div>

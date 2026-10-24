@@ -105,3 +105,9 @@ func TestZonghengBillingUsesItsChannelContract(t *testing.T) {
 	require.Error(t, ensureTaskBillingConfigured(info, types.PriceData{}, billing_setting.VideoBillingModeDynamic))
 	require.NoError(t, ensureTaskBillingConfigured(info, types.PriceData{UsePrice: true, ModelPrice: 0.25}, billing_setting.VideoBillingModeDynamic))
 }
+
+func TestV6KBillingDoesNotInheritOtherProvidersNameRules(t *testing.T) {
+	info := &relaycommon.RelayInfo{OriginModelName: "特价sd2.0-933-过脸", ChannelMeta: &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeV6K}}
+	require.Error(t, ensureTaskBillingConfigured(info, types.PriceData{}, billing_setting.VideoBillingModeDynamic))
+	require.NoError(t, ensureTaskBillingConfigured(info, types.PriceData{UsePrice: true, ModelPrice: .2}, billing_setting.VideoBillingModeDynamic))
+}

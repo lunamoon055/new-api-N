@@ -33,6 +33,7 @@ import { isTokenBasedModel } from '../lib/model-helpers'
 import {
   formatPrice,
   formatRequestPrice,
+  getMediaPriceShortUnitLabelKey,
   getVideoResolutionTierPriceEntries,
   getVideoResolutionTierShortUnitLabelKey,
   isVideoResolutionTierModel,
@@ -232,7 +233,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                       usdExchangeRate
                     )}
                   </span>
-                  /{t('times')}
+                  /{t(getMediaPriceShortUnitLabelKey(props.model))}
                 </span>
               )}
             </div>

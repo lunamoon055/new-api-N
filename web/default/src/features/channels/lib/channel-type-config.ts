@@ -46,6 +46,12 @@ export interface ChannelTypeConfig {
  * Configuration for each channel type
  */
 export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
+  60: {
+    id: 60,
+    name: CHANNEL_TYPES[60],
+    icon: 'openai',
+    defaultBaseUrl: 'https://www.v6k.top',
+  },
   59: {
     id: 59,
     name: CHANNEL_TYPES[59],

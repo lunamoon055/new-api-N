@@ -1014,6 +1014,15 @@ func FetchModels(c *gin.Context) {
 	// remove line breaks and extra spaces.
 	key := strings.TrimSpace(req.Key)
 	key = strings.Split(key, "\n")[0]
+	if req.Type == constant.ChannelTypeV6K {
+		ids, err := service.FetchV6KVideoModels(c.Request.Context(), baseURL, key, "")
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": ids})
+		return
+	}
 	if req.Type == constant.ChannelTypeZongheng {
 		models, err := service.FetchZonghengVideoModels(c.Request.Context(), baseURL, key, "")
 		if err != nil {

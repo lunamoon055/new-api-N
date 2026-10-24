@@ -265,6 +265,13 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
 	}
+	if channel.Type == constant.ChannelTypeV6K {
+		key, _, apiErr := channel.GetNextEnabledKey()
+		if apiErr != nil {
+			return nil, apiErr
+		}
+		return service.FetchV6KVideoModels(context.Background(), baseURL, strings.TrimSpace(key), channel.GetSetting().Proxy)
+	}
 	if channel.Type == constant.ChannelTypeZongheng {
 		key, _, apiErr := channel.GetNextEnabledKey()
 		if apiErr != nil {
