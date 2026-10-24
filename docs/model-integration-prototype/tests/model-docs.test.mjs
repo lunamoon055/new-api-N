@@ -3,7 +3,26 @@ import assert from 'node:assert/strict'
 import { normalizeCatalog, resolveSelectedModel } from '../src/model-catalog.js'
 import { getAllModelDocs } from '../src/all-model-docs.js'
 import { getCatalogHttpError, getPricingRequestHeaders } from '../src/catalog-auth.js'
-import { getCodeSample, getModelDoc, getModelKind, getRequestBody } from '../src/model-data.js'
+import { getCodeSample, getModelDoc, getModelKind, getRequestBody, getRequestParams } from '../src/model-data.js'
+
+test('live video note parameters drive limits, examples and bulk copied documentation', () => {
+  const model = { model_name: 'Seedance2.5:720（条）', mapped_endpoints: [{
+    type: 'openai-video', kind: 'video', path: '/v1/videos', method: 'POST', query_path: '/v1/videos/{task_id}',
+    parameters: { duration_field: 'duration', durations: Array.from({length:26}, (_,i)=>i+5), image_field: 'referenceImages', video_field: 'referenceVideos', audio_field: 'referenceAudios', max_images: 30, max_videos: 10, max_audios: 10 },
+  }] }
+  const doc = getModelDoc(model, {})
+  const rows = getRequestParams(doc)
+  assert.match(rows.find(row => row[0] === 'duration')[3], /5–30 秒/)
+  assert.match(rows.find(row => row[0] === 'referenceImages')[3], /最多 30/)
+  assert.match(rows.find(row => row[0] === 'referenceVideos')[3], /最多 10/)
+  assert.match(rows.find(row => row[0] === 'referenceAudios')[3], /最多 10/)
+  assert.equal(getRequestBody(model, doc).duration, 5)
+  const output = getAllModelDocs(normalizeCatalog({success:true,data:[model]}), 'https://gateway.example.com')
+  assert.match(output, /5–30 秒/)
+  assert.match(output, /最多 30/)
+  assert.match(output, /referenceVideos/)
+  assert.doesNotMatch(output, /\/v1\/chat\/completions/)
+})
 
 test('pricing requests send the logged-in site user ID header', () => {
   const storage = { getItem: (key) => key === 'uid' ? '42' : null }

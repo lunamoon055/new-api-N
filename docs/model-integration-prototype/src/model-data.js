@@ -185,7 +185,12 @@ export function getRequestParams(doc) {
   if (doc.parameters) {
     const p = doc.parameters
     const rows = [['model', 'string', '是', '从当前令牌的模型列表复制完整 ID'], ['prompt', 'string', '是', '希望生成的内容描述']]
-    if (p.duration_field) rows.push([p.duration_field, 'integer', '按模型', `支持时长（秒）：${(p.durations || []).join('、')}`])
+    if (p.duration_field) {
+      const values = p.durations || []
+      const contiguous = values.length > 1 && values.every((value, index) => index === 0 || value === values[index - 1] + 1)
+      const range = contiguous ? `${values[0]}–${values.at(-1)}` : values.join('、')
+      rows.push([p.duration_field, 'integer', '按模型', range ? `支持时长：${range} 秒` : '时长范围未公布，请以该模型备注和上游校验为准'])
+    }
     if (p.ratio_field) rows.push([p.ratio_field, 'string', '否', `支持比例：${(p.ratios || []).join('、')}`])
     if (p.resolution_field) rows.push([p.resolution_field, 'string', '按模型', `支持分辨率：${(p.resolutions || []).join('、')}`])
     for (const [field, count, label] of [[p.image_field, p.max_images, '图片'], [p.video_field, p.max_videos, '视频'], [p.audio_field, p.max_audios, '音频']]) {

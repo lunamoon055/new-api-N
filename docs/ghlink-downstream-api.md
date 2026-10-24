@@ -1,6 +1,6 @@
 # GHLINK 下游 API 对接文档
 
-> 文档版本：2026-09-21
+> 文档版本：2026-10-24
 >
 > 本文只描述 GHLINK 对下游公开的接口、模型 ID 和调用流程。不要把渠道名称、内部模型映射、内部任务号、供应商地址或密钥写入下游业务配置。
 
@@ -80,24 +80,31 @@ curl "$GHLINK_BASE_URL/v1/models" \
 
 这些模型统一使用异步视频任务（视频创建与查询）接口：
 
-| 公开模型 ID | 创建接口 | 查询接口 |
-| --- | --- | --- |
-| `官方h3-1080p` | `POST /v1/videos` | `GET /v1/videos/{task_id}` |
-| `官方h3-2k` | `POST /v1/videos` | `GET /v1/videos/{task_id}` |
-| `d2.5(满血原生过脸30-10-10/480P)` | `POST /v1/videos` | `GET /v1/videos/{task_id}` |
-| `mx-h3` | `POST /v1/videos` | `GET /v1/videos/{task_id}` |
-| `sd2.0(满血9-3-3不卡脸720P)` | `POST /v1/videos` | `GET /v1/videos/{task_id}` |
-| `Seedance2.0-c` | `POST /v1/videos` | `GET /v1/videos/{task_id}` |
-| `Seedance2.0-fast-c` | `POST /v1/videos` | `GET /v1/videos/{task_id}` |
-| `Seedance2.0-fast2-c` | `POST /v1/videos` | `GET /v1/videos/{task_id}` |
-| `Seedance2.5-c` | `POST /v1/videos` | `GET /v1/videos/{task_id}` |
-| `wan3.0(图片+音频参考)` | `POST /v1/videos` | `GET /v1/videos/{task_id}` |
+本轮按线上模型广场备注核对的 9 个模型如下。图片/音频/视频数量是单次请求的参考素材上限，不是生成结果数量。首尾帧如被该模型支持，也计入图片总数。
+
+| 公开模型 ID | 时长（秒） | 图片上限 | 音频上限 | 视频上限 | 分辨率 |
+| --- | --- | ---: | ---: | ---: | --- |
+| `无限制-Video` | 4–12 | 5 | 3 | 0 | 备注未写明，示例不主动发送 |
+| `Seedance2.0-c` | 4–15 | 9 | 3 | 3 | 720p |
+| `Seedance2.0-fast-c` | 5–15 | 9 | 3 | 3 | 720p |
+| `Seedance2.0-fast2-c` | 5–15 | 9 | 3 | 3 | 720p |
+| `Seedance2.0:720（秒）` | 5–15 | 9 | 3 | 3 | 720p |
+| `Seedance2.5:480（秒）` | 5–30 | 30 | 10 | 10 | 480p（保留现有档位） |
+| `Seedance2.5:720（秒）` | 5–30 | 30 | 10 | 10 | 720p |
+| `Seedance2.5:720（条）` | 5–30 | 30 | 10 | 10 | 720p |
+| `wan3.0(图片+音频参考)` | 2–30 | 10 | 5 | 0 | 480p / 720p / 1080p |
+
+以上创建接口均为 `POST /v1/videos`，查询接口为 `GET /v1/videos/{task_id}`。`无限制-Video` 不使用聊天接口。使用 `duration` 传整数秒数，`referenceImages` / `referenceAudios` / `referenceVideos` 分别传 URL 数组；禁止超过该模型的上限。
+
+`Seedance2.5:480（秒）` 的截图备注写着 720P，与模型名及已配置 480p 价格档位冲突，本次只根据备注修正 5–30 秒与 30 图 / 10 音 / 10 视频，不修改现有分辨率档位。Wan3 的备注未标素材数量，其 10 图 / 5 音 / 0 视频沿用现有接口契约；音频参考需要同时提供图片。
+
+每个模型的测试表单、在线 `/docs` 参数表、复制全部文档和代码示例，均读取实时目录的 `mapped_endpoints[].parameters`。通用上游参数不能覆盖这些完整公开模型名的已确认限制。`Seedance2.5-c` 不在本次截图内，仍保留原来的最多 10 图、不支持音频/视频的独立契约。
 
 视频任务是异步的：创建请求只代表任务已受理，必须保存 `task_id` 并轮询查询。
 
-### 3.2 图片模型
+### 3.2 图片模型接口参考
 
-当前线上图片模型使用同步图片生成接口，不使用异步图片接口：
+本次截图的启用目录只有上述 9 个视频模型。下表是既有图片协议示例，不代表这些模型当前已启用；是否可用以实时 `/v1/models` 为准。
 
 | 公开模型 ID | 创建接口 | 是否需要轮询 |
 | --- | --- | --- |

@@ -277,6 +277,22 @@ type ChannelTestChannelLike = {
   base_url?: string | null
 }
 
+// Minimum valid examples from the site's exact public model notes. Reference
+// limits and the full duration options come from mapped_endpoints.parameters.
+const SITE_VIDEO_TEST_DEFAULTS: Record<
+  string,
+  { duration: number; resolution?: string }
+> = {
+  '无限制-Video': { duration: 4 },
+  'Seedance2.0-c': { duration: 4, resolution: '720p' },
+  'Seedance2.0-fast-c': { duration: 5, resolution: '720p' },
+  'Seedance2.0-fast2-c': { duration: 5, resolution: '720p' },
+  'Seedance2.0:720（秒）': { duration: 5, resolution: '720p' },
+  'Seedance2.5:480（秒）': { duration: 5, resolution: '480p' },
+  'Seedance2.5:720（秒）': { duration: 5, resolution: '720p' },
+  'Seedance2.5:720（条）': { duration: 5, resolution: '720p' },
+}
+
 function isSanbaoChannel(channel?: ChannelTestChannelLike) {
   if (channel?.type === 58) return true
   try {
@@ -308,7 +324,11 @@ function isSanbaoEndpoint(endpointType: ChannelTestEndpointType) {
 
 export function isVideosApiTestModel(model: string) {
   const normalized = model.trim().toLowerCase()
-  return normalized.startsWith('videos-') || normalized.startsWith('sd2')
+  return (
+    Boolean(SITE_VIDEO_TEST_DEFAULTS[model.trim()]) ||
+    normalized.startsWith('videos-') ||
+    normalized.startsWith('sd2')
+  )
 }
 
 export function isAsyncImageTestModel(model: string) {
@@ -374,6 +394,17 @@ export function getChannelTestPreviewPayload(
   }
   if (channel?.type === 59) {
     return { model: model.trim() || '<model>', prompt: 'a mountain at sunrise' }
+  }
+  const siteDefaults = SITE_VIDEO_TEST_DEFAULTS[model.trim()]
+  if (
+    siteDefaults &&
+    (endpointType === 'openai-video' || endpointType === 'auto')
+  ) {
+    return {
+      model: model.trim(),
+      prompt: 'a mountain at sunrise',
+      ...siteDefaults,
+    }
   }
   if (endpointType === 'openai-video' && isVideosApiTestModel(model)) {
     return {

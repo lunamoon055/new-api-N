@@ -55,6 +55,9 @@ func NormalizeGatewayVideoModelName(modelName string) string {
 }
 
 func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters {
+	if parameters := GetSiteVideoIntegrationParameters(modelName); parameters != nil {
+		return parameters
+	}
 	if spec, ok := XJZVideoSpecs[strings.TrimSpace(modelName)]; ok {
 		durations := append([]int(nil), spec.Durations...)
 		if len(durations) == 0 {
@@ -124,6 +127,40 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 		p.Resolutions = []string{"720p", "480p", "1080p"}
 		p.MinImages, p.MaxImages, p.MaxVideos, p.MaxAudios = 1, 10, 0, 5
 		p.AudioNeedsImage = true
+	default:
+		return nil
+	}
+	return p
+}
+
+// GetSiteVideoIntegrationParameters preserves the exact public contracts in the
+// site's model notes (2026-10-24). Public aliases must not inherit a different
+// duration or reference limit merely because their upstream IDs are opaque.
+func GetSiteVideoIntegrationParameters(modelName string) *ModelIntegrationParameters {
+	p := &ModelIntegrationParameters{
+		Durations: integrationDurationRange(5, 15), Resolutions: []string{"720p"},
+		Ratios:        []string{"16:9", "9:16", "1:1", "4:3", "3:4"},
+		DurationField: "duration", RatioField: "ratio", ResolutionField: "resolution",
+		ImageField: "referenceImages", VideoField: "referenceVideos", AudioField: "referenceAudios",
+		MaxImages: 9, MaxVideos: 3, MaxAudios: 3, AllowFrames: true,
+	}
+	switch strings.TrimSpace(modelName) {
+	case "Seedance2.0-c":
+		p.Durations = integrationDurationRange(4, 15)
+	case "Seedance2.0-fast-c", "Seedance2.0-fast2-c", "Seedance2.0:720（秒）":
+	case "Seedance2.5:480（秒）", "Seedance2.5:720（秒）", "Seedance2.5:720（条）":
+		p.Durations = integrationDurationRange(5, 30)
+		p.MaxImages, p.MaxVideos, p.MaxAudios = 30, 10, 10
+		if strings.TrimSpace(modelName) == "Seedance2.5:480（秒）" {
+			// The note says 720P, but this model's existing resolution tier is 480p.
+			p.Resolutions = []string{"480p"}
+		}
+	case "无限制-Video":
+		p.Durations = integrationDurationRange(4, 12)
+		p.MaxImages, p.MaxVideos, p.MaxAudios = 5, 0, 3
+		p.Resolutions, p.Ratios = nil, nil
+		p.ResolutionField, p.RatioField = "", ""
+		p.OmitRatio, p.AllowFrames = true, false
 	default:
 		return nil
 	}

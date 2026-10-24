@@ -179,6 +179,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		upstreamModelName = info.UpstreamModelName
 	}
 	contractModelName := req.Model
+	if common.GetSiteVideoIntegrationParameters(contractModelName) != nil {
+		return validateIntegrationVideoRequest(c, contractModelName, isMeaiccNestedSeedanceModel(a.baseURL, upstreamModelName))
+	}
 	if common.GetVideoIntegrationParameters(upstreamModelName) != nil {
 		contractModelName = upstreamModelName
 	}
@@ -363,6 +366,23 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 				return nil, errors.Wrap(err, "encode_xjz_video_request_failed")
 			}
 			return bytes.NewReader(newBody), nil
+		}
+		if common.GetSiteVideoIntegrationParameters(info.OriginModelName) != nil && common.IsBaseURLHost(a.baseURL, "www.v6k.top") {
+			// The site's public aliases retain the gateway reference fields. V6K's
+			// documented upstream API uses seconds/images/videos/audios instead.
+			var payload map[string]any
+			if err := common.Unmarshal(cachedBody, &payload); err != nil {
+				return nil, err
+			}
+			payload["model"] = info.UpstreamModelName
+			for source, target := range map[string]string{"duration": "seconds", "referenceImages": "images", "referenceVideos": "videos", "referenceAudios": "audios"} {
+				if value, ok := payload[source]; ok {
+					payload[target] = value
+					delete(payload, source)
+				}
+			}
+			newBody, err := common.Marshal(payload)
+			return bytes.NewReader(newBody), err
 		}
 		if isMeaiccNestedSeedanceModel(a.baseURL, info.UpstreamModelName) {
 			newBody, err := buildSeedance2RequestBody(cachedBody, info.UpstreamModelName)

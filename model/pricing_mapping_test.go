@@ -329,3 +329,14 @@ func TestV6KPricingUsesUnifiedVideoContractAndExactModelHints(t *testing.T) {
 		require.Equal(t, "audios", endpoints[0].Parameters.AudioField)
 	}
 }
+
+func TestSiteModelNotesOverrideOpaqueMappingsAndGenericChatMetadata(t *testing.T) {
+	for _, name := range []string{"无限制-Video", "Seedance2.0-c", "Seedance2.0-fast-c", "Seedance2.0-fast2-c", "Seedance2.0:720（秒）", "Seedance2.5:480（秒）", "Seedance2.5:720（秒）", "Seedance2.5:720（条）"} {
+		metadata := map[string]*Model{"opaque": {Endpoints: `{"openai":{"path":"/v1/chat/completions"}}`}}
+		endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "opaque", name, metadata)
+		require.Len(t, endpoints, 1, name)
+		require.Equal(t, "video", endpoints[0].Kind, name)
+		require.Equal(t, "/v1/videos", endpoints[0].Path, name)
+		require.Equal(t, common.GetSiteVideoIntegrationParameters(name), endpoints[0].Parameters, name)
+	}
+}

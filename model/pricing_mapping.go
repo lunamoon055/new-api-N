@@ -187,6 +187,11 @@ func getPricingIntegrationEndpointsForModels(channelType int, modelName, origina
 		endpoint.Parameters = common.GetZonghengVideoParameters(modelName)
 		return []PricingMappedEndpoint{*endpoint}
 	}
+	if parameters := common.GetSiteVideoIntegrationParameters(originalModelName); parameters != nil {
+		endpoint := makePricingMappedEndpoint(string(constant.EndpointTypeOpenAIVideo), common.EndpointInfo{Path: "/v1/videos", Method: "POST", QueryPath: "/v1/videos/{task_id}", QueryMethod: "GET"})
+		endpoint.Parameters = parameters
+		return []PricingMappedEndpoint{*endpoint}
+	}
 	if endpoints := mappedEndpointsFromMetadata(metadata[modelName]); len(endpoints) > 0 {
 		// A generic chat declaration must not mask an implemented video
 		// contract. Dedicated/custom endpoints remain authoritative.

@@ -15,6 +15,19 @@ import (
 // Validation uses the mapped upstream contract while the request/context keeps
 // the caller's public model ID for routing and accounting.
 func validateIntegrationVideoRequest(c *gin.Context, modelName string, allowAutomaticDuration bool) *dto.TaskError {
+	if common.GetSiteVideoIntegrationParameters(modelName) != nil {
+		var fields map[string]any
+		if err := common.UnmarshalBodyReusable(c, &fields); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		for name := range fields {
+			switch name {
+			case "model", "prompt", "duration", "ratio", "resolution", "referenceImages", "referenceVideos", "referenceAudios", "start_image_url", "end_image_url", "first_image", "last_image":
+			default:
+				return service.TaskErrorWrapperLocal(fmt.Errorf("unsupported field %s for this public video contract", name), "invalid_request", http.StatusBadRequest)
+			}
+		}
+	}
 	var req videosRequest
 	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)

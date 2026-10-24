@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/stretchr/testify/require"
 )
@@ -16,8 +17,8 @@ func TestMappedVideoContractsValidateAndBuildUpstreamRequest(t *testing.T) {
 		image                              bool
 	}{
 		{"Seedance2.0-c", "sd-2-c8", "https://api.meaicc.com", "720p", 15, false},
-		{"Seedance2.0-fast-c", "sd-2-c4", "https://api.meaicc.com", "720p", 4, false},
-		{"Seedance2.0-fast2-c", "sd-2-c5", "https://api.meaicc.com", "720p", 4, false},
+		{"Seedance2.0-fast-c", "sd-2-c4", "https://api.meaicc.com", "720p", 5, false},
+		{"Seedance2.0-fast2-c", "sd-2-c5", "https://api.meaicc.com", "720p", 5, false},
 		{"Seedance2.5-c", "sd-2.5-c1", "https://api.meaicc.com", "480p", 29, false},
 		{"官方h3-2k", "特价/官方h3-2k", "https://upstream.example", "2k", 15, false},
 		{"官方h3-1080p", "特价/官方h3-1080p", "https://upstream.example", "1080p", 15, false},
@@ -130,4 +131,67 @@ func TestMappedSeedance25CReferenceLimitsBeforeUpstreamSubmission(t *testing.T) 
 			}
 		})
 	}
+}
+
+func TestSiteVideoNotesEnforceBoundariesBeforeSubmission(t *testing.T) {
+	for _, public := range []string{"无限制-Video", "Seedance2.0-fast-c", "Seedance2.0-fast2-c", "Seedance2.0:720（秒）", "Seedance2.5:480（秒）", "Seedance2.5:720（秒）", "Seedance2.5:720（条）"} {
+		t.Run(public, func(t *testing.T) {
+			p := common.GetSiteVideoIntegrationParameters(public)
+			refs := func(n int) []string {
+				r := make([]string, n)
+				for i := range r {
+					r[i] = "https://cdn.example/ref"
+				}
+				return r
+			}
+			duration := p.Durations[len(p.Durations)-1]
+			req := videosRequest{Model: public, Prompt: "sunrise", Duration: &duration, ReferenceImages: refs(p.MaxImages), ReferenceVideos: refs(p.MaxVideos), ReferenceAudios: refs(p.MaxAudios)}
+			validate := func(req videosRequest) *dto.TaskError {
+				raw, err := common.Marshal(req)
+				require.NoError(t, err)
+				c := newVideo2JSONContext(t, string(raw))
+				info := &relaycommon.RelayInfo{OriginModelName: public, RequestURLPath: "/v1/videos", TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "opaque", ChannelBaseUrl: "https://upstream.example"}}
+				return (&TaskAdaptor{baseURL: "https://upstream.example"}).ValidateRequestAndSetAction(c, info)
+			}
+			require.Nil(t, validate(req))
+			duration = p.Durations[0] - 1
+			require.NotNil(t, validate(req))
+			duration = p.Durations[len(p.Durations)-1] + 1
+			require.NotNil(t, validate(req))
+			duration = p.Durations[0]
+			req.ReferenceImages = refs(p.MaxImages + 1)
+			require.NotNil(t, validate(req))
+			req.ReferenceImages = refs(p.MaxImages)
+			req.ReferenceVideos = refs(p.MaxVideos + 1)
+			require.NotNil(t, validate(req))
+			req.ReferenceVideos = refs(p.MaxVideos)
+			req.ReferenceAudios = refs(p.MaxAudios + 1)
+			require.NotNil(t, validate(req))
+		})
+	}
+}
+
+func TestSiteV6KAliasTranslatesDocumentedGatewayReferences(t *testing.T) {
+	raw := `{"model":"Seedance2.5:720（秒）","prompt":"sunrise","duration":30,"referenceImages":["https://cdn.example/image.png"],"referenceVideos":["https://cdn.example/video.mp4"],"referenceAudios":["https://cdn.example/audio.mp3"]}`
+	c := newVideo2JSONContext(t, raw)
+	info := &relaycommon.RelayInfo{OriginModelName: "Seedance2.5:720（秒）", RequestURLPath: "/v1/videos", TaskRelayInfo: &relaycommon.TaskRelayInfo{}, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "TTseadanco2.5-720", ChannelBaseUrl: "https://www.v6k.top"}}
+	a := &TaskAdaptor{baseURL: "https://www.v6k.top"}
+	require.Nil(t, a.ValidateRequestAndSetAction(c, info))
+	reader, err := a.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	body, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, common.Unmarshal(body, &payload))
+	require.EqualValues(t, 30, payload["seconds"])
+	require.Equal(t, "TTseadanco2.5-720", payload["model"])
+	for _, field := range []string{"images", "videos", "audios"} {
+		require.Len(t, payload[field], 1)
+	}
+	for _, field := range []string{"duration", "referenceImages", "referenceVideos", "referenceAudios"} {
+		require.NotContains(t, payload, field)
+	}
+	// Unrecognized aliases cannot bypass the limits through advanced JSON.
+	c = newVideo2JSONContext(t, `{"model":"Seedance2.5:720（秒）","prompt":"sunrise","duration":5,"images":["https://cdn.example/image.png"]}`)
+	require.NotNil(t, a.ValidateRequestAndSetAction(c, info))
 }

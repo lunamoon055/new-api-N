@@ -304,6 +304,9 @@ func isOpenAIAsyncVideoModelName(modelName string) bool {
 }
 
 func isChannelTestVideosApiModel(modelName string) bool {
+	if common.GetSiteVideoIntegrationParameters(modelName) != nil {
+		return true
+	}
 	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
 	return strings.HasPrefix(normalizedModelName, "videos-") ||
 		strings.HasPrefix(normalizedModelName, "sd2") ||
@@ -1468,6 +1471,16 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	}
 	if common.IsXJZVideoModel(model) {
 		return buildXJZVideoTestRequest(model)
+	}
+	if parameters := common.GetSiteVideoIntegrationParameters(model); parameters != nil {
+		req := relaycommon.TaskSubmitReq{Model: model, Prompt: "a mountain at sunrise", Duration: parameters.Durations[0]}
+		if len(parameters.Resolutions) > 0 {
+			req.Resolution = parameters.Resolutions[0]
+		}
+		if len(parameters.Ratios) > 0 {
+			req.Ratio = parameters.Ratios[0]
+		}
+		return req
 	}
 
 	// 根据端点类型构建不同的测试请求

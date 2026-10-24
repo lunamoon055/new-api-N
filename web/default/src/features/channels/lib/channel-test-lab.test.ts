@@ -43,6 +43,40 @@ describe('V6K video channel', () => {
   })
 })
 
+describe('site video model note defaults', () => {
+  test('uses the video endpoint and a supported initial duration for each exact alias', () => {
+    for (const name of [
+      '无限制-Video',
+      'Seedance2.0-c',
+      'Seedance2.0-fast-c',
+      'Seedance2.0-fast2-c',
+      'Seedance2.0:720（秒）',
+      'Seedance2.5:480（秒）',
+      'Seedance2.5:720（秒）',
+      'Seedance2.5:720（条）',
+    ]) {
+      assert.equal(
+        resolveChannelTestEndpointType('auto', name, { type: 1 }),
+        'openai-video'
+      )
+      const payload = getChannelTestPreviewPayload('openai-video', name, {
+        type: 1,
+      })
+      assert.equal(
+        payload.duration,
+        name === '无限制-Video' || name === 'Seedance2.0-c' ? 4 : 5
+      )
+      assert.equal(payload.model, name)
+      assert.equal('size' in payload, false)
+    }
+    assert.equal(
+      getChannelTestPreviewPayload('openai-video', 'Seedance2.5:480（秒）')
+        .resolution,
+      '480p'
+    )
+  })
+})
+
 describe('Zongheng video channel', () => {
   test('uses the video endpoint and live defaults for arbitrary public model IDs', () => {
     const channel = { type: 59 }
