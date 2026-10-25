@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
 import { getSelf } from '@/lib/api'
+import { hasPendingRedemptionLink } from '@/lib/redemption-link'
 import { AuthenticatedLayout } from '@/components/layout'
 
 // 内存中的验证标记，避免同一会话中重复验证
@@ -51,6 +52,14 @@ export const Route = createFileRoute('/_authenticated')({
           search: { redirect: location.href },
         })
       }
+    }
+
+    // Includes password, passkey, 2FA, registration and OAuth returns.
+    if (
+      hasPendingRedemptionLink() &&
+      !/^\/wallet\/?$/.test(location.pathname)
+    ) {
+      throw redirect({ to: '/wallet', replace: true })
     }
   },
   component: AuthenticatedLayout,

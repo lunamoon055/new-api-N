@@ -24,6 +24,7 @@ import { PaymentSettingsSection } from '../integrations/payment-settings-section
 import { RatioSettingsCard } from '../models/ratio-settings-card'
 import type { BillingSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
+import { PurchaseLinksSection } from './purchase-links-section'
 
 const getModelDefaults = (settings: BillingSettings) => ({
   ModelPrice: settings.ModelPrice,
@@ -53,6 +54,18 @@ const getGroupDefaults = (settings: BillingSettings) => ({
 })
 
 const BILLING_SECTIONS = [
+  {
+    id: 'purchase-links',
+    titleKey: 'Recharge tier links',
+    descriptionKey:
+      'Set a separate purchase link for each of the six recharge tiers.',
+    build: (settings: BillingSettings) => (
+      <PurchaseLinksSection
+        value={settings['payment_setting.purchase_links']}
+        legacyLink={settings.TopUpLink}
+      />
+    ),
+  },
   {
     id: 'quota',
     titleKey: 'Quota Settings',

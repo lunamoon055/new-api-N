@@ -131,6 +131,8 @@ export interface TopupInfo {
   discount: Record<number, number>
   /** Optional topup link for purchasing codes */
   topup_link?: string
+  /** Independent storefront links for 10, 20, 50, 100, 200 and other. */
+  purchase_links?: import('@/lib/credit-purchase').CreditPurchaseLinks
   /** Whether Creem topup is enabled */
   enable_creem_topup?: boolean
   /** Available Creem products */
@@ -169,6 +171,7 @@ export interface PresetAmount {
 export interface RedemptionRequest {
   /** Redemption code key */
   key: string
+  expected_user_id?: number
 }
 
 /**

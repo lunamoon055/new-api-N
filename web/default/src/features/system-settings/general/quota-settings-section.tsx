@@ -248,7 +248,9 @@ export function QuotaSettingsSection({
                   />
                 </FormControl>
                 <FormDescription>
-                  {t('External link for users to purchase quota')}
+                  {t(
+                    'Legacy purchase link, used only when the Other tier has not been configured. Set individual links in Recharge tier links.'
+                  )}
                 </FormDescription>
                 <FormMessage />
               </FormItem>

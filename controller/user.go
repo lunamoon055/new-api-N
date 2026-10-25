@@ -1099,7 +1099,8 @@ func EmailBind(c *gin.Context) {
 }
 
 type topUpRequest struct {
-	Key string `json:"key"`
+	Key            string `json:"key"`
+	ExpectedUserID *int   `json:"expected_user_id,omitempty"`
 }
 
 var topUpLocks sync.Map
@@ -1160,6 +1161,10 @@ func TopUp(c *gin.Context) {
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
 		common.ApiError(c, err)
+		return
+	}
+	if req.ExpectedUserID != nil && *req.ExpectedUserID != id {
+		common.ApiErrorMsg(c, "登录账号已变化，请刷新页面并核对兑换账号")
 		return
 	}
 	quota, err := model.Redeem(req.Key, id)

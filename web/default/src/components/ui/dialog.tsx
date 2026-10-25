@@ -59,13 +59,17 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  overlayClassName,
+  closeLabel = 'Close',
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  overlayClassName?: string
+  closeLabel?: string
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Popup
         data-slot='dialog-content'
         className={cn(
@@ -87,7 +91,7 @@ function DialogContent({
             }
           >
             <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-            <span className='sr-only'>Close</span>
+            <span className='sr-only'>{closeLabel}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>

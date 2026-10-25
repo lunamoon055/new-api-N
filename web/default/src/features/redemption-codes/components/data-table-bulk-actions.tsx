@@ -28,10 +28,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { buildRedemptionLink } from '@/lib/redemption-link'
 import { CopyButton } from '@/components/copy-button'
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import { deleteInvalidRedemptions } from '../api'
 import { type Redemption } from '../types'
+import { REDEMPTION_STATUS } from '../constants'
+import { isRedemptionExpired } from '../lib'
 import { useRedemptions } from './redemptions-provider'
 
 type DataTableBulkActionsProps<TData> = {
@@ -55,6 +58,17 @@ export function DataTableBulkActions<TData>({
     })
     return selectedCodes.join('\n')
   }, [selectedRows])
+
+  const activeCodes = selectedRows
+    .map((row) => row.original as Redemption)
+    .filter(
+      (code) =>
+        code.status === REDEMPTION_STATUS.ENABLED &&
+        !isRedemptionExpired(code.expired_time, code.status)
+    )
+  const linksToCopy = activeCodes
+    .map((code) => buildRedemptionLink(code.key, window.location.origin))
+    .join('\n')
 
   const handleDeleteInvalid = async () => {
     setIsDeleting(true)
@@ -80,6 +94,18 @@ export function DataTableBulkActions<TData>({
   return (
     <>
       <BulkActionsToolbar table={table} entityName={t('redemption code')}>
+        <CopyButton
+          value={linksToCopy}
+          variant='outline'
+          size='sm'
+          tooltip={t('Only unused, active redemption codes will be exported.')}
+          successTooltip={t('Redemption links copied')}
+          disabled={activeCodes.length === 0}
+        >
+          {t('Copy active redemption links ({{count}})', {
+            count: activeCodes.length,
+          })}
+        </CopyButton>
         <CopyButton
           value={contentToCopy}
           variant='outline'

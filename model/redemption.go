@@ -112,6 +112,27 @@ func GetRedemptionById(id int) (*Redemption, error) {
 	return &redemption, err
 }
 
+// PreviewRedemption reads only the usable quota, never administrator metadata.
+func PreviewRedemption(key string) (int, error) {
+	var redemption Redemption
+	if err := DB.Where(map[string]any{"key": key}).First(&redemption).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, errors.New("无效的兑换码，请检查购买后收到的链接")
+		}
+		return 0, errors.New("暂时无法读取兑换信息，请稍后重试")
+	}
+	if redemption.Status == common.RedemptionCodeStatusUsed {
+		return 0, errors.New("该兑换码已被使用，请到钱包核对余额")
+	}
+	if redemption.Status != common.RedemptionCodeStatusEnabled {
+		return 0, errors.New("该兑换码已停用，请联系商家")
+	}
+	if redemption.ExpiredTime != 0 && redemption.ExpiredTime < common.GetTimestamp() {
+		return 0, errors.New("该兑换码已过期，请联系商家")
+	}
+	return redemption.Quota, nil
+}
+
 func Redeem(key string, userId int) (quota int, err error) {
 	if key == "" {
 		return 0, errors.New("未提供兑换码")

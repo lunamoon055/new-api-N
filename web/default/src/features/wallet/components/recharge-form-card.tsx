@@ -17,10 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect } from 'react'
-import { Gift, ExternalLink, Loader2, Receipt, WalletCards } from 'lucide-react'
+import { Loader2, Receipt, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import {
+  normalizeCreditPurchaseLinks,
+  type CreditPurchaseLinks,
+} from '@/lib/credit-purchase'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -49,6 +53,7 @@ import type {
   WaffoPayMethod,
 } from '../types'
 import { CreemProductsSection } from './creem-products-section'
+import { RedemptionCodeSection } from './redemption-code-section'
 
 interface RechargeFormCardProps {
   topupInfo: TopupInfo | null
@@ -66,6 +71,7 @@ interface RechargeFormCardProps {
   onRedeem: () => void
   redeeming: boolean
   topupLink?: string
+  purchaseLinks?: CreditPurchaseLinks
   loading?: boolean
   priceRatio?: number
   usdExchangeRate?: number
@@ -96,6 +102,7 @@ export function RechargeFormCard({
   onRedeem,
   redeeming,
   topupLink,
+  purchaseLinks,
   loading,
   priceRatio = 1,
   usdExchangeRate = 1,
@@ -136,6 +143,8 @@ export function RechargeFormCard({
     Array.isArray(waffoPayMethods) && waffoPayMethods.length > 0
   const minTopup = getMinTopupAmount(topupInfo)
   const redemptionEnabled = topupInfo?.enable_redemption !== false
+  const tierLinks = normalizeCreditPurchaseLinks(purchaseLinks, topupLink)
+  const hasPurchaseLinks = Object.values(tierLinks).some(Boolean)
 
   if (loading) {
     return (
@@ -189,7 +198,11 @@ export function RechargeFormCard({
   return (
     <TitledCard
       title={t('Add Funds')}
-      description={t('Choose an amount and payment method')}
+      description={
+        redemptionEnabled
+          ? t('Choose a recharge tier or redeem a code')
+          : t('Choose an amount and payment method')
+      }
       icon={<WalletCards className='h-4 w-4' />}
       action={
         onOpenBilling ? (
@@ -206,6 +219,16 @@ export function RechargeFormCard({
       }
       contentClassName='space-y-4 sm:space-y-6'
     >
+      {redemptionEnabled && (
+        <RedemptionCodeSection
+          purchaseLinks={tierLinks}
+          redemptionCode={redemptionCode}
+          onRedemptionCodeChange={onRedemptionCodeChange}
+          onRedeem={onRedeem}
+          redeeming={redeeming}
+        />
+      )}
+
       {/* Online Topup Section */}
       {hasAnyTopup ? (
         <div className='space-y-4 sm:space-y-6'>
@@ -419,7 +442,8 @@ export function RechargeFormCard({
             </>
           )}
         </div>
-      ) : (
+      ) : null}
+      {!hasAnyTopup && (!hasPurchaseLinks || !redemptionEnabled) && (
         <Alert>
           <AlertDescription>
             {t(
@@ -446,51 +470,7 @@ export function RechargeFormCard({
         )}
 
       {/* Redemption Code Section */}
-      {redemptionEnabled ? (
-        <div className='space-y-2.5 border-t pt-4 sm:space-y-3 sm:pt-6'>
-          <div className='flex items-center gap-2'>
-            <Gift className='text-muted-foreground h-4 w-4' />
-            <Label
-              htmlFor='redemption-code'
-              className='text-muted-foreground text-xs font-medium tracking-wider uppercase'
-            >
-              {t('Have a Code?')}
-            </Label>
-          </div>
-          <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-2'>
-            <Input
-              id='redemption-code'
-              value={redemptionCode}
-              onChange={(e) => onRedemptionCodeChange(e.target.value)}
-              placeholder={t('Enter your redemption code')}
-              className='h-9 min-w-0'
-            />
-            <Button
-              onClick={onRedeem}
-              disabled={redeeming}
-              variant='outline'
-              className='h-9 px-4'
-            >
-              {redeeming && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-              {t('Redeem')}
-            </Button>
-          </div>
-          {topupLink && (
-            <p className='text-muted-foreground text-xs'>
-              {t('Need a redemption code?')}{' '}
-              <a
-                href={topupLink}
-                target='_blank'
-                rel='noopener noreferrer'
-                className='inline-flex items-center gap-1 underline-offset-4 hover:underline'
-              >
-                {t('Get one here')}
-                <ExternalLink className='h-3 w-3' />
-              </a>
-            </p>
-          )}
-        </div>
-      ) : (
+      {!redemptionEnabled && (
         <Alert className='border-t'>
           <AlertDescription>
             {t(

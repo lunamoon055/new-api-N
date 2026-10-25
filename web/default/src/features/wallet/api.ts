@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { AxiosRequestConfig } from 'axios'
 import { api } from '@/lib/api'
 import type {
   RedemptionRequest,
@@ -63,10 +64,66 @@ export async function getTopupInfo(): Promise<TopupInfoResponse> {
  * Redeem a topup code
  */
 export async function redeemTopupCode(
-  request: RedemptionRequest
+  request: RedemptionRequest,
+  config?: AxiosRequestConfig
 ): Promise<RedemptionResponse> {
-  const res = await api.post('/api/user/topup', request)
+  const res = await api.post('/api/user/topup', request, config)
   return res.data
+}
+
+export interface RedemptionLinkPreview {
+  quota: number
+  user_id: number
+  intent_id: string
+}
+
+const redemptionLinkRequestConfig: AxiosRequestConfig & {
+  skipBusinessError: boolean
+} = { skipBusinessError: true }
+
+export async function createRedemptionLinkIntent(key: string): Promise<void> {
+  const { data } = await api.post<ApiResponse>(
+    '/api/user/topup/link',
+    { key },
+    redemptionLinkRequestConfig
+  )
+  if (!data.success) throw new Error(data.message)
+}
+
+export async function previewRedemptionLink(): Promise<RedemptionLinkPreview> {
+  // A pending request from the previous account or delivery link must not be
+  // reused after switching accounts or opening another link in the same tab.
+  const previewConfig = {
+    ...redemptionLinkRequestConfig,
+    disableDuplicate: true,
+  }
+  const { data } = await api.get<ApiResponse<RedemptionLinkPreview>>(
+    '/api/user/topup/link',
+    previewConfig
+  )
+  if (!data.success || !data.data) throw new Error(data.message)
+  return data.data
+}
+
+export async function redeemRedemptionLink(
+  preview: RedemptionLinkPreview
+): Promise<number> {
+  const { data } = await api.post<RedemptionResponse>(
+    '/api/user/topup/link/redeem',
+    { user_id: preview.user_id, intent_id: preview.intent_id },
+    redemptionLinkRequestConfig
+  )
+  if (!data.success || typeof data.data !== 'number')
+    throw new Error(data.message)
+  return data.data
+}
+
+export async function dismissRedemptionLink(): Promise<void> {
+  const { data } = await api.delete<ApiResponse>(
+    '/api/user/topup/link',
+    redemptionLinkRequestConfig
+  )
+  if (!data.success) throw new Error(data.message)
 }
 
 /**

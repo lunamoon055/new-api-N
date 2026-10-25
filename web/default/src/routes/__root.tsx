@@ -34,6 +34,7 @@ import { GeneralError } from '@/features/errors/general-error'
 import { NotFoundError } from '@/features/errors/not-found-error'
 import { getSetupStatus } from '@/features/setup/api'
 import { saveAffiliateCode } from '@/features/auth/lib/storage'
+import { PurchaseRedemptionDialog } from '@/features/wallet/components/dialogs/purchase-redemption-dialog'
 
 function RootComponent() {
   // Load system configuration (logo, system name, etc.) from backend
@@ -57,6 +58,7 @@ function RootComponent() {
     <ThemeCustomizationProvider>
       <NavigationProgress />
       <Outlet />
+      <PurchaseRedemptionDialog />
       <Toaster duration={5000} />
       {import.meta.env.MODE === 'development' && (
         <>

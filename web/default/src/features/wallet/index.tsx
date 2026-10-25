@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { WALLET_BALANCE_EVENT } from '@/lib/credit-purchase'
 import { useTranslation } from 'react-i18next'
 import { getSelf } from '@/lib/api'
 import { useStatus } from '@/hooks/use-status'
@@ -27,6 +28,7 @@ import { BillingHistoryDialog } from './components/dialogs/billing-history-dialo
 import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
 import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialog'
 import { TransferDialog } from './components/dialogs/transfer-dialog'
+import { RedemptionLinkDialog } from './components/dialogs/redemption-link-dialog'
 import { RechargeFormCard } from './components/recharge-form-card'
 import { SubscriptionPlansCard } from './components/subscription-plans-card'
 import { WalletStatsCard } from './components/wallet-stats-card'
@@ -121,6 +123,11 @@ export function Wallet(props: WalletProps) {
 
   useEffect(() => {
     fetchUser()
+    const refresh = () => {
+      void fetchUser()
+    }
+    window.addEventListener(WALLET_BALANCE_EVENT, refresh)
+    return () => window.removeEventListener(WALLET_BALANCE_EVENT, refresh)
   }, [fetchUser])
 
   useEffect(() => {
@@ -292,6 +299,7 @@ export function Wallet(props: WalletProps) {
                   onRedeem={handleRedeem}
                   redeeming={redeeming}
                   topupLink={topupInfo?.topup_link}
+                  purchaseLinks={topupInfo?.purchase_links}
                   loading={topupLoading}
                   priceRatio={(status?.price as number) || 1}
                   usdExchangeRate={effectiveUsdExchangeRate}
@@ -340,6 +348,8 @@ export function Wallet(props: WalletProps) {
         discountRate={getDiscountRate()}
         usdExchangeRate={effectiveUsdExchangeRate}
       />
+
+      <RedemptionLinkDialog onRedeemed={fetchUser} />
 
       <TransferDialog
         open={transferDialogOpen}

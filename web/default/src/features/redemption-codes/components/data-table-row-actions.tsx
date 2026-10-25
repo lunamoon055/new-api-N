@@ -23,10 +23,13 @@ import {
   Power,
   PowerOff,
   MoreHorizontal as DotsHorizontalIcon,
+  Link2,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+import { buildRedemptionLink } from '@/lib/redemption-link'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +37,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
+  DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu'
 import { updateRedemptionStatus } from '../api'
 import { REDEMPTION_STATUS, SUCCESS_MESSAGES } from '../constants'
@@ -49,6 +53,7 @@ export function DataTableRowActions<TData>({
   row,
 }: DataTableRowActionsProps<TData>) {
   const { t } = useTranslation()
+  const { copyToClipboard } = useCopyToClipboard()
   const redemption = redemptionSchema.parse(row.original)
   const { setOpen, setCurrentRow, triggerRefresh } = useRedemptions()
   const isEnabled = redemption.status === REDEMPTION_STATUS.ENABLED
@@ -89,51 +94,66 @@ export function DataTableRowActions<TData>({
         <DotsHorizontalIcon className='h-4 w-4' />
         <span className='sr-only'>{t('Open menu')}</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='end' className='w-[160px]'>
-        <DropdownMenuItem
-          onClick={() => {
-            setCurrentRow(redemption)
-            setOpen('update')
-          }}
-          disabled={!canEdit}
-        >
-          {t('Edit')}
-          <DropdownMenuShortcut>
-            <Edit size={16} />
-          </DropdownMenuShortcut>
-        </DropdownMenuItem>
-        {canToggle && (
-          <DropdownMenuItem onClick={handleToggleStatus}>
-            {isEnabled ? (
-              <>
-                {t('Disable')}
-                <DropdownMenuShortcut>
-                  <PowerOff size={16} />
-                </DropdownMenuShortcut>
-              </>
-            ) : (
-              <>
-                {t('Enable')}
-                <DropdownMenuShortcut>
-                  <Power size={16} />
-                </DropdownMenuShortcut>
-              </>
-            )}
+      <DropdownMenuContent align='end' className='w-48'>
+        <DropdownMenuGroup>
+          <DropdownMenuItem
+            disabled={!canEdit}
+            onClick={() =>
+              copyToClipboard(
+                buildRedemptionLink(redemption.key, window.location.origin)
+              )
+            }
+          >
+            {t('Copy redemption link')}
+            <DropdownMenuShortcut>
+              <Link2 size={16} />
+            </DropdownMenuShortcut>
           </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => {
-            setCurrentRow(redemption)
-            setOpen('delete')
-          }}
-          className='text-destructive focus:text-destructive'
-        >
-          {t('Delete')}
-          <DropdownMenuShortcut>
-            <Trash2 size={16} />
-          </DropdownMenuShortcut>
-        </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              setCurrentRow(redemption)
+              setOpen('update')
+            }}
+            disabled={!canEdit}
+          >
+            {t('Edit')}
+            <DropdownMenuShortcut>
+              <Edit size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+          {canToggle && (
+            <DropdownMenuItem onClick={handleToggleStatus}>
+              {isEnabled ? (
+                <>
+                  {t('Disable')}
+                  <DropdownMenuShortcut>
+                    <PowerOff size={16} />
+                  </DropdownMenuShortcut>
+                </>
+              ) : (
+                <>
+                  {t('Enable')}
+                  <DropdownMenuShortcut>
+                    <Power size={16} />
+                  </DropdownMenuShortcut>
+                </>
+              )}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => {
+              setCurrentRow(redemption)
+              setOpen('delete')
+            }}
+            className='text-destructive focus:text-destructive'
+          >
+            {t('Delete')}
+            <DropdownMenuShortcut>
+              <Trash2 size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )

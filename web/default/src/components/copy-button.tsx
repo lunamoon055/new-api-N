@@ -37,6 +37,7 @@ interface CopyButtonProps {
   size?: 'default' | 'sm' | 'lg' | 'icon'
   tooltip?: string
   successTooltip?: string
+  disabled?: boolean
   'aria-label'?: string
 }
 
@@ -49,6 +50,7 @@ export function CopyButton({
   size = 'icon',
   tooltip,
   successTooltip,
+  disabled,
   'aria-label': ariaLabel,
 }: CopyButtonProps) {
   const { t } = useTranslation()
@@ -66,6 +68,7 @@ export function CopyButton({
       className={cn('shrink-0', className)}
       onClick={() => copyToClipboard(value)}
       aria-label={isCopied ? copiedAriaLabel : resolvedAriaLabel}
+      disabled={disabled}
     >
       {isCopied ? (
         <Check className={cn('text-success', iconClassName)} />

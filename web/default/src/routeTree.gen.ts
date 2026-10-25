@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UserAgreementRouteImport } from './routes/user-agreement'
+import { Route as RedeemRouteImport } from './routes/redeem'
 import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
@@ -76,6 +77,11 @@ import { Route as AuthenticatedSystemSettingsAuthSectionRouteImport } from './ro
 const UserAgreementRoute = UserAgreementRouteImport.update({
   id: '/user-agreement',
   path: '/user-agreement',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RedeemRoute = RedeemRouteImport.update({
+  id: '/redeem',
+  path: '/redeem',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
@@ -423,6 +429,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/docs': typeof DocsRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/redeem': typeof RedeemRoute
   '/user-agreement': typeof UserAgreementRoute
   '/system-settings': typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
@@ -486,6 +493,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/docs': typeof DocsRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/redeem': typeof RedeemRoute
   '/user-agreement': typeof UserAgreementRoute
   '/forgot-password': typeof authForgotPasswordRoute
   '/oauth': typeof authOauthRoute
@@ -551,6 +559,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/docs': typeof DocsRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/redeem': typeof RedeemRoute
   '/user-agreement': typeof UserAgreementRoute
   '/_authenticated/system-settings': typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
@@ -616,6 +625,7 @@ export interface FileRouteTypes {
     | '/'
     | '/docs'
     | '/privacy-policy'
+    | '/redeem'
     | '/user-agreement'
     | '/system-settings'
     | '/forgot-password'
@@ -679,6 +689,7 @@ export interface FileRouteTypes {
     | '/'
     | '/docs'
     | '/privacy-policy'
+    | '/redeem'
     | '/user-agreement'
     | '/forgot-password'
     | '/oauth'
@@ -743,6 +754,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/docs'
     | '/privacy-policy'
+    | '/redeem'
     | '/user-agreement'
     | '/_authenticated/system-settings'
     | '/(auth)/forgot-password'
@@ -809,6 +821,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   DocsRoute: typeof DocsRoute
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
+  RedeemRoute: typeof RedeemRoute
   UserAgreementRoute: typeof UserAgreementRoute
   errors401Route: typeof errors401Route
   errors403Route: typeof errors403Route
@@ -833,6 +846,13 @@ declare module '@tanstack/react-router' {
       path: '/user-agreement'
       fullPath: '/user-agreement'
       preLoaderRoute: typeof UserAgreementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/redeem': {
+      id: '/redeem'
+      path: '/redeem'
+      fullPath: '/redeem'
+      preLoaderRoute: typeof RedeemRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy-policy': {
@@ -1413,6 +1433,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   DocsRoute: DocsRoute,
   PrivacyPolicyRoute: PrivacyPolicyRoute,
+  RedeemRoute: RedeemRoute,
   UserAgreementRoute: UserAgreementRoute,
   errors401Route: errors401Route,
   errors403Route: errors403Route,

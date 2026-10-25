@@ -237,6 +237,17 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
+	if key == operation_setting.PurchaseLinksOptionKey {
+		links, err := operation_setting.ParsePurchaseLinks(value)
+		if err != nil {
+			return err
+		}
+		encoded, err := common.Marshal(links)
+		if err != nil {
+			return err
+		}
+		value = string(encoded)
+	}
 	if key == billingModeOptionKey || key == billingExprOptionKey {
 		return UpdateBillingOption(key, value)
 	}

@@ -29,6 +29,7 @@ const defaultBillingSettings: BillingSettings = {
   QuotaForInviter: 0,
   QuotaForInvitee: 0,
   TopUpLink: '',
+  'payment_setting.purchase_links': '{}',
   'general_setting.docs_link': '',
   'quota_setting.enable_free_model_pre_consume': true,
   QuotaPerUnit: 500000,
