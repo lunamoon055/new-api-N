@@ -12,6 +12,7 @@ import (
 )
 
 func GetPerfMetricsSummary(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	hours := 24
 	if rawHours := c.Query("hours"); rawHours != "" {
 		if parsed, err := strconv.Atoi(rawHours); err == nil {
@@ -31,11 +32,12 @@ func GetPerfMetricsSummary(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    result,
+		"data":    perfSummaryForDisplay(result),
 	})
 }
 
 func GetPerfMetrics(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	modelName := c.Query("model")
 	if modelName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -71,7 +73,7 @@ func GetPerfMetrics(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    result,
+		"data":    perfQueryForDisplay(result),
 	})
 }
 

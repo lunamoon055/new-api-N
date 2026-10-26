@@ -48,6 +48,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.POST("/creation/video/generations", middleware.UserAuth(), middleware.CreationVideoGenerationsRequestConvert(), middleware.Distribute(), controller.CreationRelayVideoGenerations)
 		apiRouter.GET("/creation/video/generations/:task_id", middleware.UserAuth(), middleware.CreationVideoGenerationsFetchConvert(), controller.CreationRelayTaskFetch)
 		apiRouter.GET("/creation/videos/:task_id", middleware.UserAuth(), middleware.CreationVideoFetchConvert(), controller.CreationRelayTaskFetch)
+		apiRouter.GET("/perf-metrics/success-rate-visibility", controller.GetSuccessRateVisibility)
+		apiRouter.PUT("/perf-metrics/success-rate-visibility", middleware.AdminAuth(), controller.UpdateSuccessRateVisibility)
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")
 		perfMetricsRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))
 		{

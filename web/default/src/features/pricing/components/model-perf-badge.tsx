@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { useSuccessRateVisibility } from '@/features/performance-metrics/use-success-rate-visibility'
 import {
   formatLatency,
   formatThroughput,
@@ -26,7 +27,7 @@ import {
 
 export type ModelPerfBadgeData = {
   avg_latency_ms: number
-  success_rate: number
+  success_rate?: number
   avg_tps: number
 }
 
@@ -42,12 +43,14 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
   props: ModelPerfBadgeProps
 ) {
   const { t } = useTranslation()
+  const { showSuccessRate } = useSuccessRateVisibility()
 
   if (!props.perf) {
     return null
   }
 
-  const { avg_latency_ms, avg_tps, success_rate } = props.perf
+  const { avg_latency_ms, avg_tps } = props.perf
+  const success_rate = props.perf.success_rate ?? Number.NaN
 
   let statusColor = 'bg-emerald-500'
   if (success_rate < 99) {
@@ -59,7 +62,10 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
   return (
     <div
       className={cn(
-        'hidden w-[132px] grid-cols-[38px_48px_30px] gap-x-2 text-right tabular-nums min-[460px]:grid',
+        'hidden gap-x-2 text-right tabular-nums min-[460px]:grid',
+        showSuccessRate
+          ? 'w-[132px] grid-cols-[38px_48px_30px]'
+          : 'w-[94px] grid-cols-[38px_48px]',
         props.className
       )}
     >
@@ -79,19 +85,21 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
           {formatCompactThroughput(avg_tps)}
         </div>
       </div>
-      <div
-        title={`${t('Success rate')}: ${success_rate.toFixed(1)}%`}
-        className='min-w-0'
-      >
-        <div className='text-muted-foreground/55 truncate text-[10px] leading-4'>
-          {t('Status short')}
+      {showSuccessRate && (
+        <div
+          title={`${t('Success rate')}: ${success_rate.toFixed(1)}%`}
+          className='min-w-0'
+        >
+          <div className='text-muted-foreground/55 truncate text-[10px] leading-4'>
+            {t('Status short')}
+          </div>
+          <div className='flex h-4 items-center justify-end gap-0.5'>
+            <span className='bg-muted-foreground/10 h-2 w-1 rounded-full' />
+            <span className='bg-muted-foreground/15 h-2.5 w-1 rounded-full' />
+            <span className={cn('h-3 w-1 rounded-full', statusColor)} />
+          </div>
         </div>
-        <div className='flex h-4 items-center justify-end gap-0.5'>
-          <span className='bg-muted-foreground/10 h-2 w-1 rounded-full' />
-          <span className='bg-muted-foreground/15 h-2.5 w-1 rounded-full' />
-          <span className={cn('h-3 w-1 rounded-full', statusColor)} />
-        </div>
-      </div>
+      )}
     </div>
   )
 })

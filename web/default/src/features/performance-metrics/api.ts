@@ -19,6 +19,31 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import type { PerformanceMetricsData, PerfSummaryAllData } from './types'
 
+export type SuccessRateVisibilityResponse = {
+  success: boolean
+  message?: string
+  data: { show_success_rate: boolean }
+}
+
+export async function getSuccessRateVisibility(): Promise<SuccessRateVisibilityResponse> {
+  const response = await api.get<SuccessRateVisibilityResponse>(
+    '/api/perf-metrics/success-rate-visibility'
+  )
+  if (!response.data.success) throw new Error(response.data.message)
+  return response.data
+}
+
+export async function updateSuccessRateVisibility(
+  showSuccessRate: boolean
+): Promise<SuccessRateVisibilityResponse> {
+  const response = await api.put<SuccessRateVisibilityResponse>(
+    '/api/perf-metrics/success-rate-visibility',
+    { show_success_rate: showSuccessRate }
+  )
+  if (!response.data.success) throw new Error(response.data.message)
+  return response.data
+}
+
 export async function getPerfMetricsSummary(
   hours = 24
 ): Promise<PerfSummaryAllData> {

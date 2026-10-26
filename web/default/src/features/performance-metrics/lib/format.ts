@@ -28,7 +28,7 @@ export function formatLatency(ms: number): string {
   return `${Math.round(ms)}ms`
 }
 
-export function formatUptimePct(pct: number): string {
-  if (!Number.isFinite(pct)) return '—'
+export function formatUptimePct(pct: number | undefined): string {
+  if (pct === undefined || !Number.isFinite(pct)) return '—'
   return `${pct.toFixed(2)}%`
 }

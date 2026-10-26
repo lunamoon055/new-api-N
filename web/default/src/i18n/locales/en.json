@@ -5082,6 +5082,9 @@
     "Selected recharge tier: {{tier}}": "Selected recharge tier: {{tier}}",
     "The credited amount is determined by the redemption code, not the selected tier.": "The credited amount is determined by the redemption code, not the selected tier.",
     "Legacy purchase link, used only when the Other tier has not been configured. Set individual links in Recharge tier links.": "Legacy purchase link, used only when the Other tier has not been configured. Set individual links in Recharge tier links.",
-    "Redemption code": "Redemption code"
+    "Redemption code": "Redemption code",
+    "Show success rate": "Show success rate",
+    "Success rate display updated.": "Success rate display updated.",
+    "Unable to update success rate display.": "Unable to update success rate display."
   }
 }

@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/table'
 import { GroupBadge } from '@/components/group-badge'
 import { getPerfMetrics } from '@/features/performance-metrics/api'
+import { useSuccessRateVisibility } from '@/features/performance-metrics/use-success-rate-visibility'
 import {
   formatLatency,
   formatThroughput,
@@ -116,7 +117,10 @@ function toUptimeSeries(
   for (const group of groups) {
     for (const point of group.series) {
       const current = byTs.get(point.ts) ?? { rates: [], incidents: 0 }
-      if (Number.isFinite(point.success_rate)) {
+      if (
+        point.success_rate !== undefined &&
+        Number.isFinite(point.success_rate)
+      ) {
         current.rates.push(point.success_rate)
         if (point.success_rate < 100) current.incidents += 1
       }
@@ -143,8 +147,8 @@ function toUptimeSeries(
 function toGroupUptimeSeries(group: PerformanceGroup): UptimeDayPoint[] {
   return group.series.map((point) => ({
     date: new Date(point.ts * 1000).toISOString(),
-    uptime_pct: Math.round(point.success_rate * 100) / 100,
-    incidents: point.success_rate < 100 ? 1 : 0,
+    uptime_pct: Math.round((point.success_rate ?? Number.NaN) * 100) / 100,
+    incidents: (point.success_rate ?? 100) < 100 ? 1 : 0,
     outage_minutes: 0,
   }))
 }
@@ -162,6 +166,7 @@ function average(
 
 export function ModelDetailsPerformance(props: { model: PricingModel }) {
   const { t } = useTranslation()
+  const { showSuccessRate } = useSuccessRateVisibility()
   const videoModel = isVideoModel(props.model)
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics', props.model.model_name],
@@ -179,7 +184,7 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
         group: group.group,
         avg_ttft_ms: group.avg_ttft_ms,
         avg_latency_ms: group.avg_latency_ms,
-        success_rate: group.success_rate,
+        success_rate: group.success_rate ?? Number.NaN,
         avg_tps: group.avg_tps,
       })),
     [groups]
@@ -246,6 +251,12 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
 
   const headerCellClass =
     'text-muted-foreground py-2 text-[10px] font-medium tracking-wider uppercase'
+  let performanceDescription: string | undefined
+  if (showSuccessRate) {
+    performanceDescription = videoModel
+      ? t('Average task duration and completion success rate')
+      : t('Average latency, TTFT, TPS, and success rate')
+  }
 
   return (
     <div className='flex flex-col gap-4'>
@@ -259,7 +270,8 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
       <div
         className={cn(
           'grid grid-cols-1 gap-2',
-          videoModel ? 'sm:grid-cols-2' : 'sm:grid-cols-3'
+          showSuccessRate && !videoModel && 'sm:grid-cols-3',
+          showSuccessRate === videoModel && 'sm:grid-cols-2'
         )}
       >
         {!videoModel && (
@@ -275,30 +287,28 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
           label={videoModel ? t('Average task duration') : t('Average latency')}
           value={formatLatency(avgLatency)}
         />
-        <StatCard
-          icon={HeartPulse}
-          label={t('Success rate')}
-          value={formatUptimePct(successRate)}
-          hint={
-            incidentCount > 0
-              ? t('{{count}} incidents in the last 24 hours', {
-                  count: incidentCount,
-                })
-              : t('No incidents in the last 24 hours')
-          }
-          intent={intent}
-        />
+        {showSuccessRate && (
+          <StatCard
+            icon={HeartPulse}
+            label={t('Success rate')}
+            value={formatUptimePct(successRate)}
+            hint={
+              incidentCount > 0
+                ? t('{{count}} incidents in the last 24 hours', {
+                    count: incidentCount,
+                  })
+                : t('No incidents in the last 24 hours')
+            }
+            intent={intent}
+          />
+        )}
       </div>
 
       <section>
         <SectionHeader
           icon={HeartPulse}
           title={t('Per-group performance')}
-          description={
-            videoModel
-              ? t('Average task duration and completion success rate')
-              : t('Average latency, TTFT, TPS, and success rate')
-          }
+          description={performanceDescription}
         />
         <div className='overflow-x-auto rounded-lg border'>
           <Table className='text-sm'>
@@ -320,11 +330,13 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
                     ? t('Average task duration')
                     : t('Average latency')}
                 </TableHead>
-                <TableHead
-                  className={`${headerCellClass} min-w-[180px] text-left`}
-                >
-                  {t('Success rate')}
-                </TableHead>
+                {showSuccessRate && (
+                  <TableHead
+                    className={`${headerCellClass} min-w-[180px] text-left`}
+                  >
+                    {t('Success rate')}
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -346,12 +358,14 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
                   <TableCell className='text-muted-foreground py-2.5 text-right font-mono'>
                     {formatLatency(perf.avg_latency_ms)}
                   </TableCell>
-                  <TableCell className='py-2.5'>
-                    <UptimeSparkline
-                      size='sm'
-                      series={uptimeByGroup[perf.group] ?? []}
-                    />
-                  </TableCell>
+                  {showSuccessRate && (
+                    <TableCell className='py-2.5'>
+                      <UptimeSparkline
+                        size='sm'
+                        series={uptimeByGroup[perf.group] ?? []}
+                      />
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -373,37 +387,39 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
         />
       </section>
 
-      <section>
-        <SectionHeader
-          icon={HeartPulse}
-          title={
-            videoModel
-              ? t('Task success rate (last 24h)')
-              : t('Availability (last 24h)')
-          }
-          description={
-            incidentCount > 0
-              ? t(
-                  'Request success rate; {{incidents}} incident buckets in the last 24 hours',
-                  {
-                    incidents: incidentCount,
-                  }
-                )
-              : t('Request success rate sampled over the last 24 hours')
-          }
-          accent={
-            incidentCount > 0 ? (
-              <span className='inline-flex items-center gap-1 text-amber-600 dark:text-amber-400'>
-                <AlertTriangle className='size-3.5' />
-                {t('{{count}} incidents', {
-                  count: incidentCount,
-                })}
-              </span>
-            ) : null
-          }
-        />
-        <UptimeTrendChart series={uptimeSeries} taskMetrics={videoModel} />
-      </section>
+      {showSuccessRate && (
+        <section>
+          <SectionHeader
+            icon={HeartPulse}
+            title={
+              videoModel
+                ? t('Task success rate (last 24h)')
+                : t('Availability (last 24h)')
+            }
+            description={
+              incidentCount > 0
+                ? t(
+                    'Request success rate; {{incidents}} incident buckets in the last 24 hours',
+                    {
+                      incidents: incidentCount,
+                    }
+                  )
+                : t('Request success rate sampled over the last 24 hours')
+            }
+            accent={
+              incidentCount > 0 ? (
+                <span className='inline-flex items-center gap-1 text-amber-600 dark:text-amber-400'>
+                  <AlertTriangle className='size-3.5' />
+                  {t('{{count}} incidents', {
+                    count: incidentCount,
+                  })}
+                </span>
+              ) : null
+            }
+          />
+          <UptimeTrendChart series={uptimeSeries} taskMetrics={videoModel} />
+        </section>
+      )}
     </div>
   )
 }

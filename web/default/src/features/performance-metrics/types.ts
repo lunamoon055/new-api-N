@@ -20,7 +20,7 @@ export type PerformanceSeriesPoint = {
   ts: number
   avg_ttft_ms: number
   avg_latency_ms: number
-  success_rate: number
+  success_rate?: number
   avg_tps: number
 }
 
@@ -28,7 +28,7 @@ export type PerformanceGroup = {
   group: string
   avg_ttft_ms: number
   avg_latency_ms: number
-  success_rate: number
+  success_rate?: number
   avg_tps: number
   series: PerformanceSeriesPoint[]
 }
@@ -43,7 +43,7 @@ export type PerformanceMetricsData = {
     summary_series?: PerformanceSeriesPoint[]
     summary?: {
       avg_latency_ms: number
-      success_rate: number
+      success_rate?: number
       avg_tps: number
     }
   }
@@ -52,7 +52,7 @@ export type PerformanceMetricsData = {
 export type PerfModelSummary = {
   model_name: string
   avg_latency_ms: number
-  success_rate: number
+  success_rate?: number
   avg_tps: number
   request_count?: number
 }

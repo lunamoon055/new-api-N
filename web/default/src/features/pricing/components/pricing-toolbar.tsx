@@ -37,6 +37,7 @@ import {
 import { VIEW_MODES, type ViewMode } from '../constants'
 import type { PricingModel, PricingVendor } from '../types'
 import { PricingSidebar } from './pricing-sidebar'
+import { SuccessRateToggle } from './success-rate-toggle'
 
 type SegmentOption = {
   value: string
@@ -160,6 +161,7 @@ export function PricingToolbar(props: PricingToolbarProps) {
         </div>
 
         <div className='flex flex-wrap items-center gap-2'>
+          <SuccessRateToggle />
           <SegmentedControl
             options={[
               {

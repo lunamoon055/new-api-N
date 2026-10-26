@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
+import { useSuccessRateVisibility } from '@/features/performance-metrics/use-success-rate-visibility'
 import {
   formatLatency,
   formatThroughput,
@@ -79,15 +80,17 @@ function buildPerformanceSummary(rows: PerfModelSummary[]): PerformanceSummary {
   }
 }
 
-function successRateClassName(successRate: number): string {
-  if (!Number.isFinite(successRate)) return 'text-muted-foreground'
+function successRateClassName(successRate: number | undefined): string {
+  if (successRate === undefined || !Number.isFinite(successRate))
+    return 'text-muted-foreground'
   if (successRate >= 99.9) return 'text-success'
   if (successRate >= 99) return 'text-warning'
   return 'text-destructive'
 }
 
-function successDotClassName(successRate: number): string {
-  if (!Number.isFinite(successRate)) return 'bg-muted-foreground'
+function successDotClassName(successRate: number | undefined): string {
+  if (successRate === undefined || !Number.isFinite(successRate))
+    return 'bg-muted-foreground'
   if (successRate >= 99.9) return 'bg-success'
   if (successRate >= 99) return 'bg-warning'
   return 'bg-destructive'
@@ -95,6 +98,7 @@ function successDotClassName(successRate: number): string {
 
 export function PerformanceOverview() {
   const { t } = useTranslation()
+  const { showSuccessRate } = useSuccessRateVisibility()
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics-summary', PERFORMANCE_WINDOW_HOURS],
     queryFn: () => getPerfMetricsSummary(PERFORMANCE_WINDOW_HOURS),
@@ -144,12 +148,14 @@ export function PerformanceOverview() {
           </div>
         ) : (
           <div className='flex flex-wrap items-center gap-x-5 gap-y-2'>
-            <InlineMetric
-              icon={HeartPulse}
-              label={t('Success rate')}
-              value={formatUptimePct(summary.successRate)}
-              valueClassName={successRateClassName(summary.successRate)}
-            />
+            {showSuccessRate && (
+              <InlineMetric
+                icon={HeartPulse}
+                label={t('Success rate')}
+                value={formatUptimePct(summary.successRate)}
+                valueClassName={successRateClassName(summary.successRate)}
+              />
+            )}
             <InlineMetric
               icon={Timer}
               label={t('Average latency')}
@@ -208,27 +214,32 @@ function InlineMetric(props: {
 
 function ModelBadge(props: { model: PerfModelSummary }) {
   const model = props.model
+  const { showSuccessRate } = useSuccessRateVisibility()
 
   return (
     <span className='bg-muted/50 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1'>
       <span className='max-w-[10rem] truncate font-mono text-[11px]'>
         {model.model_name}
       </span>
-      <span
-        className={cn(
-          'size-1.5 rounded-full',
-          successDotClassName(model.success_rate)
-        )}
-        aria-hidden='true'
-      />
-      <span
-        className={cn(
-          'font-mono text-[11px] font-semibold tabular-nums',
-          successRateClassName(model.success_rate)
-        )}
-      >
-        {formatUptimePct(model.success_rate)}
-      </span>
+      {showSuccessRate && (
+        <>
+          <span
+            className={cn(
+              'size-1.5 rounded-full',
+              successDotClassName(model.success_rate)
+            )}
+            aria-hidden='true'
+          />
+          <span
+            className={cn(
+              'font-mono text-[11px] font-semibold tabular-nums',
+              successRateClassName(model.success_rate)
+            )}
+          >
+            {formatUptimePct(model.success_rate)}
+          </span>
+        </>
+      )}
     </span>
   )
 }

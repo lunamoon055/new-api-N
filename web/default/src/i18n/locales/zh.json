@@ -5082,6 +5082,9 @@
     "Selected recharge tier: {{tier}}": "所选充值档位：{{tier}}",
     "The credited amount is determined by the redemption code, not the selected tier.": "实际到账积分以兑换码额度为准。",
     "Legacy purchase link, used only when the Other tier has not been configured. Set individual links in Recharge tier links.": "兼容旧购买链接，仅在“其他”档未配置时使用。六档独立链接请到“充值档位链接”设置。",
-    "Redemption code": "兑换码"
+    "Redemption code": "兑换码",
+    "Show success rate": "显示成功率",
+    "Success rate display updated.": "成功率显示设置已更新。",
+    "Unable to update success rate display.": "无法更新成功率显示设置。"
   }
 }

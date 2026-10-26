@@ -45,6 +45,7 @@ import { CopyButton } from '@/components/copy-button'
 import { GroupBadge } from '@/components/group-badge'
 import { PublicLayout } from '@/components/layout'
 import { getPerfMetrics } from '@/features/performance-metrics/api'
+import { useSuccessRateVisibility } from '@/features/performance-metrics/use-success-rate-visibility'
 import {
   formatLatency,
   formatThroughput,
@@ -210,6 +211,7 @@ function OverviewMetric(props: {
 
 function OverviewSummaryGrid(props: { model: PricingModel }) {
   const { t } = useTranslation()
+  const { showSuccessRate } = useSuccessRateVisibility()
   const videoModel = isVideoModel(props.model)
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics', props.model.model_name],
@@ -221,7 +223,7 @@ function OverviewSummaryGrid(props: { model: PricingModel }) {
   const groups = metricsQuery.data?.data.groups ?? []
   const videoSummary = videoModel ? metricsQuery.data?.data.summary : undefined
   const successRates = groups
-    .map((group) => group.success_rate)
+    .map((group) => group.success_rate ?? Number.NaN)
     .filter((rate) => Number.isFinite(rate))
   const groupSuccessRate =
     successRates.length > 0
@@ -257,7 +259,8 @@ function OverviewSummaryGrid(props: { model: PricingModel }) {
     <div
       className={cn(
         'bg-muted/20 grid overflow-hidden rounded-lg border sm:divide-x',
-        videoModel ? 'sm:grid-cols-2' : 'sm:grid-cols-3'
+        showSuccessRate && !videoModel && 'sm:grid-cols-3',
+        showSuccessRate === videoModel && 'sm:grid-cols-2'
       )}
     >
       {!videoModel && (
@@ -272,12 +275,14 @@ function OverviewSummaryGrid(props: { model: PricingModel }) {
         label={videoModel ? t('Average task duration') : t('Average latency')}
         value={formatLatency(avgLatency)}
       />
-      <OverviewMetric
-        icon={HeartPulse}
-        label={t('Success rate')}
-        value={formatUptimePct(successRate)}
-        intent={successIntent}
-      />
+      {showSuccessRate && (
+        <OverviewMetric
+          icon={HeartPulse}
+          label={t('Success rate')}
+          value={formatUptimePct(successRate)}
+          intent={successIntent}
+        />
+      )}
     </div>
   )
 }
