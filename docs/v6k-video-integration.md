@@ -31,13 +31,15 @@
 - 模型测试页、在线文档和 `/v1/pricing` 的 `mapped_endpoints[].parameters` 共用上述能力。创建及查询仍统一为 `/v1/videos`，无需更换接口。
 - 仅对这 11 个精确 ID 增加时长、分辨率和素材数量的提交前校验。图片总量包括 `input_reference` 首帧；JSON 素材与 multipart 上传合并计数。其他已接入模型的能力和校验范围不扩展。
 - 两款 `TTTseadanco2.5` 的备注未公布视频参考支持，本次不开放视频参考。`wan3.M` 不套用旧 `wan3.0` 的 1080p、2 秒或素材必填规则；`dola2.5` 仅支持 5、10、15 秒。
-- 比例未公布时仍不提供默认比例选项。调用方可按上游支持情况显式提交 `ratio`；不猜测最少图片数、文件大小或素材总时长限制。
+- 按站点 2026-10-26 的配置要求，所有尚未配置比例的视频模型统一提供 `16:9`、`9:16`、`1:1`、`4:3`、`3:4`、`2:3`、`3:2`、`21:9`。模型测试和文档示例默认选择并提交 `ratio: "16:9"`；已有明确比例范围的模型保留原范围。这是站点缺省规则，不表示八种比例均已通过上游生成验证。
+- V6K 下游请求漏传比例时，适配器补充 `16:9`；传入 `size` 时优先从像素宽高推导比例，保留明确传入的 `ratio` / `aspect_ratio`。不猜测最少图片数、文件大小或素材总时长限制。
 
 ```json
 {
   "model": "XXseadanco2.5-720",
   "prompt": "山间日出，镜头缓慢向前，画面稳定",
   "seconds": 30,
+  "ratio": "16:9",
   "resolution": "720p",
   "images": ["https://cdn.example.com/reference.png"]
 }
@@ -92,7 +94,7 @@ POST /v1/videos
 Authorization: Bearer <本站 API Key>
 Content-Type: application/json
 
-{"model":"dola2.0","prompt":"镜头缓慢推进，一片阳光下的森林","seconds":15,"resolution":"720p"}
+{"model":"dola2.0","prompt":"镜头缓慢推进，一片阳光下的森林","seconds":15,"ratio":"16:9","resolution":"720p"}
 ```
 
 - `GET /v1/videos/{本站任务ID}`：查询任务状态。

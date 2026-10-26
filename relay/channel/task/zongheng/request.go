@@ -209,11 +209,18 @@ func validateReference(value string) error {
 
 func validateCapabilities(req *videoRequest, selected *service.ZonghengVideoModel) error {
 	caps := selected.Capabilities
+	ratios := caps.Ratios
+	if len(ratios) == 0 {
+		ratios = common.DefaultVideoAspectRatios()
+	}
 	if req.Duration == nil && len(caps.Durations) > 0 {
 		req.Duration = caps.Defaults.Duration
 	}
-	if req.Ratio == "" && len(caps.Ratios) > 0 {
+	if req.Ratio == "" {
 		req.Ratio = caps.Defaults.Ratio
+		if req.Ratio == "" {
+			req.Ratio = ratios[0]
+		}
 	}
 	if req.Resolution == "" && len(caps.Resolutions) > 0 {
 		req.Resolution = caps.Defaults.Resolution
@@ -232,7 +239,7 @@ func validateCapabilities(req *videoRequest, selected *service.ZonghengVideoMode
 	for _, field := range []struct {
 		name, value string
 		options     []string
-	}{{"ratio", req.Ratio, caps.Ratios}, {"resolution", req.Resolution, caps.Resolutions}, {"quality", req.Quality, caps.Qualities}} {
+	}{{"ratio", req.Ratio, ratios}, {"resolution", req.Resolution, caps.Resolutions}, {"quality", req.Quality, caps.Qualities}} {
 		if field.value == "" {
 			continue
 		}

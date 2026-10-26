@@ -32,7 +32,8 @@ func TestV6KZHNewModelsHaveExactPublishedCapabilities(t *testing.T) {
 			require.Equal(t, tc.videos, p.MaxVideos)
 			require.Equal(t, tc.audios, p.MaxAudios)
 			require.Equal(t, "seconds", p.DurationField)
-			require.True(t, p.OmitRatio)
+			require.False(t, p.OmitRatio)
+			require.Equal(t, DefaultVideoAspectRatios(), p.Ratios)
 		})
 	}
 	require.Equal(t, []int{5, 10, 15}, GetV6KValidatedVideoParameters("dola2.5").Durations)

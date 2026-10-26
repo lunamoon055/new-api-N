@@ -112,20 +112,22 @@ func TestInvalidParametersAndReferencesNeverSubmit(t *testing.T) {
 	}
 }
 
-func TestUnpublishedRatioReproducesPlaygroundRejection(t *testing.T) {
+func TestUnpublishedRatioUsesFullSiteMenu(t *testing.T) {
 	catalog := strings.Replace(modelResponse, `"aspect_ratio_options":["16:9","9:16"]`, `"aspect_ratio_options":[]`, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/v1/models", r.URL.Path)
 		fmt.Fprint(w, catalog)
 	}))
 	defer server.Close()
-	c, _, info, a := testContext(t, `{"model":"alias","prompt":"test","duration":5,"resolution":"720p","ratio":"16:9"}`, server.URL)
-	taskErr := a.ValidateRequestAndSetAction(c, info)
-	require.NotNil(t, taskErr)
-	require.Equal(t, `ratio "16:9" is not supported by this model`, taskErr.Message)
-	t.Logf("Original validation error: %s", taskErr.Message)
-	c, _, info, a = testContext(t, `{"model":"alias","prompt":"test","duration":5,"resolution":"720p"}`, server.URL)
+	for _, ratio := range common.DefaultVideoAspectRatios() {
+		c, _, info, a := testContext(t, `{"model":"alias","prompt":"test","duration":5,"resolution":"720p","ratio":"`+ratio+`"}`, server.URL)
+		require.Nil(t, a.ValidateRequestAndSetAction(c, info), ratio)
+	}
+	c, _, info, a := testContext(t, `{"model":"alias","prompt":"test","duration":5,"resolution":"720p"}`, server.URL)
 	require.Nil(t, a.ValidateRequestAndSetAction(c, info))
+	request, err := relaycommon.GetTaskRequest(c)
+	require.NoError(t, err)
+	require.Equal(t, "16:9", request.Ratio)
 }
 
 func TestReferenceUploadAndRetriesPreserveBody(t *testing.T) {

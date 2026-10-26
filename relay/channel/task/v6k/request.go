@@ -268,6 +268,12 @@ func normalizeRequest(source map[string]any) (map[string]any, error) {
 			if width*y != height*x {
 				return nil, fmt.Errorf("size conflicts with ratio")
 			}
+		} else {
+			x, y := width, height
+			for y != 0 {
+				x, y = y, x%y
+			}
+			payload["ratio"] = fmt.Sprintf("%d:%d", width/x, height/x)
 		}
 		if resolution, ok := payload["resolution"].(string); ok {
 			normalized := billing_setting.NormalizeVideoResolution(resolution)
@@ -276,6 +282,9 @@ func normalizeRequest(source map[string]any) (map[string]any, error) {
 				return nil, fmt.Errorf("size conflicts with resolution")
 			}
 		}
+	}
+	if payload["ratio"] == nil {
+		payload["ratio"] = common.DefaultVideoAspectRatios()[0]
 	}
 	return payload, nil
 }

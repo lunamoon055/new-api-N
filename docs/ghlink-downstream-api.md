@@ -128,6 +128,8 @@ ZH 本轮新增 `Cseadanco2.0-1`、`Cseadanco2.0-fast`、`Cseadanco2.0-mini`、`
 
 ### 4.1 创建任务
 
+每个视频请求都应携带比例。未配置比例范围的视频模型使用站内完整选项：`16:9`、`9:16`、`1:1`、`4:3`、`3:4`、`2:3`、`3:2`、`21:9`，默认 `16:9`；已有明确范围的模型继续使用各自的范围。模型测试、文档和一键复制示例均按此规则生成。参数字段以模型的 `mapped_endpoints[].parameters.ratio_field` 为准（通常为 `ratio`，部分模型为 `aspect_ratio`）。
+
 ```http
 POST /v1/videos
 ```

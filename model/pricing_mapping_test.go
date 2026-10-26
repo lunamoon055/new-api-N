@@ -331,7 +331,8 @@ func TestZonghengPricingOverridesModelNameHeuristics(t *testing.T) {
 		require.Equal(t, "/v1/videos", endpoints[0].Path)
 		require.Equal(t, "/v1/videos/{task_id}", endpoints[0].QueryPath)
 		require.NotNil(t, endpoints[0].Parameters)
-		require.True(t, endpoints[0].Parameters.OmitRatio)
+		require.False(t, endpoints[0].Parameters.OmitRatio)
+		require.Equal(t, common.DefaultVideoAspectRatios(), endpoints[0].Parameters.Ratios)
 		require.Equal(t, "reference_videos", endpoints[0].Parameters.VideoField)
 	}
 	require.Nil(t, common.GetVideoIntegrationParameters("XXseadanco2.0M"))

@@ -1458,6 +1458,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	if channel != nil && channel.Type == constant.ChannelTypeV6K {
 		req := relaycommon.TaskSubmitReq{Model: model, Prompt: "a mountain at sunrise", Duration: 5}
 		parameters := common.GetV6KVideoParameters(model)
+		req.Ratio = parameters.Ratios[0]
 		if len(parameters.Durations) > 0 {
 			req.Duration = parameters.Durations[0]
 		}
@@ -1467,7 +1468,11 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 		return req
 	}
 	if channel != nil && channel.Type == constant.ChannelTypeZongheng {
-		return relaycommon.TaskSubmitReq{Model: model, Prompt: "a mountain at sunrise"}
+		ratio := common.DefaultVideoAspectRatios()[0]
+		if parameters := common.GetZonghengVideoParameters(model); parameters != nil {
+			ratio = parameters.Ratios[0]
+		}
+		return relaycommon.TaskSubmitReq{Model: model, Prompt: "a mountain at sunrise", Ratio: ratio}
 	}
 	if common.IsXJZVideoModel(model) {
 		return buildXJZVideoTestRequest(model)

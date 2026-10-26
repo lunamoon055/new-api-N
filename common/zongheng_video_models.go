@@ -24,7 +24,7 @@ var zonghengVideoParameters = struct {
 func GetZonghengVideoParameters(modelName string) *ModelIntegrationParameters {
 	zonghengVideoParameters.RLock()
 	defer zonghengVideoParameters.RUnlock()
-	return zonghengVideoParameters.models[modelName]
+	return WithVideoRatioDefaults(zonghengVideoParameters.models[modelName])
 }
 
 func SetZonghengVideoParameters(modelName string, parameters *ModelIntegrationParameters) {

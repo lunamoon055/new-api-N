@@ -6,6 +6,8 @@ User revision, 2026-10-11: remove the three-step quick-start section and its obs
 
 User refresh preference, 2026-10-11: load the model catalog automatically once when the document opens. All subsequent catalog updates must be initiated by the manual refresh/retry buttons; do not poll or refresh on window focus or page visibility changes. Show this behavior in the sidebar footer.
 
+User ratio policy, 2026-10-26: every video model without configured ratios uses the full site menu: 16:9, 9:16, 1:1, 4:3, 3:4, 2:3, 3:2, 21:9. Keep explicit model ranges. Video documentation and copied examples must include ratio (default 16:9); the model test page must offer the same choices. Do not omit ratios because the upstream range is unpublished.
+
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.

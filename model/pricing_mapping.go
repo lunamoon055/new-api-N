@@ -245,6 +245,9 @@ func getPricingIntegrationEndpointsForModels(channelType int, modelName, origina
 }
 
 func appendPricingEndpoint(endpoints []PricingMappedEndpoint, candidate PricingMappedEndpoint) []PricingMappedEndpoint {
+	if candidate.Kind == "video" {
+		candidate.Parameters = common.WithVideoRatioDefaults(candidate.Parameters)
+	}
 	for _, existing := range endpoints {
 		if existing.Type == candidate.Type && existing.Path == candidate.Path && existing.Method == candidate.Method && existing.QueryPath == candidate.QueryPath {
 			return endpoints

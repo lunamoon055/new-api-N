@@ -34,7 +34,7 @@ func TestV6KChannelTestUsesUnifiedProtocolForCollidingModelNames(t *testing.T) {
 	require.Equal(t, 15, request.Duration)
 	require.Equal(t, "720p", request.Resolution)
 	require.Empty(t, request.Size)
-	require.Empty(t, request.Ratio)
+	require.Equal(t, "16:9", request.Ratio)
 }
 
 func TestV6KZHNewModelsUseTheirOwnTestDefaults(t *testing.T) {
@@ -52,7 +52,7 @@ func TestV6KZHNewModelsUseTheirOwnTestDefaults(t *testing.T) {
 		request := buildTestRequest(id, endpoint, channel, false).(relaycommon.TaskSubmitReq)
 		require.Equal(t, p.Durations[0], request.Duration)
 		require.Equal(t, p.Resolutions[0], request.Resolution)
-		require.Empty(t, request.Ratio)
+		require.Equal(t, p.Ratios[0], request.Ratio)
 	}
 	require.Equal(t, 11, count)
 }

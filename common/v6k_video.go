@@ -8,8 +8,8 @@ import (
 
 // UI hints transcribed from V6K's public video catalog on 2026-10-24,
 // with the explicitly selected ZH additions verified on 2026-10-26.
-// Empty ranges are unpublished, not permission to assume another provider's
-// capabilities. Runtime model authorization remains with the upstream API.
+// Empty duration/resolution ranges remain unpublished. Missing ratios use the
+// site's full ratio menu. Runtime model authorization remains with the upstream API.
 //
 //go:embed v6k_video_models.json
 var v6kVideoSnapshot []byte
@@ -27,19 +27,19 @@ var v6kVideoParameters = func() map[string]*v6kVideoSpec {
 
 func GetV6KVideoParameters(modelName string) *ModelIntegrationParameters {
 	if parameters := v6kVideoParameters[strings.TrimSpace(modelName)]; parameters != nil {
-		return &parameters.ModelIntegrationParameters
+		return WithVideoRatioDefaults(&parameters.ModelIntegrationParameters)
 	}
-	return &ModelIntegrationParameters{
+	return WithVideoRatioDefaults(&ModelIntegrationParameters{
 		DurationField: "seconds", RatioField: "ratio", ResolutionField: "resolution",
-		ImageField: "images", VideoField: "videos", AudioField: "audios", OmitRatio: true,
-	}
+		ImageField: "images", VideoField: "videos", AudioField: "audios",
+	})
 }
 
 // GetV6KValidatedVideoParameters limits stricter validation to exact models
 // whose published capabilities were confirmed for this integration.
 func GetV6KValidatedVideoParameters(modelName string) *ModelIntegrationParameters {
 	if spec := v6kVideoParameters[strings.TrimSpace(modelName)]; spec != nil && spec.ValidateRequest {
-		return &spec.ModelIntegrationParameters
+		return WithVideoRatioDefaults(&spec.ModelIntegrationParameters)
 	}
 	return nil
 }

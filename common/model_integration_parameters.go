@@ -28,6 +28,29 @@ type ModelIntegrationParameters struct {
 	MaxAudioSizeMB     int      `json:"max_audio_size_mb,omitempty"`
 }
 
+// DefaultVideoAspectRatios is the site's full ratio menu for video models
+// without a published range (operator policy, 2026-10-26).
+func DefaultVideoAspectRatios() []string {
+	return []string{"16:9", "9:16", "1:1", "4:3", "3:4", "2:3", "3:2", "21:9"}
+}
+
+// WithVideoRatioDefaults keeps explicit model ranges and fills only missing
+// ratios. Copy the hints so cached upstream capabilities remain unchanged.
+func WithVideoRatioDefaults(parameters *ModelIntegrationParameters) *ModelIntegrationParameters {
+	if parameters == nil {
+		return nil
+	}
+	result := *parameters
+	if len(result.Ratios) == 0 {
+		result.Ratios = DefaultVideoAspectRatios()
+	}
+	if result.RatioField == "" {
+		result.RatioField = "ratio"
+	}
+	result.OmitRatio = false
+	return &result
+}
+
 func integrationDurationRange(minimum, maximum int) []int {
 	values := make([]int, 0, maximum-minimum+1)
 	for value := minimum; value <= maximum; value++ {
@@ -67,7 +90,7 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 		if spec.Resolution != "" {
 			resolutions = []string{strings.ToLower(spec.Resolution)}
 		}
-		return &ModelIntegrationParameters{
+		return WithVideoRatioDefaults(&ModelIntegrationParameters{
 			Durations: durations, Resolutions: resolutions, Ratios: spec.Ratios,
 			DurationField: "duration", RatioField: spec.RatioParameter(), ResolutionField: spec.ResolutionParameter(), RequestResolution: spec.Resolution,
 			ImageField: spec.ImageField, VideoField: spec.VideoField, AudioField: spec.AudioField,
@@ -75,7 +98,7 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 			AudioNeedsImage: spec.AudioNeedsImage, AllowFrames: spec.AllowFrames,
 			AudioRequiresImage: spec.AudioRequiresImage,
 			MaxImageSizeMB:     10, MaxVideoSizeMB: 10, MaxAudioSizeMB: 10,
-		}
+		})
 	}
 	name := NormalizeGatewayVideoModelName(modelName)
 	p := &ModelIntegrationParameters{
@@ -130,7 +153,7 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 	default:
 		return nil
 	}
-	return p
+	return WithVideoRatioDefaults(p)
 }
 
 // GetSiteVideoIntegrationParameters preserves the exact public contracts in the
@@ -164,7 +187,7 @@ func GetSiteVideoIntegrationParameters(modelName string) *ModelIntegrationParame
 	default:
 		return nil
 	}
-	return p
+	return WithVideoRatioDefaults(p)
 }
 
 func GetImageIntegrationParameters(modelName string) *ModelIntegrationParameters {

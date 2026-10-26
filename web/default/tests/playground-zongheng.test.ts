@@ -25,15 +25,14 @@ const selection = { duration: '5', aspectRatio: '16:9', resolution: '720p' }
 const message: Message = { key: 'prompt', from: 'user', versions: [{ id: 'prompt', content: '两个人在进行武术切磋，一人扮演进攻方，一人扮演防守方' }] }
 
 describe('Zongheng playground video parameters', () => {
-  it('does not offer a ratio when the model publishes none', () => {
-    expect(getPlaygroundVideoChoices(model, info).aspectRatios).toEqual([])
-    expect(resolvePlaygroundVideoSelection(model, selection, info).aspectRatio).toBe('')
+  it('offers the full site ratio menu when the model publishes none', () => {
+    expect(getPlaygroundVideoChoices(model, info).aspectRatios).toEqual(['16:9', '9:16', '1:1', '4:3', '3:4', '2:3', '3:2', '21:9'])
+    expect(resolvePlaygroundVideoSelection(model, selection, info).aspectRatio).toBe('16:9')
   })
 
-  it('omits the saved 16:9 ratio from the actual generation request', () => {
+  it('includes the selected ratio in the actual generation request', () => {
     const request = buildPlaygroundMediaRequest(model, [message], 'video', 'auto', {}, selection, info)
-    expect(request).toEqual({ model, prompt: message.versions[0].content, duration: 5, resolution: '720p' })
-    expect(request).not.toHaveProperty('ratio')
+    expect(request).toEqual({ model, prompt: message.versions[0].content, duration: 5, resolution: '720p', ratio: '16:9' })
     expect(request).not.toHaveProperty('aspect_ratio')
     expect(request).not.toHaveProperty('size')
   })

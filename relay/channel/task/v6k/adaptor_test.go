@@ -217,8 +217,31 @@ func TestZHNewModelsForwardExactIDsAndMaximumPublishedReferences(t *testing.T) {
 			require.NoError(t, common.DecodeJson(body, &forwarded))
 			require.Equal(t, id, forwarded["model"])
 			require.EqualValues(t, p.Durations[len(p.Durations)-1], forwarded["seconds"])
-			require.NotContains(t, forwarded, "ratio")
+			require.Equal(t, "16:9", forwarded["ratio"])
 			require.NotContains(t, forwarded, "duration")
+		})
+	}
+}
+
+func TestV6KMissingRatioIsForwardedWithDefaultOrSizeRatio(t *testing.T) {
+	for _, tc := range []struct{ name, fields, ratio string }{
+		{"missing", `"seconds":15,"resolution":"720p"`, "16:9"},
+		{"blank", `"seconds":15,"ratio":" "`, "16:9"},
+		{"portrait size", `"seconds":15,"size":"720x1280"`, "9:16"},
+		{"alias", `"seconds":15,"aspect_ratio":"2:3"`, "2:3"},
+		{"explicit", `"seconds":15,"ratio":"21:9"`, "21:9"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _, info, a := testRequest(t, `{"model":"dola2.5","prompt":"海边日落",`+tc.fields+`}`, "https://www.v6k.top")
+			info.OriginModelName, info.UpstreamModelName = "dola2.5", "dola2.5"
+			require.Nil(t, a.ValidateRequestAndSetAction(c, info))
+			body, err := a.BuildRequestBody(c, info)
+			require.NoError(t, err)
+			var payload map[string]any
+			require.NoError(t, common.DecodeJson(body, &payload))
+			require.Equal(t, tc.ratio, payload["ratio"])
+			require.EqualValues(t, 15, payload["seconds"])
+			require.False(t, c.GetBool("v6k_submission_attempted"))
 		})
 	}
 }

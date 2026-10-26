@@ -57,8 +57,17 @@ export type PlaygroundVideoSelection = {
   resolution?: string
 }
 
-const FALLBACK_VIDEO_RATIOS = ['16:9', '9:16', '1:1']
-const SD25_VIDEO_RATIOS = [...FALLBACK_VIDEO_RATIOS, '4:3', '3:4']
+const FALLBACK_VIDEO_RATIOS = [
+  '16:9',
+  '9:16',
+  '1:1',
+  '4:3',
+  '3:4',
+  '2:3',
+  '3:2',
+  '21:9',
+]
+const SD25_VIDEO_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4']
 const SD25_VIDEO_DURATIONS = Array.from({ length: 27 }, (_, index) =>
   String(index + 4)
 )
@@ -68,6 +77,9 @@ const FALLBACK_VIDEO_SIZES: Record<string, string> = {
   '1:1': '1080x1080',
   '4:3': '1440x1080',
   '3:4': '1080x1440',
+  '2:3': '1080x1620',
+  '3:2': '1620x1080',
+  '21:9': '2520x1080',
 }
 
 export function getPlaygroundVideoChoices(
@@ -82,9 +94,9 @@ export function getPlaygroundVideoChoices(
   const parameters = getPlaygroundIntegration(info)?.parameters
   if (parameters) {
     return {
-      aspectRatios: parameters.omit_ratio
-        ? []
-        : (parameters.ratios ?? FALLBACK_VIDEO_RATIOS),
+      aspectRatios: parameters.ratios?.length
+        ? parameters.ratios
+        : FALLBACK_VIDEO_RATIOS,
       durations: parameters.durations?.map(String) ?? [],
       resolutions: parameters.resolutions ?? [],
       manualDuration: !parameters.durations?.length,
@@ -93,7 +105,9 @@ export function getPlaygroundVideoChoices(
   const capability = getCreationVideoCapabilities(model)
   if (capability) {
     return {
-      aspectRatios: capability.aspectRatios,
+      aspectRatios: capability.aspectRatios.length
+        ? capability.aspectRatios
+        : FALLBACK_VIDEO_RATIOS,
       durations: getCreationDurationOptions(model).map(
         (option) => option.value
       ),
@@ -186,7 +200,8 @@ export type PlaygroundVideoRequest = {
 } & (WithoutEstimate<CreationVideoRequestOptions> | Record<string, unknown>)
 
 export type PlaygroundMediaRequest =
-  PlaygroundImageRequest | PlaygroundVideoRequest
+  | PlaygroundImageRequest
+  | PlaygroundVideoRequest
 
 export type PlaygroundMediaResult = {
   mode: Exclude<PlaygroundMediaMode, 'chat'>
@@ -407,12 +422,14 @@ export function buildPlaygroundMediaRequest(
       payload[parameters.duration_field] = Number(
         (selection as PlaygroundVideoSelection).duration
       )
+    const ratioField =
+      parameters.ratio_field || (resolvedMode === 'video' ? 'ratio' : undefined)
     if (
-      !parameters.omit_ratio &&
-      parameters.ratio_field &&
+      (resolvedMode === 'video' || !parameters.omit_ratio) &&
+      ratioField &&
       selection.aspectRatio
     )
-      payload[parameters.ratio_field] = selection.aspectRatio
+      payload[ratioField] = selection.aspectRatio
     if (parameters.resolution_field && selection.resolution)
       payload[contract.resolution_field ?? parameters.resolution_field] =
         parameters.request_resolution ?? selection.resolution

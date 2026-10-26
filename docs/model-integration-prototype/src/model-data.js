@@ -50,6 +50,17 @@ function getMappedEndpoints(model) {
 }
 
 const likelyVideoName = /sd2|sd-2|seedance|h3|video|grok|dola|wan3|sora|veo|kling/i
+const fullVideoRatios = ['16:9', '9:16', '1:1', '4:3', '3:4', '2:3', '3:2', '21:9']
+
+function withVideoRatios(parameters) {
+  if (!parameters) return parameters
+  return {
+    ...parameters,
+    omit_ratio: false,
+    ratio_field: parameters.ratio_field || 'ratio',
+    ratios: parameters.ratios?.length ? parameters.ratios : fullVideoRatios,
+  }
+}
 
 export function getModelKind(model) {
   const name = model.model_name || ''
@@ -80,7 +91,7 @@ export function getModelDoc(model, endpointMap, selectedPath) {
       source: '渠道映射对应的上游模型',
       verified: true,
       mapped: true,
-      parameters: endpoint.parameters,
+      parameters: endpoint.kind === 'video' ? withVideoRatios(endpoint.parameters) : endpoint.parameters,
       sampleSupported: endpoint.type === 'image-generation' || endpoint.type === 'openai' ||
         ['openai-video', 'video-videos', 'video-async', 'video-generations', 'openai-response', 'openai-response-compact', 'anthropic', 'gemini', 'embeddings', 'jina-rerank'].includes(endpoint.type),
       details: endpoint.example_duration ? {
@@ -157,8 +168,7 @@ export function getRequestBody(model, doc) {
       prompt: '海边日落时，人物缓缓走向镜头，画面稳定',
     }
     if (doc.details?.duration) body.duration = doc.details.duration
-    if (doc.details?.ratio) body.ratio = doc.details.ratio
-    else if (doc.details) body.ratio = '16:9'
+    body.ratio = doc.details?.ratio || fullVideoRatios[0]
     if (doc.details?.resolution) body.resolution = doc.details.resolution
     if (doc.details?.imageRequired) {
       body.referenceImages = ['https://cdn.example.com/reference.jpg']
@@ -191,7 +201,7 @@ export function getRequestParams(doc) {
       const range = contiguous ? `${values[0]}–${values.at(-1)}` : values.join('、')
       rows.push([p.duration_field, 'integer', '按模型', range ? `支持时长：${range} 秒` : '时长范围未公布，请以该模型备注和上游校验为准'])
     }
-    if (p.ratio_field) rows.push([p.ratio_field, 'string', '否', p.ratios?.length ? `支持比例：${p.ratios.join('、')}` : '未公布可选比例，示例默认不提交；请以上游要求为准'])
+    if (p.ratio_field) rows.push([p.ratio_field, 'string', doc.kind === 'video' ? '是' : '否', p.ratios?.length ? `支持比例：${p.ratios.join('、')}` : '请显式填写比例，例如 16:9'])
     if (p.resolution_field) rows.push([p.resolution_field, 'string', '按模型', `支持分辨率：${(p.resolutions || []).join('、')}`])
     for (const [field, count, label] of [[p.image_field, p.max_images, '图片'], [p.video_field, p.max_videos, '视频'], [p.audio_field, p.max_audios, '音频']]) {
       if (field && count) rows.push([field, field.endsWith('_url') ? 'string' : 'string[]', field === p.image_field && p.min_images ? '是' : '否', `最多 ${count} 个可公开访问的${label} URL`])
@@ -212,7 +222,7 @@ export function getRequestParams(doc) {
       ['model', 'string', '是', '完整的公开视频模型 ID'],
       ['prompt', 'string', '是', '视频内容、动作与镜头描述'],
       ['duration', 'integer', '按模型', '单位为秒；以该模型参数范围为准'],
-      ['ratio', 'string', '否', '例如 16:9、9:16'],
+      ['ratio', 'string', '是', `支持比例：${fullVideoRatios.join('、')}`],
       ['resolution', 'string', '按模型', '仅发送该模型支持的分辨率'],
       ['referenceImages', 'string[]', '按模型', '需要时传可公开访问的图片 URL'],
     ]

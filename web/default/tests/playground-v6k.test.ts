@@ -69,6 +69,7 @@ describe('V6K unified video request', () => {
       model: 'dola2.0',
       prompt: '山间日出',
       seconds: 15,
+      ratio: '16:9',
       resolution: '720p',
     })
   })
@@ -117,10 +118,10 @@ describe('ZH new video model catalog contracts', () => {
       const choices = getPlaygroundVideoChoices(name,selected)
       expect(choices.durations).toContain(duration)
       expect(choices.resolutions).toContain(resolution)
-      expect(choices.aspectRatios).toEqual([])
+      expect(choices.aspectRatios).toEqual(['16:9', '9:16', '1:1', '4:3', '3:4', '2:3', '3:2', '21:9'])
       const request = buildPlaygroundMediaRequest(name,[message],'video','auto',{}, { duration, aspectRatio:'16:9',resolution },selected)
       expect(request).toMatchObject({ model:name,seconds:Number(duration),resolution })
-      expect(request).not.toHaveProperty('ratio')
+      expect(request).toHaveProperty('ratio', '16:9')
       expect(request).not.toHaveProperty('duration')
     })
   }
