@@ -1,9 +1,25 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { normalizeCatalog, resolveSelectedModel } from '../src/model-catalog.js'
 import { getAllModelDocs } from '../src/all-model-docs.js'
 import { getCatalogHttpError, getPricingRequestHeaders } from '../src/catalog-auth.js'
 import { getCodeSample, getModelDoc, getModelKind, getRequestBody, getRequestParams } from '../src/model-data.js'
+
+test('ZH model documentation keeps per-model references and explains unpublished ratios', () => {
+  const specs = JSON.parse(readFileSync(new URL('../../../common/v6k_video_models.json', import.meta.url), 'utf8'))
+  for (const name of ['TTTseadanco2.5/480', 'XXseadanco2.5-720', 'dola2.5', 'wan3.M']) {
+    const model = {model_name: name, mapped_endpoints: [{type: 'openai-video', kind: 'video', path: '/v1/videos', query_path: '/v1/videos/{task_id}', parameters: specs[name]}]}
+    const doc = getModelDoc(model, {})
+    const rows = getRequestParams(doc)
+    assert.match(rows.find(row => row[0] === 'ratio')[3], /未公布可选比例/)
+    assert.equal(rows.some(row => row[0] === 'videos'), specs[name].max_videos > 0)
+    assert.match(rows.find(row => row[0] === 'images')[3], new RegExp(`最多 ${specs[name].max_images} `))
+    assert.equal(getRequestBody(model, doc).model, name)
+    assert.equal(getRequestBody(model, doc).seconds, specs[name].durations[0])
+    assert.equal(getRequestBody(model, doc).ratio, undefined)
+  }
+})
 
 test('live video note parameters drive limits, examples and bulk copied documentation', () => {
   const model = { model_name: 'Seedance2.5:720（条）', mapped_endpoints: [{

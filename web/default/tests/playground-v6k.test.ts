@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import {
   buildPlaygroundMediaRequest,
   getPlaygroundVideoChoices,
@@ -97,4 +98,30 @@ describe('V6K unified video request', () => {
       )
     ).toHaveProperty('seconds', 23)
   })
+})
+
+
+describe('ZH new video model catalog contracts', () => {
+  type Parameters = NonNullable<NonNullable<PlaygroundModelInfo['model']['mapped_endpoints']>[number]['parameters']>
+  const parameters = JSON.parse(readFileSync(new URL('../../../common/v6k_video_models.json', import.meta.url), 'utf8')) as Record<string, Parameters>
+  for (const [name, duration, resolution] of [
+    ['Cseadanco2.0-1','15','720p'], ['Cseadanco2.0-fast','15','720p'], ['Cseadanco2.0-mini','15','720p'],
+    ['Cseadanco2.5-720','30','720p'], ['TTTseadanco2.5/480','30','480p'], ['TTTseadanco2.5/720','30','720p'],
+    ['XXseadanco2.5-1080','30','1080p'], ['XXseadanco2.5-480','30','480p'], ['XXseadanco2.5-720','30','720p'],
+    ['dola2.5','15','720p'], ['wan3.M','30','480p'],
+  ]) {
+    it(`uses the exact contract for ${name}`, () => {
+      const selected = structuredClone(info)
+      selected.model.model_name = name
+      selected.model.mapped_endpoints![0].parameters = parameters[name]
+      const choices = getPlaygroundVideoChoices(name,selected)
+      expect(choices.durations).toContain(duration)
+      expect(choices.resolutions).toContain(resolution)
+      expect(choices.aspectRatios).toEqual([])
+      const request = buildPlaygroundMediaRequest(name,[message],'video','auto',{}, { duration, aspectRatio:'16:9',resolution },selected)
+      expect(request).toMatchObject({ model:name,seconds:Number(duration),resolution })
+      expect(request).not.toHaveProperty('ratio')
+      expect(request).not.toHaveProperty('duration')
+    })
+  }
 })

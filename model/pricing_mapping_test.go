@@ -11,6 +11,27 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestV6KZHNewModelsExposeVideoContractsWithoutInternalFlags(t *testing.T) {
+	count := 0
+	for _, id := range common.V6KVideoModelIDs() {
+		parameters := common.GetV6KValidatedVideoParameters(id)
+		if parameters == nil {
+			continue
+		}
+		count++
+		endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeV6K, id, id, nil)
+		require.Len(t, endpoints, 1)
+		require.Equal(t, "video", endpoints[0].Kind)
+		require.Equal(t, "/v1/videos", endpoints[0].Path)
+		require.Equal(t, "/v1/videos/{task_id}", endpoints[0].QueryPath)
+		require.Equal(t, parameters, endpoints[0].Parameters)
+		encoded, err := common.Marshal(endpoints)
+		require.NoError(t, err)
+		require.NotContains(t, string(encoded), "validate_request")
+	}
+	require.Equal(t, 11, count)
+}
+
 func TestEnabledAbilityIncludesChannelMapping(t *testing.T) {
 	database, err := gorm.Open(sqlite.Open(t.TempDir()+"/pricing-mapping.db"), &gorm.Config{})
 	require.NoError(t, err)

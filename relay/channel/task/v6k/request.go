@@ -12,6 +12,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -49,6 +50,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if err != nil {
 		return invalid(err)
 	}
+	uploadCounts := map[string]int{}
 	if strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
 		form, err := common.ParseMultipartFormReusable(c)
 		if err != nil {
@@ -65,7 +67,15 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 			if len(files) > 0 {
 				c.Set("v6k_has_uploads", true)
 			}
+			uploadCounts[canonical] += len(files)
 		}
+	}
+	upstreamModel := info.UpstreamModelName
+	if upstreamModel == "" {
+		upstreamModel, _ = payload["model"].(string)
+	}
+	if err := validateModelCapabilities(upstreamModel, payload, uploadCounts); err != nil {
+		return invalid(err)
 	}
 	seconds, _ := payload["seconds"].(int)
 	if seconds == 0 {
@@ -97,6 +107,55 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	info.Action = constant.TaskActionTextGenerate
 	if len(request.Images)+len(request.Videos)+len(request.Audios) > 0 || request.InputReference != "" || c.GetBool("v6k_has_uploads") {
 		info.Action = constant.TaskActionGenerate
+	}
+	return nil
+}
+
+func validateModelCapabilities(modelName string, payload map[string]any, uploads map[string]int) error {
+	parameters := common.GetV6KValidatedVideoParameters(modelName)
+	if parameters == nil {
+		return nil
+	}
+	if seconds, present := payload["seconds"].(int); present && len(parameters.Durations) > 0 {
+		if !slices.Contains(parameters.Durations, seconds) {
+			return fmt.Errorf("%s does not support seconds=%d", modelName, seconds)
+		}
+	}
+	resolution, _ := payload["resolution"].(string)
+	if resolution == "" {
+		if size, _ := payload["size"].(string); size != "" {
+			width, height, err := sizeDimensions(size)
+			if err != nil {
+				return err
+			}
+			resolution = fmt.Sprintf("%dp", min(width, height))
+		}
+	}
+	if resolution != "" && len(parameters.Resolutions) > 0 {
+		resolution = billing_setting.NormalizeVideoResolution(resolution)
+		if !common.StringsContains(parameters.Resolutions, resolution) {
+			return fmt.Errorf("%s does not support resolution=%s", modelName, resolution)
+		}
+	}
+	images, _ := payload["images"].([]any)
+	videos, _ := payload["videos"].([]any)
+	audios, _ := payload["audios"].([]any)
+	imageCount := len(images) + uploads["images"] + uploads["input_reference"]
+	if payload["input_reference"] != nil {
+		imageCount++
+	}
+	for _, limit := range []struct {
+		field   string
+		count   int
+		maximum int
+	}{
+		{"images", imageCount, parameters.MaxImages},
+		{"videos", len(videos) + uploads["video"], parameters.MaxVideos},
+		{"audios", len(audios) + uploads["audio"], parameters.MaxAudios},
+	} {
+		if limit.count > limit.maximum {
+			return fmt.Errorf("%s supports at most %d %s references", modelName, limit.maximum, limit.field)
+		}
 	}
 	return nil
 }

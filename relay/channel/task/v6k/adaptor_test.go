@@ -190,3 +190,60 @@ func TestAmbiguousPostIsNotResubmitted(t *testing.T) {
 	require.Error(t, err)
 	require.EqualValues(t, 1, calls.Load())
 }
+
+func TestZHNewModelsForwardExactIDsAndMaximumPublishedReferences(t *testing.T) {
+	for _, id := range common.V6KVideoModelIDs() {
+		p := common.GetV6KValidatedVideoParameters(id)
+		if p == nil {
+			continue
+		}
+		t.Run(id, func(t *testing.T) {
+			payload := map[string]any{"model": id, "prompt": "demo", "seconds": p.Durations[len(p.Durations)-1], "resolution": p.Resolutions[0]}
+			for field, count := range map[string]int{"images": p.MaxImages, "videos": p.MaxVideos, "audios": p.MaxAudios} {
+				refs := make([]string, count)
+				for index := range refs {
+					refs[index] = fmt.Sprintf("https://cdn.example/%s/%d", field, index)
+				}
+				payload[field] = refs
+			}
+			data, err := common.Marshal(payload)
+			require.NoError(t, err)
+			c, _, info, a := testRequest(t, string(data), "https://www.v6k.top")
+			info.OriginModelName, info.UpstreamModelName = id, id
+			require.Nil(t, a.ValidateRequestAndSetAction(c, info))
+			body, err := a.BuildRequestBody(c, info)
+			require.NoError(t, err)
+			var forwarded map[string]any
+			require.NoError(t, common.DecodeJson(body, &forwarded))
+			require.Equal(t, id, forwarded["model"])
+			require.EqualValues(t, p.Durations[len(p.Durations)-1], forwarded["seconds"])
+			require.NotContains(t, forwarded, "ratio")
+			require.NotContains(t, forwarded, "duration")
+		})
+	}
+}
+
+func TestZHNewModelCapabilityErrorsAreRejectedBeforeSubmission(t *testing.T) {
+	for _, tc := range []struct{ id, fields string }{
+		{"Cseadanco2.0-fast", `"seconds":30,"resolution":"720p"`},
+		{"Cseadanco2.5-720", `"seconds":31,"resolution":"720p"`},
+		{"XXseadanco2.5-1080", `"seconds":5,"resolution":"720p"`},
+		{"TTTseadanco2.5/480", `"seconds":5,"videos":["https://cdn.example/v.mp4"]`},
+		{"wan3.M", `"seconds":5,"resolution":"1080p"`},
+		{"dola2.5", `"seconds":6`},
+		{"dola2.5", `"seconds":5,"audios":["https://cdn.example/a.mp3"]`},
+	} {
+		t.Run(tc.id+tc.fields, func(t *testing.T) {
+			c, _, info, a := testRequest(t, `{"model":"`+tc.id+`","prompt":"demo",`+tc.fields+`}`, "https://www.v6k.top")
+			info.UpstreamModelName = tc.id
+			require.NotNil(t, a.ValidateRequestAndSetAction(c, info))
+			require.False(t, c.GetBool("v6k_submission_attempted"))
+		})
+	}
+	payload := map[string]any{"seconds": 5, "images": make([]any, 9), "input_reference": "https://cdn.example/first.png"}
+	require.ErrorContains(t, validateModelCapabilities("Cseadanco2.0-1", payload, nil), "images")
+	require.ErrorContains(t, validateModelCapabilities("Cseadanco2.5-720", map[string]any{"images": make([]any, 30)}, map[string]int{"images": 1}), "images")
+	require.ErrorContains(t, validateModelCapabilities("TTTseadanco2.5/720", map[string]any{}, map[string]int{"video": 1}), "videos")
+	// Published hints for previously integrated models remain hints.
+	require.NoError(t, validateModelCapabilities("JJseadanco2.5", map[string]any{"seconds": 3600}, nil))
+}

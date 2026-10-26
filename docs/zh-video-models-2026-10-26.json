@@ -1,0 +1,105 @@
+{
+  "source": "https://www.v6k.top/api/pricing",
+  "retrieved_on": "2026-10-26",
+  "currency": "USD",
+  "upstream_usd_exchange_rate": 7.3,
+  "merge_only": true,
+  "models": [
+    {
+      "id": "Cseadanco2.0-1",
+      "description": "9图3音3视/720P/5-15秒/原生不卡脸稳定50-70%",
+      "tags": "9图3音3视/720P/5-15秒/原生不卡脸稳定50-70%"
+    },
+    {
+      "id": "Cseadanco2.0-fast",
+      "description": "9图3音3视/720P/5-15秒/原生不卡脸",
+      "tags": "9图3音3视/720P/5-15秒/原生不卡脸"
+    },
+    {
+      "id": "Cseadanco2.0-mini",
+      "description": "9图3音3视/720P/5-15秒/原生不卡脸",
+      "tags": "9图3音3视/720P/5-15秒/原生不卡脸"
+    },
+    {
+      "id": "Cseadanco2.5-720",
+      "description": "30图10音10视/720P/5-30秒/原生不卡脸",
+      "tags": "30图10音10视/720P/5-30秒/原生不卡脸"
+    },
+    {
+      "id": "TTTseadanco2.5/480",
+      "description": "30图10音/480P/5-30秒原生不卡脸全天跑稳定",
+      "tags": "30图10音/480P/5-30秒原生不卡脸全天跑稳定"
+    },
+    {
+      "id": "TTTseadanco2.5/720",
+      "description": "30图10音/720P/5-30秒原生不卡脸全天跑稳定",
+      "tags": "30图10音/720P/5-30秒原生不卡脸全天跑稳定"
+    },
+    {
+      "id": "XXseadanco2.5-1080",
+      "description": "30图10音10视/1080P/5-30秒/原生不卡脸全天稳定高并发",
+      "tags": "30图10音10视/1080P/5-30秒/原生不卡脸全天稳定高并发"
+    },
+    {
+      "id": "XXseadanco2.5-480",
+      "description": "30图10音10视/480P/5-30秒/原生不卡脸全天稳定高并发",
+      "tags": "30图10音10视/480P/5-30秒/原生不卡脸全天稳定高并发"
+    },
+    {
+      "id": "XXseadanco2.5-720",
+      "description": "30图10音10视/720P/5-30秒/原生不卡脸全天稳定高并发",
+      "tags": "30图10音10视/720P/5-30秒/原生不卡脸全天稳定高并发"
+    },
+    {
+      "id": "dola2.5",
+      "description": "9图/720P/5-10-15/",
+      "tags": "9图/720P/5-10-15/"
+    },
+    {
+      "id": "wan3.M",
+      "description": "10图5音/480P/720P//5-30秒/30积分/稳定",
+      "tags": "10图5音/480P/720P//5-30秒/30积分/稳定"
+    }
+  ],
+  "option_updates": {
+    "ModelPrice": {
+      "Cseadanco2.0-1": 0.205479452055,
+      "Cseadanco2.0-fast": 0.383561643836,
+      "Cseadanco2.0-mini": 0.205479452055,
+      "Cseadanco2.5-720": 0.684931506849,
+      "TTTseadanco2.5/480": 0.684931506849,
+      "TTTseadanco2.5/720": 0.684931506849,
+      "XXseadanco2.5-1080": 1.232876712329,
+      "XXseadanco2.5-480": 0.821917808219,
+      "XXseadanco2.5-720": 0.958904109589,
+      "dola2.5": 0.13698630137,
+      "wan3.M": 0.41095890411
+    },
+    "billing_setting.video_billing_mode": {
+      "Cseadanco2.0-1": "fixed",
+      "Cseadanco2.0-fast": "fixed",
+      "Cseadanco2.0-mini": "fixed",
+      "Cseadanco2.5-720": "fixed",
+      "TTTseadanco2.5/480": "fixed",
+      "TTTseadanco2.5/720": "fixed",
+      "XXseadanco2.5-1080": "fixed",
+      "XXseadanco2.5-480": "fixed",
+      "XXseadanco2.5-720": "fixed",
+      "dola2.5": "fixed",
+      "wan3.M": "fixed"
+    },
+    "billing_setting.billing_mode": {
+      "Cseadanco2.0-1": "ratio",
+      "Cseadanco2.0-fast": "ratio",
+      "Cseadanco2.0-mini": "ratio",
+      "Cseadanco2.5-720": "ratio",
+      "TTTseadanco2.5/480": "ratio",
+      "TTTseadanco2.5/720": "ratio",
+      "XXseadanco2.5-1080": "ratio",
+      "XXseadanco2.5-480": "ratio",
+      "XXseadanco2.5-720": "ratio",
+      "dola2.5": "ratio",
+      "wan3.M": "ratio"
+    }
+  }
+}

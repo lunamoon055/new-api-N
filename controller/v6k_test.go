@@ -37,6 +37,26 @@ func TestV6KChannelTestUsesUnifiedProtocolForCollidingModelNames(t *testing.T) {
 	require.Empty(t, request.Ratio)
 }
 
+func TestV6KZHNewModelsUseTheirOwnTestDefaults(t *testing.T) {
+	channel := &model.Channel{Type: constant.ChannelTypeV6K}
+	count := 0
+	for _, id := range common.V6KVideoModelIDs() {
+		p := common.GetV6KValidatedVideoParameters(id)
+		if p == nil {
+			continue
+		}
+		count++
+		endpoint, path, _ := resolveChannelTestEndpoint(channel, id, "")
+		require.Equal(t, "openai-video", endpoint)
+		require.Equal(t, "/v1/videos", path)
+		request := buildTestRequest(id, endpoint, channel, false).(relaycommon.TaskSubmitReq)
+		require.Equal(t, p.Durations[0], request.Duration)
+		require.Equal(t, p.Resolutions[0], request.Resolution)
+		require.Empty(t, request.Ratio)
+	}
+	require.Equal(t, 11, count)
+}
+
 func TestV6KContentProxyKeepsTaskCredentialAndSupportsRangeAndHead(t *testing.T) {
 	setupVideoProxyControllerTestDB(t)
 	service.InitHttpClient()

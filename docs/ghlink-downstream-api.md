@@ -102,6 +102,14 @@ curl "$GHLINK_BASE_URL/v1/models" \
 
 视频任务是异步的：创建请求只代表任务已受理，必须保存 `task_id` 并轮询查询。
 
+### 3.1.1 ZH 新增视频模型（2026-10-26）
+
+ZH 本轮新增 `Cseadanco2.0-1`、`Cseadanco2.0-fast`、`Cseadanco2.0-mini`、`Cseadanco2.5-720`、`TTTseadanco2.5/480`、`TTTseadanco2.5/720`、`XXseadanco2.5-1080`、`XXseadanco2.5-480`、`XXseadanco2.5-720`、`dola2.5`、`wan3.M`，均使用 `POST /v1/videos`，并按次计费。
+
+这些 ID 使用 `seconds`、`resolution`、`images`、`audios`、`videos`；已有的 `duration` 和 `referenceImages/referenceAudios/referenceVideos` 别名也可由 V6K 适配器转换。具体时长、分辨率和素材上限见 [ZH/V6K 接入表](./v6k-video-integration.md)，在线文档、模型测试页及下游价格接口从同一份 `mapped_endpoints[].parameters` 读取。
+
+原 9 个公开别名的参数、渠道映射和价格保留，不把 ZH 新模型的能力套用到旧模型。
+
 ### 3.2 图片模型接口参考
 
 本次截图的启用目录只有上述 9 个视频模型。下表是既有图片协议示例，不代表这些模型当前已启用；是否可用以实时 `/v1/models` 为准。

@@ -191,7 +191,7 @@ export function getRequestParams(doc) {
       const range = contiguous ? `${values[0]}–${values.at(-1)}` : values.join('、')
       rows.push([p.duration_field, 'integer', '按模型', range ? `支持时长：${range} 秒` : '时长范围未公布，请以该模型备注和上游校验为准'])
     }
-    if (p.ratio_field) rows.push([p.ratio_field, 'string', '否', `支持比例：${(p.ratios || []).join('、')}`])
+    if (p.ratio_field) rows.push([p.ratio_field, 'string', '否', p.ratios?.length ? `支持比例：${p.ratios.join('、')}` : '未公布可选比例，示例默认不提交；请以上游要求为准'])
     if (p.resolution_field) rows.push([p.resolution_field, 'string', '按模型', `支持分辨率：${(p.resolutions || []).join('、')}`])
     for (const [field, count, label] of [[p.image_field, p.max_images, '图片'], [p.video_field, p.max_videos, '视频'], [p.audio_field, p.max_audios, '音频']]) {
       if (field && count) rows.push([field, field.endsWith('_url') ? 'string' : 'string[]', field === p.image_field && p.min_images ? '是' : '否', `最多 ${count} 个可公开访问的${label} URL`])

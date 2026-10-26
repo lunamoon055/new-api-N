@@ -53,7 +53,7 @@ func TestV6KPollScheduleAndPublishedHints(t *testing.T) {
 	now := time.Now().Unix()
 	scheduleV6KPollRetry(task, "100")
 	require.GreaterOrEqual(t, task.PrivateData.NextPollAt, now+100)
-	require.Len(t, common.V6KVideoModelIDs(), 34)
+	require.Len(t, common.V6KVideoModelIDs(), 44)
 	require.Len(t, common.GetV6KVideoParameters("JJseadanco2.5").Durations, 26)
 	require.Equal(t, []int{15}, common.GetV6KVideoParameters("dola2.0").Durations)
 	require.Equal(t, []int{5, 10, 15}, common.GetV6KVideoParameters("dola2.5").Durations)
