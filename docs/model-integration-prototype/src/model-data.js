@@ -88,10 +88,10 @@ export function getModelDoc(model, endpointMap, selectedPath) {
       method: endpoint.method || 'POST',
       path,
       queryPath: endpoint.query_path?.replace('{model}', encodeURIComponent(name)),
-      source: '渠道映射对应的上游模型',
+      source: endpoint.documentation_fields ? '本站统一视频接口' : '渠道映射对应的上游模型',
       verified: true,
       mapped: true,
-      parameters: endpoint.kind === 'video' ? withVideoRatios(endpoint.parameters) : endpoint.parameters,
+      parameters: endpoint.kind === 'video' ? withVideoRatios(endpoint.documentation_fields || endpoint.parameters) : endpoint.parameters,
       sampleSupported: endpoint.type === 'image-generation' || endpoint.type === 'openai' ||
         ['openai-video', 'video-videos', 'video-async', 'video-generations', 'openai-response', 'openai-response-compact', 'anthropic', 'gemini', 'embeddings', 'jina-rerank'].includes(endpoint.type),
       details: endpoint.example_duration ? {

@@ -13,4 +13,7 @@ type ModelIntegrationEndpoint struct {
 	ExampleResolution    string                      `json:"example_resolution,omitempty"`
 	ExampleImageRequired bool                        `json:"example_image_required,omitempty"`
 	Parameters           *ModelIntegrationParameters `json:"parameters,omitempty"`
+	// DocumentationFields is a stable gateway schema for adapters that accept
+	// these aliases. Parameters remains the live relay/Playground contract.
+	DocumentationFields *ModelIntegrationParameters `json:"documentation_fields,omitempty"`
 }

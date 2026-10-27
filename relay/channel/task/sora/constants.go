@@ -1,6 +1,7 @@
 package sora
 
 var ModelList = []string{
+	"005系列/sd2.5(30-10-10/5-30秒/720P)",
 	"w3-c1",
 	"gpt-image-2",
 	"gpt-image-2.5",

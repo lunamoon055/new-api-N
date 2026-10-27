@@ -6,6 +6,20 @@ import { getAllModelDocs } from '../src/all-model-docs.js'
 import { getCatalogHttpError, getPricingRequestHeaders } from '../src/catalog-auth.js'
 import { getCodeSample, getModelDoc, getModelKind, getRequestBody, getRequestParams } from '../src/model-data.js'
 
+test('public documentation fields survive a provider mapping change without changing live fields', () => {
+  const parameters = {duration_field:'seconds', durations:[5,10,30], ratio_field:'ratio', ratios:['16:9'], resolution_field:'resolution', resolutions:['720p'], image_field:'images', audio_field:'audios', max_images:30, max_videos:0, max_audios:10}
+  const documentation_fields = {...parameters, duration_field:'duration', image_field:'referenceImages', video_field:'referenceVideos', audio_field:'referenceAudios'}
+  const model = {model_name:'public-video', mapped_endpoints:[{type:'openai-video', kind:'video', path:'/v1/videos', parameters, documentation_fields}]}
+  const doc = getModelDoc(model,{})
+  const body = getRequestBody(model,doc)
+  assert.equal(body.duration,5)
+  assert.equal(body.seconds,undefined)
+  assert.equal(body.model,'public-video')
+  assert.ok(getRequestParams(doc).some(row=>row[0]==='referenceAudios'))
+  assert.equal(model.mapped_endpoints[0].parameters.duration_field,'seconds')
+  assert.match(getAllModelDocs({models:[model],endpoints:{}}),/referenceAudios/)
+})
+
 test('ZH model documentation fills unpublished ratios and retains per-model references', () => {
   const specs = JSON.parse(readFileSync(new URL('../../../common/v6k_video_models.json', import.meta.url), 'utf8'))
   for (const name of ['TTTseadanco2.5/480', 'XXseadanco2.5-720', 'dola2.5', 'wan3.M']) {

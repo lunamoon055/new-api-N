@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import type { IntegrationParameters, PricingModel } from '../types'
 import type { SupportedParameter } from './mock-stats'
 import { getModelEndpointPreset } from './model-endpoint-presets'
+import { getVideoDocumentationParameters } from './video-documentation'
 
 type VideoParameters = {
   parameters: SupportedParameter[]
@@ -73,9 +74,7 @@ export function buildVideoSupportedParameters(
       descriptionKey: 'Text description of the desired video',
     },
   ]
-  const p = model.mapped_endpoints?.find(
-    (endpoint) => endpoint.kind === 'video' && endpoint.parameters
-  )?.parameters
+  const p = getVideoDocumentationParameters(model)
   if (!p) return { parameters, hasDetails: false }
 
   const duration = durationParameter(p)

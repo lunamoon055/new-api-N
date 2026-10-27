@@ -86,6 +86,11 @@ func normalizeXJZVideoPayload(source map[string]any, modelName string) (map[stri
 	if !ok {
 		return nil, 0, 0, 0, 0, fmt.Errorf("unsupported XJZ video model %q", modelName)
 	}
+	return normalizeVideoPayloadForSpec(source, modelName, spec)
+}
+
+// Shared validation; each provider selects its own exact spec and wire format.
+func normalizeVideoPayloadForSpec(source map[string]any, modelName string, spec xjzVideoSpec) (map[string]any, int, int, int, int, error) {
 	if source == nil {
 		return nil, 0, 0, 0, 0, fmt.Errorf("request must be a JSON object")
 	}

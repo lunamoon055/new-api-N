@@ -61,6 +61,7 @@ export type PricingModel = {
     example_resolution?: string
     example_image_required?: boolean
     parameters?: IntegrationParameters
+    documentation_fields?: IntegrationParameters
   }>
   key?: string
   group_ratio?: Record<string, number>

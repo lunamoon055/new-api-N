@@ -107,6 +107,11 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 		ImageField: "referenceImages", VideoField: "referenceVideos", AudioField: "referenceAudios", MaxImages: 9, MaxVideos: 3, MaxAudios: 3,
 	}
 	switch {
+	case name == "005系列/sd2.5(30-10-10/5-30秒/720p)":
+		// Suanliai's exact 005 model, catalog and /docs checked 2026-10-27.
+		p.Durations = integrationDurationRange(5, 30)
+		p.Ratios = nil // Unpublished: use the operator-approved full ratio menu.
+		p.MaxImages, p.MaxVideos, p.MaxAudios = 30, 10, 10
 	case name == "w3-c1":
 		// Meaicc's public catalog and creation form, checked 2026-10-27.
 		p.Durations = integrationDurationRange(5, 30)

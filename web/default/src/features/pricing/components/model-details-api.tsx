@@ -58,7 +58,12 @@ import {
   buildVideoSupportedParameters,
   isVideoModel,
 } from '../lib/video-parameters'
-import type { PricingEndpoint, PricingModel } from '../types'
+import type {
+  IntegrationParameters,
+  PricingEndpoint,
+  PricingModel,
+} from '../types'
+import { buildVideoDocumentationBody } from '../lib/video-documentation'
 
 // ---------------------------------------------------------------------------
 // Code-sample registry
@@ -96,6 +101,7 @@ type SampleContext = {
   exampleDuration?: number
   exampleResolution?: string
   exampleImageRequired?: boolean
+  videoParameters?: IntegrationParameters
 }
 
 type DisplayEndpoint = {
@@ -111,6 +117,7 @@ type DisplayEndpoint = {
   exampleDuration?: number
   exampleResolution?: string
   exampleImageRequired?: boolean
+  videoParameters?: IntegrationParameters
 }
 
 function endpointKey(endpoint: DisplayEndpoint): string {
@@ -519,18 +526,23 @@ function buildVideoSample(lang: Lang, ctx: SampleContext): string {
     modelLower.startsWith('004系列/')
 
   // 构建请求体
-  const body: Record<string, unknown> = {
+  let body: Record<string, unknown> = {
     model: ctx.modelName,
     prompt,
   }
 
   // 为 videos API 格式添加特定参数
   if (ctx.mapped) {
-    if (ctx.exampleDuration) body.duration = ctx.exampleDuration
-    if (ctx.exampleResolution) body.resolution = ctx.exampleResolution
-    if (ctx.exampleImageRequired) {
-      body.referenceImages = ['https://cdn.example.com/reference.jpg']
-    }
+    body = buildVideoDocumentationBody(
+      ctx.modelName,
+      prompt,
+      ctx.videoParameters,
+      {
+        duration: ctx.exampleDuration,
+        resolution: ctx.exampleResolution,
+        imageRequired: ctx.exampleImageRequired,
+      }
+    )
   } else if (isVideosApi) {
     body.ratio = '16:9'
     body.resolution = '720p'
@@ -659,6 +671,7 @@ function CodeSamplesSection(props: {
           exampleDuration: endpoint.example_duration,
           exampleResolution: endpoint.example_resolution,
           exampleImageRequired: endpoint.example_image_required,
+          videoParameters: endpoint.documentation_fields ?? endpoint.parameters,
         })
       )
     }
@@ -767,6 +780,7 @@ function CodeSamplesSection(props: {
     exampleDuration: activeEndpoint.exampleDuration,
     exampleResolution: activeEndpoint.exampleResolution,
     exampleImageRequired: activeEndpoint.exampleImageRequired,
+    videoParameters: activeEndpoint.videoParameters,
   })
 
   return (

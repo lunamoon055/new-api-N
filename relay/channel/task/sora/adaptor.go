@@ -164,6 +164,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if isXJZVideoRequest(info) {
 		return validateXJZVideoJSONRequest(c, info)
 	}
+	if isSuanliai005Request(info) {
+		return validateSuanliai005Request(c, info)
+	}
 	if taskErr := relaycommon.ValidateMultipartDirect(c, info); taskErr != nil {
 		return taskErr
 	}
@@ -264,6 +267,10 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 	if info.ChannelMeta != nil {
 		upstreamModelName = info.UpstreamModelName
 	}
+	if isSuanliai005Request(info) {
+		setUpstreamEndpoint(info, "/v1/videos")
+		return fmt.Sprintf("%s/v1/videos", baseURL), nil
+	}
 	if isMeaiccWanModel(a.baseURL, upstreamModelName) || isMeaiccNestedSeedanceModel(a.baseURL, upstreamModelName) {
 		setUpstreamEndpoint(info, "/v1/videos")
 		return fmt.Sprintf("%s/v1/videos", baseURL), nil
@@ -344,6 +351,9 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	contentType := c.GetHeader("Content-Type")
 
 	if strings.HasPrefix(contentType, "application/json") {
+		if isSuanliai005Request(info) {
+			return buildSuanliai005RequestBody(c, info)
+		}
 		if isAsyncImageGenerationsPath(info.RequestURLPath) || getTaskAction(info) == constant.TaskActionImageGenerate {
 			newBody, err := buildAsyncImageRequestBody(cachedBody, info.OriginModelName, info.UpstreamModelName)
 			if err != nil {

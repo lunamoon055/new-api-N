@@ -11,6 +11,58 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestSuanliai005MappedAliasExposesVideoContract(t *testing.T) {
+	upstream := "005系列/sd2.5(30-10-10/5-30秒/720P)"
+	metadata := map[string]*Model{upstream: {Endpoints: `{"openai":{"path":"/v1/chat/completions"}}`}}
+	endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, upstream, "Seedance2.5:720-S（条）", metadata)
+	require.Len(t, endpoints, 1)
+	require.Equal(t, "/v1/videos", endpoints[0].Path)
+	require.Equal(t, "/v1/videos/{task_id}", endpoints[0].QueryPath)
+	require.Equal(t, "video", endpoints[0].Kind)
+	p := endpoints[0].Parameters
+	require.Equal(t, 5, p.Durations[0])
+	require.Equal(t, 30, p.Durations[len(p.Durations)-1])
+	require.Equal(t, []string{"720p"}, p.Resolutions)
+	require.Equal(t, common.DefaultVideoAspectRatios(), p.Ratios)
+	require.Equal(t, 30, p.MaxImages)
+	require.Equal(t, 10, p.MaxVideos)
+	require.Equal(t, 10, p.MaxAudios)
+	require.Equal(t, p, endpoints[0].DocumentationFields)
+	require.Nil(t, common.GetVideoIntegrationParameters("005系列/sd2.5-other"))
+}
+
+func TestVideoDocumentationFieldsStayStableAcrossProviderMappings(t *testing.T) {
+	for _, tc := range []struct {
+		channel  int
+		upstream string
+	}{
+		{constant.ChannelTypeV6K, "TTTseadanco2.5/720"},
+		{constant.ChannelTypeZongheng, "XXseadanco2.0M"},
+		{constant.ChannelTypeOpenAI, "005系列/sd2.5(30-10-10/5-30秒/720P)"},
+		{constant.ChannelTypeOpenAI, "sd-2.5-c1"},
+		{constant.ChannelTypeOpenAI, "w3-c1"},
+	} {
+		endpoints := getPricingIntegrationEndpointsForModels(tc.channel, tc.upstream, "public-video", nil)
+		require.NotEmpty(t, endpoints)
+		ep := endpoints[0]
+		require.Equal(t, "/v1/videos", ep.Path)
+		doc := ep.DocumentationFields
+		require.NotNil(t, doc, tc.upstream)
+		require.Equal(t, "duration", doc.DurationField)
+		require.Equal(t, "ratio", doc.RatioField)
+		require.Equal(t, "resolution", doc.ResolutionField)
+		require.Equal(t, "referenceImages", doc.ImageField)
+		require.Equal(t, "referenceVideos", doc.VideoField)
+		require.Equal(t, "referenceAudios", doc.AudioField)
+		require.Equal(t, ep.Parameters.Durations, doc.Durations)
+		require.Equal(t, ep.Parameters.MaxAudios, doc.MaxAudios)
+		if tc.channel == constant.ChannelTypeV6K {
+			require.Equal(t, "seconds", ep.Parameters.DurationField)
+			require.Equal(t, "audios", ep.Parameters.AudioField)
+		}
+	}
+}
+
 func TestV6KZHNewModelsExposeVideoContractsWithoutInternalFlags(t *testing.T) {
 	count := 0
 	for _, id := range common.V6KVideoModelIDs() {

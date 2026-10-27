@@ -110,6 +110,7 @@ func pricingVideoEndpoint(modelName string) *PricingMappedEndpoint {
 	case strings.HasPrefix(name, "官转"):
 		path = "/v1/video/generations"
 	case name == "grok-imagine-video-1.5",
+		name == "005系列/sd2.5(30-10-10/5-30秒/720p)",
 		name == "w3-c1",
 		name == "sd-mini",
 		name == "sd-2-c1",
@@ -178,6 +179,30 @@ func getPricingIntegrationEndpoints(channelType int, modelName string, metadata 
 }
 
 func getPricingIntegrationEndpointsForModels(channelType int, modelName, originalModelName string, metadata map[string]*Model) []PricingMappedEndpoint {
+	endpoints := resolvePricingIntegrationEndpoints(channelType, modelName, originalModelName, metadata)
+	// Only adapters with verified public aliases receive stable documentation
+	// fields. Native/vendor-specific protocols retain their own documentation.
+	name := normalizePricingVideoModelName(modelName)
+	_, xjz := common.XJZVideoSpecs[modelName]
+	stable := channelType == constant.ChannelTypeV6K || channelType == constant.ChannelTypeZongheng ||
+		xjz || name == "w3-c1" || name == "005系列/sd2.5(30-10-10/5-30秒/720p)" ||
+		strings.HasPrefix(name, "seedance-2.") || strings.HasPrefix(name, "sd-2-c") || name == "sd-2.5-c1"
+	if stable {
+		for i := range endpoints {
+			ep := &endpoints[i]
+			if ep.Kind != "video" || ep.Path != "/v1/videos" || ep.Parameters == nil {
+				continue
+			}
+			p := *ep.Parameters
+			p.DurationField, p.RatioField, p.ResolutionField = "duration", "ratio", "resolution"
+			p.ImageField, p.VideoField, p.AudioField = "referenceImages", "referenceVideos", "referenceAudios"
+			ep.DocumentationFields = &p
+		}
+	}
+	return endpoints
+}
+
+func resolvePricingIntegrationEndpoints(channelType int, modelName, originalModelName string, metadata map[string]*Model) []PricingMappedEndpoint {
 	if channelType == constant.ChannelTypeV6K {
 		endpoint := makePricingMappedEndpoint(string(constant.EndpointTypeOpenAIVideo), common.EndpointInfo{Path: "/v1/videos", Method: "POST", QueryPath: "/v1/videos/{task_id}", QueryMethod: "GET"})
 		endpoint.Parameters = common.GetV6KVideoParameters(modelName)

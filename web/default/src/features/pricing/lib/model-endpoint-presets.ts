@@ -76,6 +76,7 @@ export function getModelEndpointPreset(
   // 004 系列文档、全能系列文档和统一视频文档使用 /v1/videos。
   if (
     model.startsWith('004系列/') ||
+    model === '005系列/sd2.5(30-10-10/5-30秒/720p)' ||
     model.startsWith('omni-video-') ||
     model.startsWith('videos-') ||
     model === 'sd-2-c1' ||

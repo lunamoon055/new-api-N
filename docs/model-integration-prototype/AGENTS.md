@@ -8,6 +8,8 @@ User refresh preference, 2026-10-11: load the model catalog automatically once w
 
 User ratio policy, 2026-10-26: every video model without configured ratios uses the full site menu: 16:9, 9:16, 1:1, 4:3, 3:4, 2:3, 3:2, 21:9. Keep explicit model ranges. Video documentation and copied examples must include ratio (default 16:9); the model test page must offer the same choices. Do not omit ratios because the upstream range is unpublished.
 
+User public API stability requirement, 2026-10-27: prefer endpoint `documentation_fields` for documented request fields. Compatible video adapters publish duration, ratio, resolution, referenceImages, referenceVideos, and referenceAudios regardless of provider mapping. Keep the public model ID and gateway route. Show current model limits; do not freeze outdated capabilities or change the live `parameters` used by Playground and existing downstream clients.
+
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.
