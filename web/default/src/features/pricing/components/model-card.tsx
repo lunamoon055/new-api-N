@@ -40,6 +40,7 @@ import {
 } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
 import { ModelDescriptionEditor } from './model-description-editor'
+import { ModelAvailability } from './model-availability'
 import { ModelPerfBadge, type ModelPerfBadgeData } from './model-perf-badge'
 
 export interface ModelCardProps {
@@ -272,43 +273,56 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         />
       </div>
 
-      {/* Footer: left metadata and right performance summary share row alignment */}
-      <div className='mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 sm:mt-4'>
-        <div className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1'>
-          {primaryGroup && (
-            <span className='text-muted-foreground text-xs font-medium'>
-              {primaryGroup} {t('Groups')}
-            </span>
-          )}
-          {!isVideoTier && (
-            <span className='text-muted-foreground text-xs font-medium'>
-              {isTokenBased ? t('Token-based') : t('Per Request')}
-            </span>
-          )}
-          {isDynamicPricing && (
-            <StatusBadge
-              label={t('Dynamic Pricing')}
-              variant='warning'
-              copyable={false}
-              size='sm'
-            />
-          )}
-        </div>
-        <ModelPerfBadge perf={props.perf} className='row-span-2 self-start' />
+      <div className='mt-2 sm:mt-3'>
+        <ModelAvailability
+          modelName={props.model.model_name}
+          available={props.model.display_available}
+        />
+      </div>
 
-        <div className='flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 sm:gap-x-3 sm:gap-y-1'>
+      {/* Keep metadata labels intact and let each footer row wrap independently. */}
+      <div className='mt-3 flex flex-col gap-2 sm:mt-4'>
+        <div className='flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2'>
+          <div className='flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1'>
+            {primaryGroup && (
+              <span className='text-muted-foreground text-xs font-medium whitespace-nowrap'>
+                {primaryGroup} {t('Groups')}
+              </span>
+            )}
+            {!isVideoTier && (
+              <span className='text-muted-foreground text-xs font-medium whitespace-nowrap'>
+                {isTokenBased ? t('Token-based') : t('Per Request')}
+              </span>
+            )}
+            {isDynamicPricing && (
+              <StatusBadge
+                label={t('Dynamic Pricing')}
+                variant='warning'
+                copyable={false}
+                size='sm'
+              />
+            )}
+          </div>
+          <ModelPerfBadge perf={props.perf} className='shrink-0' />
+        </div>
+
+        <div className='flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 sm:gap-x-3'>
           {bottomTags.map((item) => (
-            <span key={item} className='text-muted-foreground/70 text-xs'>
+            <span
+              key={item}
+              title={item}
+              className='text-muted-foreground/70 max-w-40 min-w-0 truncate text-xs'
+            >
               {item}
             </span>
           ))}
           {!isVideoTier && (
-            <span className='text-muted-foreground/50 text-xs'>
+            <span className='text-muted-foreground/50 text-xs whitespace-nowrap'>
               {tokenUnitLabel}
             </span>
           )}
           {hiddenCount > 0 && (
-            <span className='text-muted-foreground/40 text-xs'>
+            <span className='text-muted-foreground/40 text-xs whitespace-nowrap'>
               +{hiddenCount}
             </span>
           )}

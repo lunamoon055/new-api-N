@@ -44,6 +44,7 @@ import {
   stripTrailingZeros,
 } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
+import { ModelAvailability } from './model-availability'
 
 // ----------------------------------------------------------------------------
 // Pricing Table Columns
@@ -135,6 +136,22 @@ export function usePricingColumns(
         )
       },
       minSize: 200,
+    },
+
+    {
+      id: 'display_available',
+      accessorFn: (model) => model.display_available !== false,
+      meta: { label: t('Status') },
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Status')} />
+      ),
+      cell: ({ row }) => (
+        <ModelAvailability
+          modelName={row.original.model_name}
+          available={row.original.display_available}
+        />
+      ),
+      size: 180,
     },
 
     // Type column

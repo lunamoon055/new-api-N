@@ -27,7 +27,8 @@ export function usePricingData() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['pricing'],
     queryFn: getPricing,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
   })
 
   // Ensure rates never reach zero to prevent division errors

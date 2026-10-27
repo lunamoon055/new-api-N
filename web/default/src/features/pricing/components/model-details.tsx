@@ -81,6 +81,7 @@ import type {
 import { DynamicPricingBreakdown } from './dynamic-pricing-breakdown'
 import { ModelDetailsApi, ModelDetailsProviderInfo } from './model-details-api'
 import { ModelDescriptionEditor } from './model-description-editor'
+import { ModelAvailability } from './model-availability'
 import { ModalityIcons } from './model-details-modalities'
 import { ModelDetailsPerformance } from './model-details-performance'
 import { isVideoModel } from '../lib/video-parameters'
@@ -351,6 +352,12 @@ function ModelHeader(props: { model: PricingModel }) {
         <ModelDescriptionEditor
           modelName={model.model_name}
           description={model.description}
+        />
+      </div>
+      <div className='mt-2.5'>
+        <ModelAvailability
+          modelName={model.model_name}
+          available={model.display_available}
         />
       </div>
       {tags.length > 0 && (

@@ -30,6 +30,8 @@ export type PricingVendor = {
 export type PricingModel = {
   id: number
   model_name: string
+  /** Administrator-controlled Model Square display only; absent means available. */
+  display_available?: boolean
   description?: string
   vendor_id?: number
   vendor_name?: string

@@ -39,3 +39,18 @@ export async function updateModelDescription(
   })
   return res.data
 }
+
+export async function updateModelDisplayStatus(
+  modelName: string,
+  available: boolean
+): Promise<{
+  success: boolean
+  data: { model_name: string; available: boolean }
+}> {
+  const res = await api.put('/api/models/display-status', {
+    model_name: modelName,
+    available,
+  })
+  if (!res.data.success) throw new Error('Unable to update model availability.')
+  return res.data
+}

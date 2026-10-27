@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"net/http"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -49,7 +51,13 @@ func getPricingForRequest(c *gin.Context) ([]model.Pricing, string, map[string]s
 }
 
 func GetPricing(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	pricing, group, usableGroup := getPricingForRequest(c)
+	publicPricing, err := pricingWithDisplayStatus(pricing)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "unable to read model display status"})
+		return
+	}
 	groupRatio := map[string]float64{}
 	for s, f := range ratio_setting.GetGroupRatioCopy() {
 		groupRatio[s] = f
@@ -72,7 +80,7 @@ func GetPricing(c *gin.Context) {
 
 	c.JSON(200, gin.H{
 		"success":            true,
-		"data":               pricing,
+		"data":               publicPricing,
 		"vendors":            model.GetVendors(),
 		"group_ratio":        groupRatio,
 		"usable_group":       usableGroup,
