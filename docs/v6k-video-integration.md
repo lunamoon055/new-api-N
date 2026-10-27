@@ -105,6 +105,18 @@ Content-Type: application/json
 
 JSON 支持 `seconds`、`ratio`、`resolution`、`size`、`images`、`videos`、`audios`、`input_reference` 和 `metadata`。参考素材可为公共 HTTP(S) URL，视频/音频也可带 `duration_seconds`。本地文件通过 multipart 上传，不能将本地路径或 data URL 当作上游可访问地址。首帧 input_reference 与参考图数组分开传递。ratio/resolution/size 同时出现必须一致。元数据保留显式 false/0，但不得覆盖模型和计费字段。按秒模型必须明确传 seconds，避免未传时长而按上游默认时长生成。
 
+### `TTTseadanco2.5/720` 音频链接兼容（2026-10-27）
+
+适用于 ZH 映射到精确上游 ID `TTTseadanco2.5/720` 的模型，包括当前公开别名 `Seedance2.5:720（条）`。外部客户端仍可提交 `audios` 或 `referenceAudios` 音频 URL 数组，不需要改接口。
+
+- 对普通音频 URL（字符串或仅含 `url` 的对象），本站先用 `New-API-Reference-Audio/1.0` 标识读取音频，再按原顺序转为 V6K 文档支持的 multipart `audio` 文件上传。每段 URL 只替换为一个文件，不重复发送 URL；图片、时长、比例、分辨率和元数据保留，任务日志保留原始音频链接。
+- 下载沿用 SSRF 校验、DNS 固定和逐跳重定向检查，遵守渠道代理；不会向素材主机发送上游密钥、本站密钥或登录 Cookie。不会通过关闭防护来读取受限地址。
+- 本站中转限制为单段 **15 MiB**、合计 **60 MiB**，整批下载最多 **30 秒**。这是本站中转限制，并非上游公布的模型限制。检查下载内容，空文件、网页/拦截页、超限和不可识别文件会在本站返回 `400 invalid_reference_audio`，提示第几段音频有问题；此时还未预扣额度，也未创建上游任务。
+- 如任一音频 URL 对象显式包含 `duration_seconds`，整个音频列表保留原来的 URL/时长格式和顺序，避免在 multipart 未提供时长提示协议的情况下丢失参数。此类请求仍要求上游可直接读取链接；遇到链接拦截时可改为直接 multipart 上传音频文件。
+- 该兼容路径仅用于此精确上游模型；其他模型及计费配置保持原有处理。全程只允许一次创建任务的 POST，不因下载或提交失败重复创建付费任务。
+
+根据 [V6K 统一视频 OpenAPI](https://www.v6k.top/docs/openapi-video.json) 的 `POST /v1/videos`，音频可用 JSON URL 数组或 multipart `audio` 文件提交。已用本地 HTTP 模拟验证双音频顺序、混合素材、字段保留、下载拦截与 SSRF；模拟通过不代表真实上游生成已经成功。原始故障返回通用 `400`，未保存完整请求，CDN 下载器拦截仍属于已证实的兼容问题，不能据此断言它是当次错误的唯一原因。
+
 模型参数提示仅来自公开描述。dola2.0 固定 15 秒；未公布时长范围的模型提供手动时长输入，具体支持范围由上游校验，不沿用同名旧渠道的默认值。
 
 ## 异步与验证边界

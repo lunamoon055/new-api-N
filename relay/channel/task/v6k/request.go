@@ -84,6 +84,11 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 			return invalid(fmt.Errorf("seconds is required for duration-based billing; choose a supported duration or configure fixed billing"))
 		}
 	}
+	// Fetch reference audio before quota reservation and before the only paid
+	// submission. A failed download is a local input error, never a POST retry.
+	if err := prepareReferenceAudioUploads(c, upstreamModel, payload, info.ChannelSetting.Proxy); err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_reference_audio", http.StatusBadRequest)
+	}
 	request := relaycommon.TaskSubmitReq{Model: payload["model"].(string), Prompt: payload["prompt"].(string), Duration: seconds}
 	request.Seconds = strconv.Itoa(seconds)
 	request.Ratio, _ = payload["ratio"].(string)
@@ -386,9 +391,13 @@ func fileField(field string) (string, error) {
 }
 
 func buildMultipart(c *gin.Context, payload map[string]any) (io.Reader, error) {
-	form, err := common.ParseMultipartFormReusable(c)
-	if err != nil {
-		return nil, err
+	var form *multipart.Form
+	if strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
+		var err error
+		form, err = common.ParseMultipartFormReusable(c)
+		if err != nil {
+			return nil, err
+		}
 	}
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
@@ -411,7 +420,23 @@ func buildMultipart(c *gin.Context, payload map[string]any) (io.Reader, error) {
 			return nil, err
 		}
 	}
-	for name, files := range form.File {
+	for _, upload := range referenceAudioUploads(c) {
+		header := make(textproto.MIMEHeader)
+		header.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": "audio", "filename": upload.filename}))
+		header.Set("Content-Type", upload.contentType)
+		part, err := writer.CreatePart(header)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := part.Write(upload.data); err != nil {
+			return nil, err
+		}
+	}
+	var filesByField map[string][]*multipart.FileHeader
+	if form != nil {
+		filesByField = form.File
+	}
+	for name, files := range filesByField {
 		field, err := fileField(name)
 		if err != nil {
 			return nil, err

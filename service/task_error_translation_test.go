@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -211,6 +212,17 @@ func TestLocalizeVideoTaskErrorDoesNotSerializeRawMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(payload), "image url returned 404")
 	require.Contains(t, string(payload), "参考图片链接不存在或已失效")
+}
+
+func TestLocalAudioReferenceErrorKeepsIndexAndMediaCategory(t *testing.T) {
+	message := "第 2 段参考音频读取失败：音频链接返回 HTTP 403；请换用可公开读取的音频直链，或通过 multipart 的 audio 字段上传文件"
+	taskError := TaskErrorWrapperLocal(fmt.Errorf("%s", message), "invalid_reference_audio", http.StatusBadRequest)
+	LocalizeVideoTaskError(taskError)
+	require.Equal(t, message, taskError.Message)
+	require.Equal(t, dto.TaskErrorPublicData{Category: "reference_media", Retryable: false}, taskError.Data)
+	require.True(t, taskError.LocalError)
+	translated := TranslateVideoTaskError("unrecognized download failure", "invalid_reference_audio", http.StatusBadRequest)
+	require.Equal(t, "参考音频无法读取，请更换公开音频直链或直接上传文件。", translated.Message)
 }
 
 func TestLocalizeVideoTaskErrorPreservesReadableChineseProviderMessage(t *testing.T) {

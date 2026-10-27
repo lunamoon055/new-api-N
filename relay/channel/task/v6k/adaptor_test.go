@@ -192,6 +192,9 @@ func TestAmbiguousPostIsNotResubmitted(t *testing.T) {
 }
 
 func TestZHNewModelsForwardExactIDsAndMaximumPublishedReferences(t *testing.T) {
+	audioOrigin := referenceAudioTestOrigin(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "ID3audio-fixture")
+	})
 	for _, id := range common.V6KVideoModelIDs() {
 		p := common.GetV6KValidatedVideoParameters(id)
 		if p == nil {
@@ -203,6 +206,9 @@ func TestZHNewModelsForwardExactIDsAndMaximumPublishedReferences(t *testing.T) {
 				refs := make([]string, count)
 				for index := range refs {
 					refs[index] = fmt.Sprintf("https://cdn.example/%s/%d", field, index)
+					if id == "TTTseadanco2.5/720" && field == "audios" {
+						refs[index] = fmt.Sprintf("%s/audio/%d", audioOrigin, index)
+					}
 				}
 				payload[field] = refs
 			}
@@ -214,9 +220,16 @@ func TestZHNewModelsForwardExactIDsAndMaximumPublishedReferences(t *testing.T) {
 			body, err := a.BuildRequestBody(c, info)
 			require.NoError(t, err)
 			var forwarded map[string]any
-			require.NoError(t, common.DecodeJson(body, &forwarded))
+			if id == "TTTseadanco2.5/720" {
+				var files int
+				forwarded, files = multipartTestFields(t, body, c.GetString("v6k_content_type"))
+				require.Equal(t, p.MaxAudios, files)
+				require.NotContains(t, forwarded, "audios")
+			} else {
+				require.NoError(t, common.DecodeJson(body, &forwarded))
+			}
 			require.Equal(t, id, forwarded["model"])
-			require.EqualValues(t, p.Durations[len(p.Durations)-1], forwarded["seconds"])
+			require.Equal(t, fmt.Sprint(p.Durations[len(p.Durations)-1]), fmt.Sprint(forwarded["seconds"]))
 			require.Equal(t, "16:9", forwarded["ratio"])
 			require.NotContains(t, forwarded, "duration")
 		})

@@ -108,6 +108,8 @@ ZH 本轮新增 `Cseadanco2.0-1`、`Cseadanco2.0-fast`、`Cseadanco2.0-mini`、`
 
 这些 ID 使用 `seconds`、`resolution`、`images`、`audios`、`videos`；已有的 `duration` 和 `referenceImages/referenceAudios/referenceVideos` 别名也可由 V6K 适配器转换。具体时长、分辨率和素材上限见 [ZH/V6K 接入表](./v6k-video-integration.md)，在线文档、模型测试页及下游价格接口从同一份 `mapped_endpoints[].parameters` 读取。
 
+ZH 中映射到 `TTTseadanco2.5/720`（当前公开别名 `Seedance2.5:720（条）`）的普通音频 URL 由本站先读取并转为文件上传，减少上游下载器被素材 CDN 拦截的影响。下游继续提交原有 `audios` / `referenceAudios` 数组；中转限制单段 15 MiB、合计 60 MiB、整批 30 秒。读取失败会在扣费前返回 `400 invalid_reference_audio`，指出第几段音频。带 `duration_seconds` 的音频对象保持 URL 格式，以保留时长提示；完整规则见上述接入表的“音频链接兼容”。
+
 原 9 个公开别名的参数、渠道映射和价格保留，不把 ZH 新模型的能力套用到旧模型。
 
 ### 3.2 图片模型接口参考

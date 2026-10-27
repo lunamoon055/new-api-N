@@ -282,6 +282,13 @@ func TranslateVideoTaskError(rawMessage string, code string, statusCode int, ups
 }
 
 func translateVideoTaskError(rawMessage string, code string, statusCode int) TaskErrorTranslation {
+	if code == "invalid_reference_audio" {
+		message := extractChineseTaskErrorMessage(rawMessage)
+		if message == "" {
+			message = "参考音频无法读取，请更换公开音频直链或直接上传文件。"
+		}
+		return taskErrorTranslation(message, "reference_media", false)
+	}
 	if code == "upstream_capabilities_unavailable" {
 		return taskErrorTranslation("读取上游模型能力失败，请稍后重试；如持续失败，请联系管理员。", "upstream_service", true)
 	}

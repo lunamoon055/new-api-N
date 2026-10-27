@@ -169,6 +169,7 @@ func (a *TaskAdaptor) GetModelList() []string { return common.V6KVideoModelIDs()
 func (a *TaskAdaptor) GetChannelName() string { return "v6k" }
 
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
+	c.Set("v6k_content_type", "")
 	value, ok := c.Get("v6k_request")
 	if !ok {
 		return nil, fmt.Errorf("validated V6K request is unavailable")
@@ -181,7 +182,12 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if info.UpstreamModelName != "" {
 		copy["model"] = info.UpstreamModelName
 	}
-	if strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
+	if len(referenceAudioUploads(c)) > 0 {
+		// The audio bytes replace these URL references one for one; do not
+		// submit the URL list as well and double-count or reorder references.
+		delete(copy, "audios")
+	}
+	if strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") || len(referenceAudioUploads(c)) > 0 {
 		return buildMultipart(c, copy)
 	}
 	data, err := common.Marshal(copy)
