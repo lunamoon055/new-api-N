@@ -5091,6 +5091,23 @@
     "Redemption code": "兑换码",
     "Show success rate": "显示成功率",
     "Success rate display updated.": "成功率显示设置已更新。",
-    "Unable to update success rate display.": "无法更新成功率显示设置。"
+    "Unable to update success rate display.": "无法更新成功率显示设置。",
+    "Batch add tags": "批量打标签",
+    "Tag models": "打标签",
+    "Tags to add": "要追加的标签",
+    "Existing tags (multiple selection)": "已有标签（可多选）",
+    "Search existing tags": "搜索已有标签",
+    "No matching tags. Enter a new tag above.": "没有匹配的标签，可在上方输入新标签。",
+    "Existing tags could not be loaded. You can still enter new tags.": "已有标签加载失败，仍可在上方输入新标签。",
+    "Apply tags": "应用标签",
+    "Tags added to {{count}} model(s).": "已为 {{count}} 个模型添加标签。",
+    "Add tags to {{count}} selected model(s). Existing tags are kept and duplicates are skipped.": "为选中的 {{count}} 个模型追加标签，保留原有标签并自动去重。",
+    "Select or enter tags, up to 255 characters in total. Tags cannot contain commas or line breaks.": "请选择或输入标签，总长度不超过 255 个字符，单个标签不能包含逗号或换行。",
+    "Clear model tags": "一键清除模型标签",
+    "Clear tags": "清除标签",
+    "Clear model tags?": "清除模型标签？",
+    "Confirm clear tags": "确认清除标签",
+    "Remove all tags from {{count}} selected model(s)? You can add tags again afterwards.": "确定清空所选 {{count}} 个模型的全部标签吗？清除后可以重新添加标签。",
+    "Tags cleared from {{count}} model(s).": "已清除 {{count}} 个模型的标签。"
   }
 }

@@ -100,6 +100,36 @@ export async function updateModelStatus(
   return res.data
 }
 
+export async function getModelTags(): Promise<{
+  success: boolean
+  message?: string
+  data: string[]
+}> {
+  const res = await api.get('/api/models/tags')
+  return res.data
+}
+
+export async function batchAddModelTags(data: {
+  ids: number[]
+  tags: string[]
+}): Promise<{
+  success: boolean
+  message?: string
+  data: { updated_count: number }
+}> {
+  const res = await api.put('/api/models/batch/tags', data)
+  return res.data
+}
+
+export async function batchClearModelTags(ids: number[]): Promise<{
+  success: boolean
+  message?: string
+  data: { updated_count: number }
+}> {
+  const res = await api.put('/api/models/batch/tags/clear', { ids })
+  return res.data
+}
+
 /**
  * Delete model
  */

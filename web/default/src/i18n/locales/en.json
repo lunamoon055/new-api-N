@@ -5091,6 +5091,23 @@
     "Redemption code": "Redemption code",
     "Show success rate": "Show success rate",
     "Success rate display updated.": "Success rate display updated.",
-    "Unable to update success rate display.": "Unable to update success rate display."
+    "Unable to update success rate display.": "Unable to update success rate display.",
+    "Batch add tags": "Batch add tags",
+    "Tag models": "Tag models",
+    "Tags to add": "Tags to add",
+    "Existing tags (multiple selection)": "Existing tags (multiple selection)",
+    "Search existing tags": "Search existing tags",
+    "No matching tags. Enter a new tag above.": "No matching tags. Enter a new tag above.",
+    "Existing tags could not be loaded. You can still enter new tags.": "Existing tags could not be loaded. You can still enter new tags.",
+    "Apply tags": "Apply tags",
+    "Tags added to {{count}} model(s).": "Tags added to {{count}} model(s).",
+    "Add tags to {{count}} selected model(s). Existing tags are kept and duplicates are skipped.": "Add tags to {{count}} selected model(s). Existing tags are kept and duplicates are skipped.",
+    "Select or enter tags, up to 255 characters in total. Tags cannot contain commas or line breaks.": "Select or enter tags, up to 255 characters in total. Tags cannot contain commas or line breaks.",
+    "Clear model tags": "Clear model tags",
+    "Clear tags": "Clear tags",
+    "Clear model tags?": "Clear model tags?",
+    "Confirm clear tags": "Confirm clear tags",
+    "Remove all tags from {{count}} selected model(s)? You can add tags again afterwards.": "Remove all tags from {{count}} selected model(s)? You can add tags again afterwards.",
+    "Tags cleared from {{count}} model(s).": "Tags cleared from {{count}} model(s)."
   }
 }

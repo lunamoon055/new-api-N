@@ -153,6 +153,24 @@ func TestMappedWANImageContractIncludesAllDocumentedResolutions(t *testing.T) {
 	require.Equal(t, []string{"720p"}, common.GetVideoIntegrationParameters("gz稳定sd2.0-903-720P").Resolutions)
 }
 
+func TestMeaiccWanMappedAliasExposesVideoContract(t *testing.T) {
+	metadata := map[string]*Model{"w3-c1": {Endpoints: `{"openai":{"path":"/v1/chat/completions"}}`}}
+	endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, "w3-c1", "Wan 3.0", metadata)
+	require.Len(t, endpoints, 1)
+	require.Equal(t, "video", endpoints[0].Kind)
+	require.Equal(t, "/v1/videos", endpoints[0].Path)
+	require.Equal(t, "/v1/videos/{task_id}", endpoints[0].QueryPath)
+	p := endpoints[0].Parameters
+	require.Equal(t, 5, p.Durations[0])
+	require.Equal(t, 30, p.Durations[len(p.Durations)-1])
+	require.Equal(t, []string{"720p", "1080p"}, p.Resolutions)
+	require.Equal(t, 10, p.MaxImages)
+	require.Equal(t, 5, p.MaxVideos)
+	require.Equal(t, 5, p.MaxAudios)
+	require.True(t, p.AllowFrames)
+	require.Nil(t, common.GetVideoIntegrationParameters("w3-c2"), "neighboring models must not inherit this contract")
+}
+
 func TestMappedSeedance25CContractLimitsImageReferences(t *testing.T) {
 	for _, name := range []string{"Seedance2.5-c", "sd-2.5-c1"} {
 		endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeOpenAI, name, "Seedance2.5-c", nil)

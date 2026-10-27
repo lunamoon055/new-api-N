@@ -107,6 +107,13 @@ func GetVideoIntegrationParameters(modelName string) *ModelIntegrationParameters
 		ImageField: "referenceImages", VideoField: "referenceVideos", AudioField: "referenceAudios", MaxImages: 9, MaxVideos: 3, MaxAudios: 3,
 	}
 	switch {
+	case name == "w3-c1":
+		// Meaicc's public catalog and creation form, checked 2026-10-27.
+		p.Durations = integrationDurationRange(5, 30)
+		p.Resolutions = []string{"720p", "1080p"}
+		p.Ratios = []string{"16:9", "9:16", "1:1", "4:3", "3:4", "21:9"}
+		p.MaxImages, p.MaxVideos, p.MaxAudios = 10, 5, 5
+		p.AllowFrames = true
 	case name == "seedance2.0:x", name == "seedance2.0:x1":
 		p.Durations = integrationDurationRange(5, 15)
 	case name == "sd-2.5-c1", name == "seedance2.5-c", name == "seedance-2.5":

@@ -196,6 +196,7 @@ export function ModelsTable() {
     onPaginationChange,
     onGlobalFilterChange,
     getCoreRowModel: getCoreRowModel(),
+    getRowId: (model) => String(model.id),
     manualPagination: true,
     manualSorting: true,
     manualFiltering: true,

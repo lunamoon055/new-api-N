@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { type Table } from '@tanstack/react-table'
-import { Power, PowerOff, Trash2, Copy } from 'lucide-react'
+import { Power, PowerOff, Trash2, Copy, Tags, Eraser } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
@@ -44,6 +44,8 @@ import {
   handleBatchDeleteModels,
 } from '../lib'
 import type { Model } from '../types'
+import { BatchTagsDialog } from './dialogs/batch-tags-dialog'
+import { ClearTagsDialog } from './dialogs/clear-tags-dialog'
 
 interface DataTableBulkActionsProps<TData> {
   table: Table<TData>
@@ -55,6 +57,10 @@ export function DataTableBulkActions<TData>({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [tagModelIds, setTagModelIds] = useState<number[] | null>(null)
+  const [clearTagModelIds, setClearTagModelIds] = useState<number[] | null>(
+    null
+  )
 
   const selectedRows = table.getFilteredSelectedRowModel().rows
   const selectedIds = selectedRows.reduce<number[]>((ids, row) => {
@@ -101,6 +107,26 @@ export function DataTableBulkActions<TData>({
   return (
     <>
       <BulkActionsToolbar table={table} entityName='model'>
+        <Button
+          variant='outline'
+          size='sm'
+          onClick={() => setTagModelIds(selectedIds)}
+          aria-label={t('Batch add tags')}
+          title={t('Batch add tags')}
+        >
+          <Tags data-icon='inline-start' />
+          <span className='hidden sm:inline'>{t('Tag models')}</span>
+        </Button>
+        <Button
+          variant='outline'
+          size='sm'
+          onClick={() => setClearTagModelIds(selectedIds)}
+          aria-label={t('Clear model tags')}
+          title={t('Clear model tags')}
+        >
+          <Eraser data-icon='inline-start' />
+          <span className='hidden sm:inline'>{t('Clear tags')}</span>
+        </Button>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -185,6 +211,22 @@ export function DataTableBulkActions<TData>({
           </TooltipContent>
         </Tooltip>
       </BulkActionsToolbar>
+
+      {tagModelIds && (
+        <BatchTagsDialog
+          modelIds={tagModelIds}
+          onClose={() => setTagModelIds(null)}
+          onSuccess={handleClearSelection}
+        />
+      )}
+
+      {clearTagModelIds && (
+        <ClearTagsDialog
+          modelIds={clearTagModelIds}
+          onClose={() => setClearTagModelIds(null)}
+          onSuccess={handleClearSelection}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

@@ -82,6 +82,8 @@ export function getModelEndpointPreset(
     model === 'sd-mini' ||
     model === 'sd-2.5' ||
     model === 'grok-imagine-video-1.5' ||
+    model === 'w3-c1' ||
+    model === 'wan 3.0' ||
     model.startsWith('wan3.0(') ||
     model.startsWith('wan3.0（') ||
     startsWithAny(model, ['wan3.0-video', 'wan3.0-image', 'sd2', 'sd-2-'])

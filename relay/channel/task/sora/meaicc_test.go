@@ -149,7 +149,7 @@ func TestMeaiccPollingUsesPersistedVideosEndpoint(t *testing.T) {
 		_, _ = w.Write([]byte(`{"task_id":"task_test","status":"SUCCEEDED","object":"https://cdn.example/result.mp4"}`))
 	}))
 	defer server.Close()
-	for _, upstream := range []string{"sd-2-c8", "sd-2-c4", "sd-2-c5", "sd-2.5-c1"} {
+	for _, upstream := range []string{"sd-2-c8", "sd-2-c4", "sd-2-c5", "sd-2.5-c1", "w3-c1"} {
 		t.Run(upstream, func(t *testing.T) {
 			a, info, _ := meaiccTestRequest(t, "https://api.meaicc.com", "video-2.5", upstream, "/v1/video/async-generations", nil)
 			_, err := a.BuildRequestURL(info)
@@ -167,5 +167,90 @@ func TestMeaiccPollingUsesPersistedVideosEndpoint(t *testing.T) {
 			require.Equal(t, "SUCCESS", result.Status)
 			require.Equal(t, "https://cdn.example/result.mp4", result.Url)
 		})
+	}
+}
+
+func TestMeaiccWanMappedContractAndNestedPayload(t *testing.T) {
+	for _, origin := range []string{"Wan 3.0", "w3-c1", "opaque public video"} {
+		for _, path := range []string{"/v1/videos", "/v1/video/async-generations", "/v1/video/generations"} {
+			t.Run(origin+path, func(t *testing.T) {
+				duration := 30
+				a, info, c := meaiccTestRequest(t, "https://api.meaicc.com/v1/", origin, "w3-c1", path, &duration)
+				require.Nil(t, a.ValidateRequestAndSetAction(c, info))
+				url, err := a.BuildRequestURL(info)
+				require.NoError(t, err)
+				require.Equal(t, "https://api.meaicc.com/v1/videos", url)
+				require.Equal(t, "/v1/videos", info.UpstreamEndpoint)
+				reader, err := a.BuildRequestBody(c, info)
+				require.NoError(t, err)
+				body, err := io.ReadAll(reader)
+				require.NoError(t, err)
+				var request seedance2Request
+				require.NoError(t, common.Unmarshal(body, &request))
+				require.Equal(t, "w3-c1", request.Model)
+				require.Equal(t, "720P", request.Parameters.Resolution)
+				require.Equal(t, "16:9", request.Parameters.Ratio)
+				require.Equal(t, &duration, request.Parameters.Duration)
+				require.Equal(t, "a cat walking", request.Input.Prompt)
+				require.Equal(t, []seedance2Media{
+					{Type: "first_frame", URL: "https://cdn.example/start.png"},
+					{Type: "last_frame", URL: "https://cdn.example/end.png"},
+					{Type: "reference_image", URL: "https://cdn.example/ref.png"},
+					{Type: "reference_video", URL: "https://cdn.example/ref.mp4"},
+					{Type: "reference_voice", URL: "https://cdn.example/ref.mp3"},
+				}, request.Input.Media)
+			})
+		}
+	}
+}
+
+func TestMeaiccWanLimitsAndIsolation(t *testing.T) {
+	p := common.GetVideoIntegrationParameters("w3-c1")
+	duration := 30
+	req := videosRequest{Prompt: "test", Duration: &duration, Resolution: "1080p", Ratio: "21:9"}
+	for i := 0; i < 10; i++ {
+		req.ReferenceImages = append(req.ReferenceImages, "https://cdn.example/image.png")
+	}
+	for i := 0; i < 5; i++ {
+		req.ReferenceVideos = append(req.ReferenceVideos, "https://cdn.example/video.mp4")
+		req.ReferenceAudios = append(req.ReferenceAudios, "https://cdn.example/audio.mp3")
+	}
+	require.NoError(t, validateIntegrationVideoParameters(req, p))
+	for _, kind := range []string{"image", "video", "audio", "frame", "duration", "resolution"} {
+		invalid := req
+		switch kind {
+		case "image":
+			invalid.ReferenceImages = append(append([]string{}, req.ReferenceImages...), "https://cdn.example/extra.png")
+		case "video":
+			invalid.ReferenceVideos = append(append([]string{}, req.ReferenceVideos...), "https://cdn.example/extra.mp4")
+		case "audio":
+			invalid.ReferenceAudios = append(append([]string{}, req.ReferenceAudios...), "https://cdn.example/extra.mp3")
+		case "frame":
+			invalid.StartImageURL = "https://cdn.example/start.png"
+		case "duration":
+			value := 31
+			invalid.Duration = &value
+		case "resolution":
+			invalid.Resolution = "480p"
+		}
+		require.Error(t, validateIntegrationVideoParameters(invalid, p), kind)
+	}
+	for _, tc := range []struct{ base, upstream string }{
+		{"https://other.example", "w3-c1"},
+		{"https://api.meaicc.com.other.example", "w3-c1"},
+		{"https://api.meaicc.com", "w3-c2"},
+	} {
+		a, info, c := meaiccTestRequest(t, tc.base, "Wan 3.0", tc.upstream, "/v1/video/async-generations", &duration)
+		url, err := a.BuildRequestURL(info)
+		require.NoError(t, err)
+		require.Equal(t, tc.base+"/v1/video/async-generations", url)
+		reader, err := a.BuildRequestBody(c, info)
+		require.NoError(t, err)
+		body, err := io.ReadAll(reader)
+		require.NoError(t, err)
+		var payload map[string]any
+		require.NoError(t, common.Unmarshal(body, &payload))
+		require.Contains(t, payload, "prompt")
+		require.NotContains(t, payload, "input")
 	}
 }

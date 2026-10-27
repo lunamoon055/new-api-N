@@ -24,6 +24,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
 interface TagInputProps {
+  id?: string
+  'aria-invalid'?: boolean
   value: string[]
   onChange: (tags: string[]) => void
   placeholder?: string
@@ -32,6 +34,8 @@ interface TagInputProps {
 }
 
 export function TagInput({
+  id,
+  'aria-invalid': ariaInvalid,
   value = [],
   onChange,
   placeholder,
@@ -79,8 +83,14 @@ export function TagInput({
       onClick={() => inputRef.current?.focus()}
     >
       {value.map((tag) => (
-        <Badge key={tag} variant='secondary' className='gap-1 pr-1'>
-          {tag}
+        <Badge
+          key={tag}
+          variant='secondary'
+          className='max-w-full min-w-0 gap-1 pr-1'
+        >
+          <span className='truncate' title={tag}>
+            {tag}
+          </span>
           {!disabled && (
             <Button
               type='button'
@@ -91,7 +101,7 @@ export function TagInput({
                 e.stopPropagation()
                 removeTag(tag)
               }}
-              className='hover:bg-secondary-foreground/20 size-auto rounded-sm p-0'
+              className='hover:bg-secondary-foreground/20 size-auto shrink-0 rounded-sm p-0'
             >
               <X className='h-3 w-3' aria-hidden='true' />
             </Button>
@@ -99,6 +109,8 @@ export function TagInput({
         </Badge>
       ))}
       <input
+        id={id}
+        aria-invalid={ariaInvalid}
         ref={inputRef}
         type='text'
         value={inputValue}

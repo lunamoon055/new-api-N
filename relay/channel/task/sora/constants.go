@@ -1,6 +1,7 @@
 package sora
 
 var ModelList = []string{
+	"w3-c1",
 	"gpt-image-2",
 	"gpt-image-2.5",
 	"nano-banana-pro",

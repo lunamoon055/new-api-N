@@ -264,7 +264,7 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 	if info.ChannelMeta != nil {
 		upstreamModelName = info.UpstreamModelName
 	}
-	if isMeaiccNestedSeedanceModel(a.baseURL, upstreamModelName) {
+	if isMeaiccWanModel(a.baseURL, upstreamModelName) || isMeaiccNestedSeedanceModel(a.baseURL, upstreamModelName) {
 		setUpstreamEndpoint(info, "/v1/videos")
 		return fmt.Sprintf("%s/v1/videos", baseURL), nil
 	}
@@ -388,6 +388,13 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 			newBody, err := buildSeedance2RequestBody(cachedBody, info.UpstreamModelName)
 			if err != nil {
 				return nil, errors.Wrap(err, "build_meaicc_seedance_request_body_failed")
+			}
+			return bytes.NewReader(newBody), nil
+		}
+		if isMeaiccWanModel(a.baseURL, info.UpstreamModelName) {
+			newBody, err := buildMeaiccWanRequestBody(cachedBody, info.UpstreamModelName)
+			if err != nil {
+				return nil, errors.Wrap(err, "build_meaicc_wan_request_body_failed")
 			}
 			return bytes.NewReader(newBody), nil
 		}

@@ -110,6 +110,7 @@ func pricingVideoEndpoint(modelName string) *PricingMappedEndpoint {
 	case strings.HasPrefix(name, "官转"):
 		path = "/v1/video/generations"
 	case name == "grok-imagine-video-1.5",
+		name == "w3-c1",
 		name == "sd-mini",
 		name == "sd-2-c1",
 		name == "sd-2.5",
