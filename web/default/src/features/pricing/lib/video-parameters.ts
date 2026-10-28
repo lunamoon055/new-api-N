@@ -24,6 +24,7 @@ import { getVideoDocumentationParameters } from './video-documentation'
 type VideoParameters = {
   parameters: SupportedParameter[]
   hasDetails: boolean
+  hasUnconfirmedParameters?: boolean
 }
 
 export function isVideoModel(model: PricingModel): boolean {
@@ -40,7 +41,15 @@ export function isVideoModel(model: PricingModel): boolean {
 function durationParameter(
   p: IntegrationParameters
 ): SupportedParameter | null {
-  if (!p.duration_field || !p.durations?.length) return null
+  if (!p.duration_field) return null
+  if (!p.durations?.length) {
+    return {
+      name: p.duration_field,
+      type: p.duration_field === 'seconds' ? 'string' : 'integer',
+      availability: 'unconfirmed',
+      descriptionKey: 'Video length in seconds',
+    }
+  }
   const values = [...new Set(p.durations)].sort((a, b) => a - b)
   const contiguous = values.every((value, index) => value === values[0] + index)
   return {
@@ -79,22 +88,24 @@ export function buildVideoSupportedParameters(
 
   const duration = durationParameter(p)
   if (duration) parameters.push(duration)
-  if (p.ratio_field && p.ratios?.length) {
+  if (p.ratio_field && !p.omit_ratio) {
     parameters.push({
       name: p.ratio_field,
       type: 'string',
       enumValues: p.ratios,
+      ...(!p.ratios?.length ? { availability: 'unconfirmed' as const } : {}),
       descriptionKey: 'Output aspect ratio',
     })
   }
   const resolutions = p.resolutions?.length
     ? p.resolutions
     : [p.request_resolution].filter((value): value is string => Boolean(value))
-  if (p.resolution_field && resolutions.length) {
+  if (p.resolution_field) {
     parameters.push({
       name: p.resolution_field,
       type: 'string',
       enumValues: resolutions,
+      ...(!resolutions.length ? { availability: 'unconfirmed' as const } : {}),
       descriptionKey: 'Output video resolution',
     })
   }
@@ -123,10 +134,19 @@ export function buildVideoSupportedParameters(
     },
   ]
   for (const item of media) {
-    if (!item.field || item.max <= 0) continue
-    const notes: NonNullable<SupportedParameter['notes']> = [
-      { key: 'At most {{count}} references.', values: { count: item.max } },
-    ]
+    if (!item.field) continue
+    const notes: NonNullable<SupportedParameter['notes']> = []
+    let availability: SupportedParameter['availability']
+    if (p.capabilities_unknown) {
+      availability = 'unconfirmed'
+    } else if (item.max <= 0) {
+      availability = 'unsupported'
+    } else {
+      notes.push({
+        key: 'At most {{count}} references.',
+        values: { count: item.max },
+      })
+    }
     if (item.size && item.size > 0) {
       notes.push({
         key: 'Maximum file size: {{size}} MB.',
@@ -153,8 +173,9 @@ export function buildVideoSupportedParameters(
       type: ['image_url', 'video_url', 'audio_url'].includes(item.field)
         ? 'string'
         : 'array',
-      required: item.min > 0 && !p.allow_frames,
-      range: `${item.min} ~ ${item.max}`,
+      required: !availability && item.min > 0 && !p.allow_frames,
+      ...(!availability ? { range: `${item.min} ~ ${item.max}` } : {}),
+      availability,
       descriptionKey: item.descriptionKey,
       notes,
     })
@@ -181,5 +202,11 @@ export function buildVideoSupportedParameters(
       }
     )
   }
-  return { parameters, hasDetails: parameters.length > 2 }
+  return {
+    parameters,
+    hasDetails: parameters.length > 2,
+    hasUnconfirmedParameters: parameters.some(
+      (parameter) => parameter.availability === 'unconfirmed'
+    ),
+  }
 }

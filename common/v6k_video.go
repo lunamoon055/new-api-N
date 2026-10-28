@@ -30,7 +30,8 @@ func GetV6KVideoParameters(modelName string) *ModelIntegrationParameters {
 		return WithVideoRatioDefaults(&parameters.ModelIntegrationParameters)
 	}
 	return WithVideoRatioDefaults(&ModelIntegrationParameters{
-		DurationField: "seconds", RatioField: "ratio", ResolutionField: "resolution",
+		CapabilitiesUnknown: true,
+		DurationField:       "seconds", RatioField: "ratio", ResolutionField: "resolution",
 		ImageField: "images", VideoField: "videos", AudioField: "audios",
 	})
 }

@@ -63,6 +63,25 @@ func TestVideoDocumentationFieldsStayStableAcrossProviderMappings(t *testing.T) 
 	}
 }
 
+func TestV6KDocumentationPreservesUnknownCapabilitiesAfterMapping(t *testing.T) {
+	for _, upstream := range []string{"BBseadanco2.5-480", "BBseadanco2.5-720"} {
+		endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeV6K, upstream, "Seedance2.5:720（秒）", nil)
+		require.Len(t, endpoints, 1)
+		p := endpoints[0].DocumentationFields
+		require.NotNil(t, p)
+		require.True(t, p.CapabilitiesUnknown)
+		require.Equal(t, "duration", p.DurationField)
+		require.Equal(t, "referenceImages", p.ImageField)
+		require.Equal(t, "referenceVideos", p.VideoField)
+		require.Equal(t, "referenceAudios", p.AudioField)
+		require.Empty(t, p.Durations, "do not invent upstream limits from the public alias")
+		encoded, err := common.Marshal(endpoints)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), `"capabilities_unknown":true`)
+		require.NotContains(t, string(encoded), upstream)
+	}
+}
+
 func TestV6KZHNewModelsExposeVideoContractsWithoutInternalFlags(t *testing.T) {
 	count := 0
 	for _, id := range common.V6KVideoModelIDs() {

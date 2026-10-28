@@ -41,3 +41,22 @@ func TestV6KZHNewModelsHaveExactPublishedCapabilities(t *testing.T) {
 		require.Nil(t, GetV6KValidatedVideoParameters(original), "only exact selected IDs gain stricter validation")
 	}
 }
+
+func TestV6KUnknownCapabilitiesAreNotExplicitZeroLimits(t *testing.T) {
+	for _, name := range []string{"BBseadanco2.5-480", "BBseadanco2.5-720", "future-video-model"} {
+		p := GetV6KVideoParameters(name)
+		require.True(t, p.CapabilitiesUnknown, name)
+		require.Empty(t, p.Durations)
+		require.Empty(t, p.Resolutions)
+		require.NotEmpty(t, p.ImageField)
+		require.NotEmpty(t, p.VideoField)
+		require.NotEmpty(t, p.AudioField)
+		require.Nil(t, GetV6KValidatedVideoParameters(name))
+	}
+	for _, name := range []string{"BBseadanco-480", "BBseadanco-720", "TTTseadanco2.5/720"} {
+		p := GetV6KVideoParameters(name)
+		require.False(t, p.CapabilitiesUnknown, name)
+		require.Equal(t, 0, p.MaxVideos)
+		require.NotEmpty(t, p.Durations)
+	}
+}

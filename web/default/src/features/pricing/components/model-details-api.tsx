@@ -41,6 +41,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Toggle } from '@/components/ui/toggle'
 import {
   CodeBlock,
   CodeBlockCopyButton,
@@ -63,7 +64,10 @@ import type {
   PricingEndpoint,
   PricingModel,
 } from '../types'
-import { buildVideoDocumentationBody } from '../lib/video-documentation'
+import {
+  buildVideoDocumentationBody,
+  hasVideoReferenceMedia,
+} from '../lib/video-documentation'
 
 // ---------------------------------------------------------------------------
 // Code-sample registry
@@ -102,6 +106,7 @@ type SampleContext = {
   exampleResolution?: string
   exampleImageRequired?: boolean
   videoParameters?: IntegrationParameters
+  includeReferenceMedia?: boolean
 }
 
 type DisplayEndpoint = {
@@ -541,6 +546,7 @@ function buildVideoSample(lang: Lang, ctx: SampleContext): string {
         duration: ctx.exampleDuration,
         resolution: ctx.exampleResolution,
         imageRequired: ctx.exampleImageRequired,
+        includeReferenceMedia: ctx.includeReferenceMedia,
       }
     )
   } else if (isVideosApi) {
@@ -758,6 +764,7 @@ function CodeSamplesSection(props: {
     endpoints[0] ? endpointKey(endpoints[0]) : ''
   )
   const [lang, setLang] = useState<Lang>('curl')
+  const [includeReferenceMedia, setIncludeReferenceMedia] = useState(false)
 
   const activeEndpoint = useMemo(() => {
     return (
@@ -781,6 +788,7 @@ function CodeSamplesSection(props: {
     exampleResolution: activeEndpoint.exampleResolution,
     exampleImageRequired: activeEndpoint.exampleImageRequired,
     videoParameters: activeEndpoint.videoParameters,
+    includeReferenceMedia,
   })
 
   return (
@@ -875,6 +883,27 @@ function CodeSamplesSection(props: {
       )}
 
       <div className='mt-3'>
+        {activeEndpoint.kind === 'video' &&
+          activeEndpoint.isMapped &&
+          hasVideoReferenceMedia(activeEndpoint.videoParameters) && (
+            <div className='mb-2 flex flex-col items-start gap-2'>
+              <Toggle
+                variant='outline'
+                size='sm'
+                pressed={includeReferenceMedia}
+                onPressedChange={setIncludeReferenceMedia}
+              >
+                {t('Include reference media')}
+              </Toggle>
+              {includeReferenceMedia && (
+                <p className='text-muted-foreground text-xs'>
+                  {t(
+                    'Replace the example media URLs with your own accessible files. Remove reference fields you do not need.'
+                  )}
+                </p>
+              )}
+            </div>
+          )}
         <CodeBlock code={code} language={LANG_HIGHLIGHT[lang]}>
           <CodeBlockCopyButton />
         </CodeBlock>
@@ -910,7 +939,16 @@ function SupportedParametersSection(props: { model: PricingModel }) {
 
   return (
     <section>
-      <SectionTitle icon={Sigma}>{t('Supported parameters')}</SectionTitle>
+      <SectionTitle icon={Sigma}>
+        {videoParameters ? t('Request parameters') : t('Supported parameters')}
+      </SectionTitle>
+      {videoParameters?.hasUnconfirmedParameters && (
+        <p className='text-muted-foreground mb-3 text-xs'>
+          {t(
+            'Support or limits for parameters marked Unconfirmed have not been published. Confirm them before use.'
+          )}
+        </p>
+      )}
       {videoParameters && !videoParameters.hasDetails && (
         <p className='text-muted-foreground mb-3 text-xs'>
           {t(
@@ -979,6 +1017,16 @@ function SupportedParametersSection(props: { model: PricingModel }) {
 }
 
 function ParamRangeCell(props: { param: SupportedParameter }) {
+  const { t } = useTranslation()
+  if (props.param.availability) {
+    return (
+      <Badge variant='outline'>
+        {props.param.availability === 'unsupported'
+          ? t('Not supported')
+          : t('Unconfirmed')}
+      </Badge>
+    )
+  }
   const { defaultValue, range, enumValues } = props.param
   if (defaultValue !== undefined) {
     return (

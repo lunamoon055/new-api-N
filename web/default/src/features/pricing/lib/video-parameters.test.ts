@@ -68,7 +68,16 @@ describe('video model supported parameters', () => {
     assert.equal(result.hasDetails, true)
     assert.deepEqual(
       result.parameters.map((parameter) => parameter.name),
-      ['model', 'prompt', 'duration', 'ratio', 'resolution', 'reference_images']
+      [
+        'model',
+        'prompt',
+        'duration',
+        'ratio',
+        'resolution',
+        'reference_images',
+        'reference_videos',
+        'reference_audios',
+      ]
     )
     assert.deepEqual(result.parameters[0].enumValues, ['Grok 1.5'])
     assert.equal(
@@ -140,11 +149,13 @@ describe('video model supported parameters', () => {
       )?.range,
       '0 ~ 10'
     )
-    assert(
-      !single.parameters.some((parameter) =>
-        ['reference_videos', 'reference_audios'].includes(parameter.name)
+    for (const name of ['reference_videos', 'reference_audios']) {
+      assert.equal(
+        single.parameters.find((parameter) => parameter.name === name)
+          ?.availability,
+        'unsupported'
       )
-    )
+    }
   })
 
   test('uses request field names and fixed resolution values verbatim', () => {
@@ -282,7 +293,7 @@ describe('video model supported parameters', () => {
     }
   })
 
-  test('omits fields without values and media fields without supported references', () => {
+  test('keeps unpublished ranges distinct from explicitly unsupported media', () => {
     const result = buildVideoSupportedParameters(
       modelWithContract({
         ...grokParameters,
@@ -292,11 +303,84 @@ describe('video model supported parameters', () => {
         max_images: 0,
       })
     )!
-    assert.equal(result.hasDetails, false)
+    assert.equal(result.hasDetails, true)
+    assert.equal(result.hasUnconfirmedParameters, true)
     assert.deepEqual(
       result.parameters.map((parameter) => parameter.name),
-      ['model', 'prompt']
+      [
+        'model',
+        'prompt',
+        'duration',
+        'ratio',
+        'resolution',
+        'reference_images',
+        'reference_videos',
+        'reference_audios',
+      ]
     )
+    for (const name of ['duration', 'ratio', 'resolution']) {
+      assert.equal(
+        result.parameters.find((parameter) => parameter.name === name)
+          ?.availability,
+        'unconfirmed'
+      )
+    }
+    for (const name of [
+      'reference_images',
+      'reference_videos',
+      'reference_audios',
+    ]) {
+      assert.equal(
+        result.parameters.find((parameter) => parameter.name === name)
+          ?.availability,
+        'unsupported'
+      )
+    }
+  })
+
+  test('unknown mapped profiles keep gateway fields without claiming zero support or invented limits', () => {
+    const model = modelWithContract({
+      capabilities_unknown: true,
+      duration_field: 'seconds',
+      resolution_field: 'resolution',
+      image_field: 'images',
+      video_field: 'videos',
+      audio_field: 'audios',
+      max_images: 0,
+      max_videos: 0,
+      max_audios: 0,
+    })
+    model.mapped_endpoints![0].documentation_fields = {
+      ...model.mapped_endpoints![0].parameters!,
+      duration_field: 'duration',
+      image_field: 'referenceImages',
+      video_field: 'referenceVideos',
+      audio_field: 'referenceAudios',
+    }
+    const result = buildVideoSupportedParameters(model)!
+    assert.equal(result.hasUnconfirmedParameters, true)
+    assert.deepEqual(
+      result.parameters.map((parameter) => parameter.name),
+      [
+        'model',
+        'prompt',
+        'duration',
+        'resolution',
+        'referenceImages',
+        'referenceVideos',
+        'referenceAudios',
+      ]
+    )
+    for (const parameter of result.parameters.slice(2)) {
+      assert.equal(parameter.availability, 'unconfirmed')
+      assert.equal(parameter.range, undefined)
+      assert.equal(parameter.defaultValue, undefined)
+      assert(
+        !parameter.notes?.some(
+          (note) => note.key === 'At most {{count}} references.'
+        )
+      )
+    }
   })
 
   test('prefers a video endpoint with published parameters', () => {

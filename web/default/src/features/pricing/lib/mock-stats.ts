@@ -508,6 +508,7 @@ export type SupportedParameter = {
   defaultValue?: string | number | boolean
   range?: string
   enumValues?: string[]
+  availability?: 'unconfirmed' | 'unsupported'
   descriptionKey: string
   required?: boolean
   notes?: Array<{
