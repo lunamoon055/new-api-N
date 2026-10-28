@@ -3,8 +3,13 @@
     "360": "360",
     "1000": "1000",
     "10000": "10000",
+    "Configure the destination of the Workbench navigation link.": "设置顶部“工作台”栏目的跳转地址。",
     "Enter a duration supported by this model": "请填写该模型支持的时长秒数",
     "_copy": "_复制",
+    "Workbench": "工作台",
+    "Workbench link": "工作台链接",
+    "External workspace opened in a new tab.": "在新标签页打开外部工作台。",
+    "Open the Workbench in a new tab. Leave blank to hide the navigation link.": "点击“工作台”将在新标签页打开此地址，留空则隐藏导航入口。",
     "，": "，",
     ", and": "，和",
     "，and ": "，",
@@ -5108,6 +5113,16 @@
     "Clear model tags?": "清除模型标签？",
     "Confirm clear tags": "确认清除标签",
     "Remove all tags from {{count}} selected model(s)? You can add tags again afterwards.": "确定清空所选 {{count}} 个模型的全部标签吗？清除后可以重新添加标签。",
-    "Tags cleared from {{count}} model(s).": "已清除 {{count}} 个模型的标签。"
+    "Tags cleared from {{count}} model(s).": "已清除 {{count}} 个模型的标签。",
+    "Authentication fields and signed URL credentials have been redacted.": "认证字段和链接签名凭据已脱敏。",
+    "Click to view request body": "点击查看请求体",
+    "Copy request body": "复制请求体",
+    "Full request bodies are available to super administrators only. Only visible fields are shown here.": "完整请求体仅超级管理员可查看，此处仅展示当前可见字段。",
+    "Incoming request body before upstream model conversion.": "本站接收的请求体（上游模型转换前）。",
+    "Multipart requests show form fields and file metadata. File contents are not recorded.": "文件上传请求仅记录表单字段和文件信息，不保存文件内容。",
+    "Request Body": "请求体",
+    "Some content was omitted because it was oversized, inline media, or unavailable. This snapshot is incomplete.": "部分内容因过大、为内联媒体或无法读取而被省略，此快照不完整。",
+    "This historical record only contains saved fields. The original request body was not recorded.": "此历史记录仅展示已保存的字段，未记录原始请求体。",
+    "View request body": "查看请求体"
   }
 }

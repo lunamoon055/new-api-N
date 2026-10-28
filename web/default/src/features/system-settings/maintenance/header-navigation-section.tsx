@@ -48,6 +48,7 @@ const headerNavSchema = z.object({
   pricingRequireAuth: z.boolean(),
   rankingsEnabled: z.boolean(),
   rankingsRequireAuth: z.boolean(),
+  workbench: z.boolean(),
   docs: z.boolean(),
   about: z.boolean(),
 })
@@ -88,6 +89,10 @@ const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
       : Boolean(config.rankings.requireAuth),
   docs:
     config.docs === undefined ? HEADER_NAV_DEFAULT.docs : Boolean(config.docs),
+  workbench:
+    config.workbench === undefined
+      ? HEADER_NAV_DEFAULT.workbench
+      : Boolean(config.workbench),
   about:
     config.about === undefined
       ? HEADER_NAV_DEFAULT.about
@@ -117,6 +122,7 @@ export function HeaderNavigationSection({
       home: values.home,
       console: values.console,
       creation: values.creation,
+      workbench: values.workbench,
       docs: values.docs,
       about: values.about,
       pricing: {
@@ -165,6 +171,11 @@ export function HeaderNavigationSection({
       key: 'creation',
       title: t('Creation Center'),
       description: t('Unified workspace for chat, image, and video creation.'),
+    },
+    {
+      key: 'workbench',
+      title: t('Workbench'),
+      description: t('External workspace opened in a new tab.'),
     },
     {
       key: 'docs',

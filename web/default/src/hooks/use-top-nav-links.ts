@@ -39,6 +39,7 @@ export type TopNavLink = {
  *   creation: true,
  *   pricing: { enabled: true, requireAuth: false },
  *   rankings: { enabled: true, requireAuth: false },
+ *   workbench: true,
  *   docs: true,
  *   about: true
  * }
@@ -57,6 +58,7 @@ export function useTopNavLinks(): TopNavLink[] {
 
   // Documentation link (may be external)
   const docsLink: string | undefined = status?.docs_link as string | undefined
+  const workbenchLink = status?.workbench_link
 
   const isAuthed = !!auth?.user
 
@@ -89,6 +91,19 @@ export function useTopNavLinks(): TopNavLink[] {
   if (rankings && typeof rankings === 'object' && rankings.enabled) {
     const requiresAuth = rankings.requireAuth && !isAuthed
     links.push({ title: t('Rankings'), href: '/rankings', requiresAuth })
+  }
+
+  // Workbench (external link, immediately before Docs)
+  if (
+    modules.workbench !== false &&
+    typeof workbenchLink === 'string' &&
+    /^https?:\/\//.test(workbenchLink)
+  ) {
+    links.push({
+      title: t('Workbench'),
+      href: workbenchLink,
+      external: true,
+    })
   }
 
   // Docs (supports external links)

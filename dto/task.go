@@ -50,16 +50,32 @@ type TaskDto struct {
 	Status     string `json:"status"`
 	FailReason string `json:"fail_reason"`
 	// RawFailReason is only populated for super-administrator task-log responses.
-	RawFailReason string          `json:"raw_fail_reason,omitempty"`
-	ResultURL     string          `json:"result_url,omitempty"` // 任务结果 URL（视频地址等）
-	Prompt        string          `json:"prompt,omitempty"`     // 用户提交任务时输入的提示词
-	SubmitTime    int64           `json:"submit_time"`
-	StartTime     int64           `json:"start_time"`
-	FinishTime    int64           `json:"finish_time"`
-	Progress      string          `json:"progress"`
-	Properties    any             `json:"properties"`
-	Username      string          `json:"username,omitempty"`
-	Data          json.RawMessage `json:"data"`
+	RawFailReason string `json:"raw_fail_reason,omitempty"`
+	// RequestBodySnapshot is only populated in super-administrator task logs.
+	RequestBodySnapshot *TaskRequestSnapshot `json:"request_body_snapshot,omitempty"`
+	ResultURL           string               `json:"result_url,omitempty"` // 任务结果 URL（视频地址等）
+	Prompt              string               `json:"prompt,omitempty"`     // 用户提交任务时输入的提示词
+	SubmitTime          int64                `json:"submit_time"`
+	StartTime           int64                `json:"start_time"`
+	FinishTime          int64                `json:"finish_time"`
+	Progress            string               `json:"progress"`
+	Properties          any                  `json:"properties"`
+	Username            string               `json:"username,omitempty"`
+	Data                json.RawMessage      `json:"data"`
+}
+
+// A bounded, sanitized copy of the incoming request before provider conversion.
+// Multipart bodies are represented as fields/file metadata, never file bytes.
+type TaskRequestSnapshot struct {
+	Method      string          `json:"method"`
+	Path        string          `json:"path"`
+	ContentType string          `json:"content_type"`
+	Body        json.RawMessage `json:"body,omitempty"`
+	// Task logs use text to preserve integers beyond JavaScript's safe range.
+	BodyJSON string `json:"body_json,omitempty"`
+	Redacted bool   `json:"redacted,omitempty"`
+	Omitted  bool   `json:"omitted,omitempty"`
+	Format   string `json:"format"` // json, form, multipart, unavailable
 }
 
 type FetchReq struct {

@@ -154,6 +154,7 @@ export type SiteSettings = {
   'legal.user_agreement': string
   'legal.privacy_policy': string
   HeaderNavModules: string
+  'general_setting.workbench_link': string
   SidebarModulesAdmin: string
 }
 

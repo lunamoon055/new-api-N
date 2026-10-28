@@ -28,6 +28,7 @@ import { NoticeSection } from '../maintenance/notice-section'
 import { SidebarModulesSection } from '../maintenance/sidebar-modules-section'
 import type { SiteSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
+import { WorkbenchLinkSection } from './workbench-link-section'
 
 const SITE_SECTIONS = [
   {
@@ -76,6 +77,17 @@ const SITE_SECTIONS = [
         />
       )
     },
+  },
+  {
+    id: 'workbench-link',
+    titleKey: 'Workbench link',
+    descriptionKey:
+      'Configure the destination of the Workbench navigation link.',
+    build: (settings: SiteSettings) => (
+      <WorkbenchLinkSection
+        value={settings['general_setting.workbench_link']}
+      />
+    ),
   },
   {
     id: 'sidebar-modules',

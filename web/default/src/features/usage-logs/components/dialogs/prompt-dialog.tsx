@@ -28,6 +28,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Dialog,
   DialogContent,
@@ -50,11 +51,15 @@ import type {
   TaskInputMaterial,
   TaskInputMaterialKind,
 } from '../../lib/task-preview'
+import type { TaskRequestSnapshot } from '../../types'
 
 interface PromptDialogProps {
   prompt: string
   promptEn?: string
   inputMaterials?: TaskInputMaterial[]
+  requestBody?: string
+  requestSnapshot?: TaskRequestSnapshot
+  requestBodyNotice?: 'historical' | 'restricted'
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -108,28 +113,115 @@ export function PromptDialog({
   prompt,
   promptEn,
   inputMaterials = [],
+  requestBody,
+  requestSnapshot,
+  requestBodyNotice,
   open,
   onOpenChange,
 }: PromptDialogProps) {
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
+  const requestMode = requestBody !== undefined
+  let description = t('View the complete prompt and its English translation')
+  if (inputMaterials.length > 0)
+    description = t('View the complete details for this log entry')
+  if (requestMode)
+    description = t('Incoming request body before upstream model conversion.')
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-2xl'>
+      <DialogContent className={requestMode ? 'sm:max-w-4xl' : 'sm:max-w-2xl'}>
         <DialogHeader>
-          <DialogTitle>{t('Prompt Details')}</DialogTitle>
-          <DialogDescription>
-            {inputMaterials.length > 0
-              ? t('View the complete details for this log entry')
-              : t('View the complete prompt and its English translation')}
-          </DialogDescription>
+          <DialogTitle>
+            {requestMode ? t('Request Body') : t('Prompt Details')}
+          </DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <ScrollArea className='max-h-[65vh] pr-4'>
           <div className='flex flex-col gap-4 py-4'>
+            {requestMode && (
+              <div className='flex min-w-0 flex-col gap-3'>
+                {requestSnapshot && (
+                  <div className='flex flex-wrap items-center gap-2 text-xs'>
+                    <code className='bg-muted rounded px-2 py-1'>
+                      {requestSnapshot.method} {requestSnapshot.path}
+                    </code>
+                    <span className='text-muted-foreground'>
+                      {requestSnapshot.content_type}
+                    </span>
+                  </div>
+                )}
+                {(requestBodyNotice ||
+                  requestSnapshot?.omitted ||
+                  requestSnapshot?.redacted ||
+                  requestSnapshot?.format === 'multipart') && (
+                  <Alert>
+                    <AlertDescription className='flex flex-col gap-1'>
+                      {requestBodyNotice === 'historical' && (
+                        <p>
+                          {t(
+                            'This historical record only contains saved fields. The original request body was not recorded.'
+                          )}
+                        </p>
+                      )}
+                      {requestBodyNotice === 'restricted' && (
+                        <p>
+                          {t(
+                            'Full request bodies are available to super administrators only. Only visible fields are shown here.'
+                          )}
+                        </p>
+                      )}
+                      {requestSnapshot?.redacted && (
+                        <p>
+                          {t(
+                            'Authentication fields and signed URL credentials have been redacted.'
+                          )}
+                        </p>
+                      )}
+                      {requestSnapshot?.omitted && (
+                        <p>
+                          {t(
+                            'Some content was omitted because it was oversized, inline media, or unavailable. This snapshot is incomplete.'
+                          )}
+                        </p>
+                      )}
+                      {requestSnapshot?.format === 'multipart' && (
+                        <p>
+                          {t(
+                            'Multipart requests show form fields and file metadata. File contents are not recorded.'
+                          )}
+                        </p>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {requestBody && (
+                  <>
+                    <div className='flex justify-end'>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => copyToClipboard(requestBody)}
+                      >
+                        <HugeiconsIcon
+                          icon={
+                            copiedText === requestBody ? Tick02Icon : Copy01Icon
+                          }
+                          data-icon='inline-start'
+                        />
+                        {t('Copy request body')}
+                      </Button>
+                    </div>
+                    <pre className='bg-muted/50 max-w-full overflow-x-auto rounded-md border p-4 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap'>
+                      {requestBody}
+                    </pre>
+                  </>
+                )}
+              </div>
+            )}
             {/* Original Prompt */}
-            {prompt && (
+            {!requestMode && prompt && (
               <div className='flex flex-col gap-2'>
                 <h3 className='text-sm font-semibold'>{t('Prompt')}</h3>
                 <div className='bg-muted/50 relative rounded-md border p-3'>

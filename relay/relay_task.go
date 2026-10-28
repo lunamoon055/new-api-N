@@ -349,6 +349,7 @@ func ensurePersistentTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 
 	task := model.InitTask(platform, info)
+	task.PrivateData.RequestBodySnapshot = service.CaptureTaskRequestSnapshot(c)
 	if request, err := relaycommon.GetTaskRequest(c); err == nil {
 		task.Properties.Input = request.Prompt
 		task.Properties.InputImages, task.Properties.InputVideos, task.Properties.InputAudios = request.InputMaterialURLs()
@@ -821,6 +822,18 @@ func TaskModel2DtoWithInputMaterials(task *model.Task) *dto.TaskDto {
 }
 
 func taskModel2Dto(task *model.Task, includePrivateDetails bool) *dto.TaskDto {
+	var requestSnapshot *dto.TaskRequestSnapshot
+	if includePrivateDetails && task.PrivateData.RequestBodySnapshot != nil {
+		copy := *task.PrivateData.RequestBodySnapshot
+		if len(copy.Body) > 0 {
+			formatted, err := common.MarshalIndent(copy.Body, "", "  ")
+			if err == nil {
+				copy.BodyJSON = string(formatted)
+			}
+			copy.Body = nil
+		}
+		requestSnapshot = &copy
+	}
 	resultURL := task.GetResultURL()
 	if task.Status == model.TaskStatusFailure {
 		// GetResultURL falls back to FailReason for historical compatibility.
@@ -862,29 +875,30 @@ func taskModel2Dto(task *model.Task, includePrivateDetails bool) *dto.TaskDto {
 	}
 
 	return &dto.TaskDto{
-		ID:            task.ID,
-		CreatedAt:     task.CreatedAt,
-		UpdatedAt:     task.UpdatedAt,
-		TaskID:        task.TaskID,
-		ModelName:     task.Properties.ModelName(),
-		Platform:      string(task.Platform),
-		UserId:        task.UserId,
-		Group:         task.Group,
-		ChannelId:     task.ChannelId,
-		Quota:         task.Quota,
-		Action:        task.Action,
-		Status:        string(task.Status),
-		FailReason:    failReason,
-		RawFailReason: rawFailReason,
-		ResultURL:     resultURL,
-		Prompt:        task.Properties.Input,
-		SubmitTime:    task.SubmitTime,
-		StartTime:     task.StartTime,
-		FinishTime:    task.FinishTime,
-		Progress:      task.Progress,
-		Properties:    properties,
-		Username:      task.Username,
-		Data:          taskData,
+		ID:                  task.ID,
+		CreatedAt:           task.CreatedAt,
+		UpdatedAt:           task.UpdatedAt,
+		TaskID:              task.TaskID,
+		ModelName:           task.Properties.ModelName(),
+		Platform:            string(task.Platform),
+		UserId:              task.UserId,
+		Group:               task.Group,
+		ChannelId:           task.ChannelId,
+		Quota:               task.Quota,
+		Action:              task.Action,
+		Status:              string(task.Status),
+		FailReason:          failReason,
+		RawFailReason:       rawFailReason,
+		RequestBodySnapshot: requestSnapshot,
+		ResultURL:           resultURL,
+		Prompt:              task.Properties.Input,
+		SubmitTime:          task.SubmitTime,
+		StartTime:           task.StartTime,
+		FinishTime:          task.FinishTime,
+		Progress:            task.Progress,
+		Properties:          properties,
+		Username:            task.Username,
+		Data:                taskData,
 	}
 }
 

@@ -21,7 +21,7 @@ import { useState, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Image02Icon, Link02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Film, MessageSquareText, Music } from 'lucide-react'
+import { Braces, Film, Music } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatTimestampToDate } from '@/lib/format'
@@ -35,10 +35,10 @@ import { taskActionMapper, taskStatusMapper } from '../../lib/mappers'
 import {
   getTaskLogImagePreviewUrls,
   getTaskLogModelName,
-  getTaskLogPrompt,
   getTaskLogVideoPreviewUrl,
   getVisibleTaskLogInputMaterials,
 } from '../../lib/task-preview'
+import { getTaskLogRequestBody } from '../../lib/task-request-body'
 import { getTaskFailureDetails } from '../../lib/task-errors'
 import type { TaskLog } from '../../types'
 import {
@@ -169,7 +169,7 @@ function ImagePreviewCell({ log }: { log: TaskLog }) {
   )
 }
 
-function PromptCell({
+function RequestBodyCell({
   log,
   canViewInputMaterials,
 }: {
@@ -178,30 +178,30 @@ function PromptCell({
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const prompt = getTaskLogPrompt(log)
+  const request = getTaskLogRequestBody(log, canViewInputMaterials)
   const inputMaterials = getVisibleTaskLogInputMaterials(
     log,
     canViewInputMaterials
   )
   const firstMaterial = inputMaterials[0]
 
-  if (!prompt && !firstMaterial) {
+  if (!request.text && !request.snapshot && !firstMaterial) {
     return <span className='text-muted-foreground/60 text-xs'>-</span>
   }
 
   return (
     <>
       <div className='flex max-w-[280px] flex-col gap-1'>
-        {prompt && (
+        {(request.text || request.snapshot) && (
           <button
             type='button'
             className='group flex min-w-0 items-center gap-1 text-left text-xs'
             onClick={() => setOpen(true)}
-            title={t('Click to view full prompt')}
+            title={t('Click to view request body')}
           >
-            <MessageSquareText className='text-muted-foreground size-3 shrink-0' />
+            <Braces className='text-muted-foreground size-3 shrink-0' />
             <span className='text-muted-foreground truncate leading-snug group-hover:underline'>
-              {prompt}
+              {request.preview || t('View request body')}
             </span>
           </button>
         )}
@@ -238,7 +238,10 @@ function PromptCell({
         )}
       </div>
       <PromptDialog
-        prompt={prompt ?? ''}
+        prompt=''
+        requestBody={request.text}
+        requestSnapshot={request.snapshot}
+        requestBodyNotice={request.notice}
         inputMaterials={inputMaterials}
         open={open}
         onOpenChange={setOpen}
@@ -401,17 +404,17 @@ export function useTaskLogsColumns(
       size: 170,
     },
     {
-      id: 'prompt',
+      id: 'request_body',
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Prompt')} />
+        <DataTableColumnHeader column={column} title={t('Request Body')} />
       ),
       cell: ({ row }) => (
-        <PromptCell
+        <RequestBodyCell
           log={row.original}
           canViewInputMaterials={canViewPrivateTaskDetails}
         />
       ),
-      meta: { label: t('Prompt'), mobileHidden: true },
+      meta: { label: t('Request Body'), mobileHidden: true },
       size: 260,
       maxSize: 300,
     },

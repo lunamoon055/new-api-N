@@ -35,6 +35,7 @@ const defaultSiteSettings: SiteSettings = {
   'legal.user_agreement': '',
   'legal.privacy_policy': '',
   HeaderNavModules: '',
+  'general_setting.workbench_link': 'https://unline.visualwk.com',
   SidebarModulesAdmin: '',
 }
 

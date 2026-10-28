@@ -252,11 +252,23 @@ export interface TaskLog {
   data?: unknown // JSON payload from the task response
   fail_reason?: string
   raw_fail_reason?: string // Super-administrator task-log responses only
+  request_body_snapshot?: TaskRequestSnapshot // Super-administrator task-log responses only
   result_url?: string
   status: string // NOT_START, SUBMITTED, IN_PROGRESS, SUCCESS, FAILURE, QUEUED, UNKNOWN
   other?: string
   created_at?: number
   updated_at?: number
+}
+
+export interface TaskRequestSnapshot {
+  method: string
+  path: string
+  content_type: string
+  body?: unknown
+  body_json?: string
+  redacted?: boolean
+  omitted?: boolean
+  format: 'json' | 'form' | 'multipart' | 'unavailable'
 }
 
 // ============================================================================

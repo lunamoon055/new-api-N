@@ -3,8 +3,13 @@
     "360": "360",
     "1000": "1000",
     "10000": "10000",
+    "Configure the destination of the Workbench navigation link.": "Configure the destination of the Workbench navigation link.",
     "Enter a duration supported by this model": "Enter a duration supported by this model",
     "_copy": "_copy",
+    "Workbench": "Workbench",
+    "Workbench link": "Workbench link",
+    "External workspace opened in a new tab.": "External workspace opened in a new tab.",
+    "Open the Workbench in a new tab. Leave blank to hide the navigation link.": "Open the Workbench in a new tab. Leave blank to hide the navigation link.",
     "，": ", ",
     ", and": ", and",
     "，and ": ", and ",
@@ -5108,6 +5113,16 @@
     "Clear model tags?": "Clear model tags?",
     "Confirm clear tags": "Confirm clear tags",
     "Remove all tags from {{count}} selected model(s)? You can add tags again afterwards.": "Remove all tags from {{count}} selected model(s)? You can add tags again afterwards.",
-    "Tags cleared from {{count}} model(s).": "Tags cleared from {{count}} model(s)."
+    "Tags cleared from {{count}} model(s).": "Tags cleared from {{count}} model(s).",
+    "Authentication fields and signed URL credentials have been redacted.": "Authentication fields and signed URL credentials have been redacted.",
+    "Click to view request body": "Click to view request body",
+    "Copy request body": "Copy request body",
+    "Full request bodies are available to super administrators only. Only visible fields are shown here.": "Full request bodies are available to super administrators only. Only visible fields are shown here.",
+    "Incoming request body before upstream model conversion.": "Incoming request body before upstream model conversion.",
+    "Multipart requests show form fields and file metadata. File contents are not recorded.": "Multipart requests show form fields and file metadata. File contents are not recorded.",
+    "Request Body": "Request Body",
+    "Some content was omitted because it was oversized, inline media, or unavailable. This snapshot is incomplete.": "Some content was omitted because it was oversized, inline media, or unavailable. This snapshot is incomplete.",
+    "This historical record only contains saved fields. The original request body was not recorded.": "This historical record only contains saved fields. The original request body was not recorded.",
+    "View request body": "View request body"
   }
 }

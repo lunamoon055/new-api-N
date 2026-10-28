@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -228,6 +229,16 @@ func UpdateOption(c *gin.Context) {
 		}
 	}
 	switch option.Key {
+	case "general_setting.workbench_link":
+		value := strings.TrimSpace(option.Value.(string))
+		if value != "" {
+			link, parseErr := url.ParseRequestURI(value)
+			if parseErr != nil || (link.Scheme != "http" && link.Scheme != "https") || link.Hostname() == "" || link.User != nil || strings.ContainsAny(value, " \t\r\n") {
+				common.ApiErrorMsg(c, "工作台链接必须是有效的 http:// 或 https:// 地址")
+				return
+			}
+		}
+		option.Value = value
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && common.GitHubClientId == "" {
 			c.JSON(http.StatusOK, gin.H{
