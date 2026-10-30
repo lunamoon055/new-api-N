@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -85,6 +86,77 @@ func TestUnifiedVideoLifecycleAndReferenceMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.TaskStatusSuccess, result.Status)
 	require.Equal(t, server.URL+"/v1/videos/upstream_private/content", result.Url)
+}
+
+func TestSeedanceBBMappingsReachUpstreamExactly(t *testing.T) {
+	service.InitHttpClient()
+	for _, resolution := range []string{"480", "720"} {
+		for _, multipartRequest := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/multipart=%t", resolution, multipartRequest), func(t *testing.T) {
+				publicModel := "Seedance2.5:" + resolution + "（秒）"
+				upstreamModel := "BBseadanco-" + resolution
+				var submittedModel string
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					require.Equal(t, "/v1/videos", r.URL.Path)
+					require.Equal(t, http.MethodPost, r.Method)
+					if multipartRequest {
+						require.NoError(t, r.ParseMultipartForm(1024*1024))
+						defer r.MultipartForm.RemoveAll()
+						submittedModel = r.FormValue("model")
+						require.Equal(t, "5", r.FormValue("seconds"))
+						require.Equal(t, resolution+"p", r.FormValue("resolution"))
+					} else {
+						var payload map[string]any
+						require.NoError(t, common.DecodeJson(r.Body, &payload))
+						submittedModel, _ = payload["model"].(string)
+						require.EqualValues(t, 5, payload["seconds"])
+						require.Equal(t, resolution+"p", payload["resolution"])
+						require.NotContains(t, payload, "duration")
+					}
+					fmt.Fprint(w, `{"id":"bb-test","status":"queued"}`)
+				}))
+				defer server.Close()
+				fields := map[string]string{"model": publicModel, "prompt": "日出", "duration": "5", "ratio": "16:9", "resolution": resolution + "p"}
+				payload, err := common.Marshal(fields)
+				require.NoError(t, err)
+				c, _, info, a := testRequest(t, string(payload), server.URL)
+				if multipartRequest {
+					var form bytes.Buffer
+					writer := multipart.NewWriter(&form)
+					for field, value := range fields {
+						require.NoError(t, writer.WriteField(field, value))
+					}
+					require.NoError(t, writer.Close())
+					c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", &form)
+					c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+					t.Cleanup(func() {
+						if c.Request.MultipartForm != nil {
+							c.Request.MultipartForm.RemoveAll()
+						}
+					})
+				}
+				info.OriginModelName = publicModel
+				// Exercise the same mapping helper as RelayTaskSubmit, including
+				// replacing a previous upstream model before validation/building.
+				mapping, err := common.Marshal(map[string]string{publicModel: upstreamModel})
+				require.NoError(t, err)
+				c.Set("model_mapping", string(mapping))
+				require.NoError(t, helper.ModelMappedHelper(c, info, nil))
+				a.Init(info)
+				require.Nil(t, a.ValidateRequestAndSetAction(c, info))
+				body, err := a.BuildRequestBody(c, info)
+				require.NoError(t, err)
+				resp, err := a.DoRequest(c, info, body)
+				require.NoError(t, err)
+				resp.Body.Close()
+				require.Equal(t, upstreamModel, submittedModel)
+				require.Equal(t, publicModel, info.OriginModelName)
+				original, exists := c.Get("v6k_request")
+				require.True(t, exists)
+				require.Equal(t, publicModel, original.(map[string]any)["model"], "the original request must not be overwritten by the upstream mapping")
+			})
+		}
+	}
 }
 
 func TestInvalidVideoInputsAreRejectedBeforeSubmission(t *testing.T) {

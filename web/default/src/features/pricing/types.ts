@@ -62,6 +62,8 @@ export type PricingModel = {
     example_image_required?: boolean
     parameters?: IntegrationParameters
     documentation_fields?: IntegrationParameters
+    capability_source?: string
+    capabilities_updated_at?: number
   }>
   key?: string
   group_ratio?: Record<string, number>
@@ -95,6 +97,7 @@ export type PricingModel = {
 /** Public model-specific request contract shared with relay validation. */
 export type IntegrationParameters = {
   capabilities_unknown?: boolean
+  unknown_fields?: string[]
   omit_ratio?: boolean
   durations?: number[]
   resolutions?: string[]

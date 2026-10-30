@@ -30,12 +30,34 @@ test('ZH model documentation fills unpublished ratios and retains per-model refe
     for (const ratio of ['16:9', '9:16', '1:1', '4:3', '3:4', '2:3', '3:2', '21:9']) {
       assert.ok(rows.find(row => row[0] === 'ratio')[3].includes(ratio))
     }
-    assert.equal(rows.some(row => row[0] === 'videos'), specs[name].max_videos > 0)
+    const videoRow = rows.find(row => row[0] === 'videos')
+    assert.ok(videoRow)
+    if (specs[name].max_videos === 0) assert.match(videoRow[3], /不支持/)
     assert.match(rows.find(row => row[0] === 'images')[3], new RegExp(`最多 ${specs[name].max_images} `))
     assert.equal(getRequestBody(model, doc).model, name)
     assert.equal(getRequestBody(model, doc).seconds, specs[name].durations[0])
     assert.equal(getRequestBody(model, doc).ratio, '16:9')
   }
+})
+
+test('unknown and explicitly unsupported reference capabilities remain distinct in page and copied docs', () => {
+  const model = {model_name:'new-video',mapped_endpoints:[{
+    type:'openai-video',kind:'video',path:'/v1/videos',
+    capability_source:'upstream_catalog',
+    documentation_fields:{duration_field:'duration',resolution_field:'resolution',image_field:'referenceImages',video_field:'referenceVideos',audio_field:'referenceAudios',max_images:30,max_videos:0,max_audios:0,unknown_fields:['max_videos']},
+  }]}
+  const doc = getModelDoc(model,{})
+  const rows = getRequestParams(doc)
+  assert.match(rows.find(row=>row[0]==='referenceImages')[3],/最多 30/)
+  assert.match(rows.find(row=>row[0]==='referenceVideos')[3],/未确认/)
+  assert.match(rows.find(row=>row[0]==='referenceAudios')[3],/不支持/)
+  assert.match(rows.find(row=>row[0]==='resolution')[3],/未确认/)
+  assert.match(doc.source,/上游模型目录/)
+  const copied = getAllModelDocs({models:[model],endpoints:{}},'https://gateway.example')
+  assert.match(copied,/referenceVideos.*未确认/)
+  assert.match(copied,/referenceAudios.*不支持/)
+  const unknown={...model,mapped_endpoints:[{...model.mapped_endpoints[0],documentation_fields:{...model.mapped_endpoints[0].documentation_fields,capabilities_unknown:true}}]}
+  assert.match(getRequestParams(getModelDoc(unknown,{})).find(row=>row[0]==='referenceImages')[3],/未确认/)
 })
 
 test('video ratio fallback covers every live ID while preserving explicit ranges', () => {
@@ -55,7 +77,7 @@ test('video ratio fallback covers every live ID while preserving explicit ranges
 
 test('live video note parameters drive limits, examples and bulk copied documentation', () => {
   const model = { model_name: 'Seedance2.5:720（条）', mapped_endpoints: [{
-    type: 'openai-video', kind: 'video', path: '/v1/videos', method: 'POST', query_path: '/v1/videos/{task_id}',
+    type: 'openai-video', kind: 'video', path: '/v1/videos', method: 'POST', query_path: '/v1/videos/{task_id}', example_duration: 99,
     parameters: { duration_field: 'duration', durations: Array.from({length:26}, (_,i)=>i+5), image_field: 'referenceImages', video_field: 'referenceVideos', audio_field: 'referenceAudios', max_images: 30, max_videos: 10, max_audios: 10 },
   }] }
   const doc = getModelDoc(model, {})

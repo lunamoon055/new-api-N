@@ -5129,6 +5129,13 @@
     "Request Body": "Request Body",
     "Some content was omitted because it was oversized, inline media, or unavailable. This snapshot is incomplete.": "Some content was omitted because it was oversized, inline media, or unavailable. This snapshot is incomplete.",
     "This historical record only contains saved fields. The original request body was not recorded.": "This historical record only contains saved fields. The original request body was not recorded.",
-    "View request body": "View request body"
+    "View request body": "View request body",
+    "Refresh model capabilities": "Refresh model capabilities",
+    "Update documentation and API parameters from the current upstream model catalog. Capabilities also refresh after channel saves and on the server schedule.": "Update documentation and API parameters from the current upstream model catalog. Capabilities also refresh after channel saves and on the server schedule.",
+    "Failed to refresh model capabilities. Existing information has been retained.": "Failed to refresh model capabilities. Existing information has been retained.",
+    "Refreshing model capabilities...": "Refreshing model capabilities...",
+    "Updated capability information for {{count}} models.": "Updated capability information for {{count}} models.",
+    "The upstream has not published all capabilities for these models. Unconfirmed parameters remain visible:": "The upstream has not published all capabilities for these models. Unconfirmed parameters remain visible:",
+    "All synchronized models have published capability information.": "All synchronized models have published capability information."
   }
 }

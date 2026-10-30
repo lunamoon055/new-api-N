@@ -49,6 +49,10 @@ function getMappedEndpoints(model) {
   return (model.mapped_endpoints || []).filter((endpoint) => endpoint?.path)
 }
 
+function isUnknown(parameters, field) {
+  return parameters.capabilities_unknown || parameters.unknown_fields?.includes(field)
+}
+
 const likelyVideoName = /sd2|sd-2|seedance|h3|video|grok|dola|wan3|sora|veo|kling/i
 const fullVideoRatios = ['16:9', '9:16', '1:1', '4:3', '3:4', '2:3', '3:2', '21:9']
 
@@ -88,7 +92,7 @@ export function getModelDoc(model, endpointMap, selectedPath) {
       method: endpoint.method || 'POST',
       path,
       queryPath: endpoint.query_path?.replace('{model}', encodeURIComponent(name)),
-      source: endpoint.documentation_fields ? '本站统一视频接口' : '渠道映射对应的上游模型',
+      source: endpoint.capability_source === 'upstream_catalog' ? '当前渠道的上游模型目录' : endpoint.capability_source === 'upstream_capabilities' ? '当前渠道的上游能力接口' : endpoint.documentation_fields ? '本站统一视频接口' : '渠道映射对应的上游模型',
       verified: true,
       mapped: true,
       parameters: endpoint.kind === 'video' ? withVideoRatios(endpoint.documentation_fields || endpoint.parameters) : endpoint.parameters,
@@ -144,10 +148,10 @@ export function getRequestBody(model, doc) {
     const p = doc.parameters
     const body = { model: model.model_name, prompt: doc.kind === 'image' ? '一张简洁的海边日落电影海报' : '海边日落时，人物缓缓走向镜头，画面稳定' }
     if (doc.kind === 'image') body.n = 1
-    if (p.duration_field && p.durations?.length) body[p.duration_field] = doc.details?.duration || p.durations[0]
+    if (p.duration_field && p.durations?.length) body[p.duration_field] = p.durations.includes(doc.details?.duration) ? doc.details.duration : p.durations[0]
     if (p.ratio_field && p.ratios?.length) body[p.ratio_field] = p.ratios[0]
     if (p.resolution_field && p.resolutions?.length) body[p.resolution_field] = p.request_resolution || p.resolutions[0]
-    if (p.min_images && p.image_field) body[p.image_field] = p.image_field.endsWith('_url') ? 'https://cdn.example.com/reference.jpg' : ['https://cdn.example.com/reference.jpg']
+    if (p.min_images && p.image_field && !isUnknown(p, 'max_images')) body[p.image_field] = p.image_field.endsWith('_url') ? 'https://cdn.example.com/reference.jpg' : ['https://cdn.example.com/reference.jpg']
     return body
   }
   if (doc.kind === 'image') {
@@ -202,9 +206,13 @@ export function getRequestParams(doc) {
       rows.push([p.duration_field, 'integer', '按模型', range ? `支持时长：${range} 秒` : '时长范围未公布，请以该模型备注和上游校验为准'])
     }
     if (p.ratio_field) rows.push([p.ratio_field, 'string', doc.kind === 'video' ? '是' : '否', p.ratios?.length ? `支持比例：${p.ratios.join('、')}` : '请显式填写比例，例如 16:9'])
-    if (p.resolution_field) rows.push([p.resolution_field, 'string', '按模型', `支持分辨率：${(p.resolutions || []).join('、')}`])
-    for (const [field, count, label] of [[p.image_field, p.max_images, '图片'], [p.video_field, p.max_videos, '视频'], [p.audio_field, p.max_audios, '音频']]) {
-      if (field && count) rows.push([field, field.endsWith('_url') ? 'string' : 'string[]', field === p.image_field && p.min_images ? '是' : '否', `最多 ${count} 个可公开访问的${label} URL`])
+    if (p.resolution_field) rows.push([p.resolution_field, 'string', '按模型', p.resolutions?.length ? `支持分辨率：${p.resolutions.join('、')}` : '未确认：上游未公布分辨率范围'])
+    for (const [field, count, label, capability] of [[p.image_field, p.max_images, '图片', 'max_images'], [p.video_field, p.max_videos, '视频', 'max_videos'], [p.audio_field, p.max_audios, '音频', 'max_audios']]) {
+      if (!field) continue
+      let description = `最多 ${count} 个可公开访问的${label} URL`
+      if (isUnknown(p, capability) || count == null) description = `未确认：上游未公布${label}参考能力或数量限制`
+      else if (count <= 0) description = `不支持${label}参考`
+      rows.push([field, field.endsWith('_url') ? 'string' : 'string[]', field === p.image_field && p.min_images && !isUnknown(p, capability) ? '是' : '否', description])
     }
     return rows
   }

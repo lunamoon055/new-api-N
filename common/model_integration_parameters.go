@@ -8,6 +8,9 @@ type ModelIntegrationParameters struct {
 	// CapabilitiesUnknown distinguishes an unpublished profile from explicit
 	// zero reference limits. Consumers must not interpret unknown zeros as unsupported.
 	CapabilitiesUnknown bool `json:"capabilities_unknown,omitempty"`
+	// UnknownFields permits partially published profiles without turning an
+	// omitted reference limit into an explicit zero (unsupported).
+	UnknownFields []string `json:"unknown_fields,omitempty"`
 
 	OmitRatio          bool     `json:"omit_ratio,omitempty"`
 	Durations          []int    `json:"durations,omitempty"`
@@ -30,6 +33,18 @@ type ModelIntegrationParameters struct {
 	MaxImageSizeMB     int      `json:"max_image_size_mb,omitempty"`
 	MaxVideoSizeMB     int      `json:"max_video_size_mb,omitempty"`
 	MaxAudioSizeMB     int      `json:"max_audio_size_mb,omitempty"`
+}
+
+func IsIntegrationCapabilityUnknown(p *ModelIntegrationParameters, field string) bool {
+	if p == nil || p.CapabilitiesUnknown {
+		return true
+	}
+	for _, unknown := range p.UnknownFields {
+		if unknown == field {
+			return true
+		}
+	}
+	return false
 }
 
 // DefaultVideoAspectRatios is the site's full ratio menu for video models

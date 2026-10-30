@@ -211,6 +211,11 @@ func resolvePricingIntegrationEndpoints(channelType int, modelName, originalMode
 	if channelType == constant.ChannelTypeZongheng {
 		endpoint := makePricingMappedEndpoint(string(constant.EndpointTypeOpenAIVideo), common.EndpointInfo{Path: "/v1/videos", Method: "POST", QueryPath: "/v1/videos/{task_id}", QueryMethod: "GET"})
 		endpoint.Parameters = common.GetZonghengVideoParameters(modelName)
+		if endpoint.Parameters == nil {
+			endpoint.Parameters = &common.ModelIntegrationParameters{CapabilitiesUnknown: true,
+				DurationField: "duration", RatioField: "ratio", ResolutionField: "resolution",
+				ImageField: "images", VideoField: "reference_videos", AudioField: "reference_audios"}
+		}
 		return []PricingMappedEndpoint{*endpoint}
 	}
 	if parameters := common.GetSiteVideoIntegrationParameters(originalModelName); parameters != nil {
@@ -274,8 +279,37 @@ func appendPricingEndpoint(endpoints []PricingMappedEndpoint, candidate PricingM
 	if candidate.Kind == "video" {
 		candidate.Parameters = common.WithVideoRatioDefaults(candidate.Parameters)
 	}
-	for _, existing := range endpoints {
+	for i, existing := range endpoints {
 		if existing.Type == candidate.Type && existing.Path == candidate.Path && existing.Method == candidate.Method && existing.QueryPath == candidate.QueryPath {
+			if candidate.Kind == "video" {
+				left, _ := common.Marshal(existing.Parameters)
+				right, _ := common.Marshal(candidate.Parameters)
+				if string(left) != string(right) {
+					// One public model may route to several channels. Different
+					// profiles cannot be represented as a single verified limit.
+					unknown := &common.ModelIntegrationParameters{CapabilitiesUnknown: true}
+					if existing.Parameters != nil {
+						*unknown = *existing.Parameters
+						unknown.CapabilitiesUnknown = true
+					}
+					unknown.Durations, unknown.Resolutions = nil, nil
+					unknown.Ratios = common.DefaultVideoAspectRatios()
+					unknown.MaxImages, unknown.MaxVideos, unknown.MaxAudios, unknown.MinImages = 0, 0, 0, 0
+					unknown.RequestResolution = ""
+					unknown.AllowFrames = false
+					unknown.AudioNeedsImage, unknown.AudioRequiresImage = false, false
+					unknown.MaxImageSizeMB, unknown.MaxVideoSizeMB, unknown.MaxAudioSizeMB = 0, 0, 0
+					endpoints[i].Parameters = unknown
+					if existing.DocumentationFields != nil {
+						doc := *unknown
+						doc.DurationField, doc.RatioField, doc.ResolutionField = "duration", "ratio", "resolution"
+						doc.ImageField, doc.VideoField, doc.AudioField = "referenceImages", "referenceVideos", "referenceAudios"
+						endpoints[i].DocumentationFields = &doc
+					}
+					endpoints[i].CapabilitySource = "multiple_channels"
+					endpoints[i].CapabilitiesUpdatedAt = 0
+				}
+			}
 			return endpoints
 		}
 	}

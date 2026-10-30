@@ -130,6 +130,7 @@ func main() {
 
 	// Channel upstream model update check task
 	controller.StartChannelUpstreamModelUpdateTask()
+	service.StartChannelCapabilitySyncTask()
 
 	if common.IsMasterNode {
 		service.StartMediaTransferWorker()

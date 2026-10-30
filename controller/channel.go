@@ -677,6 +677,12 @@ func AddChannel(c *gin.Context) {
 		return
 	}
 	service.ResetProxyClientCache()
+	model.InvalidatePricingCache()
+	for i := range channels {
+		if service.SupportsChannelCapabilitySync(channels[i].Type, channels[i].GetBaseURL()) {
+			service.QueueChannelCapabilitySync(channels[i].Id)
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -981,6 +987,10 @@ func UpdateChannel(c *gin.Context) {
 	}
 	model.InitChannelCache()
 	service.ResetProxyClientCache()
+	model.InvalidatePricingCache()
+	if service.SupportsChannelCapabilitySync(channel.Type, channel.GetBaseURL()) {
+		service.QueueChannelCapabilitySync(channel.Id)
+	}
 	channel.Key = ""
 	clearChannelInfo(&channel.Channel)
 	c.JSON(http.StatusOK, gin.H{

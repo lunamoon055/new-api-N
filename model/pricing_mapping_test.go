@@ -82,6 +82,35 @@ func TestV6KDocumentationPreservesUnknownCapabilitiesAfterMapping(t *testing.T) 
 	}
 }
 
+func TestSeedanceBBMappingRestoresExactDocumentationCapabilities(t *testing.T) {
+	for _, resolution := range []string{"480", "720"} {
+		publicModel := "Seedance2.5:" + resolution + "（秒）"
+		upstreamModel := "BBseadanco-" + resolution
+		mappingJSON, err := common.Marshal(map[string]string{publicModel: upstreamModel})
+		require.NoError(t, err)
+		mapping := string(mappingJSON)
+		target, mapped := resolvePricingMappedModel(publicModel, &mapping)
+		require.True(t, mapped)
+		require.Equal(t, upstreamModel, target)
+		endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeV6K, target, publicModel, nil)
+		require.Len(t, endpoints, 1)
+		require.Equal(t, "/v1/videos", endpoints[0].Path)
+		p := endpoints[0].DocumentationFields
+		require.NotNil(t, p)
+		require.False(t, p.CapabilitiesUnknown)
+		require.Equal(t, "duration", p.DurationField)
+		require.Equal(t, "referenceImages", p.ImageField)
+		require.Equal(t, "referenceAudios", p.AudioField)
+		require.Equal(t, []string{resolution + "p"}, p.Resolutions)
+		require.Len(t, p.Durations, 26)
+		require.Equal(t, 5, p.Durations[0])
+		require.Equal(t, 30, p.Durations[25])
+		require.Equal(t, 30, p.MaxImages)
+		require.Equal(t, 10, p.MaxAudios)
+		require.Zero(t, p.MaxVideos, "do not inherit the public alias's old 10-video contract")
+	}
+}
+
 func TestV6KZHNewModelsExposeVideoContractsWithoutInternalFlags(t *testing.T) {
 	count := 0
 	for _, id := range common.V6KVideoModelIDs() {

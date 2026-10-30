@@ -206,6 +206,7 @@ func updatePricing() {
 	modelSupportEndpointsStr := make(map[string][]string)
 	mappedEndpointCandidates := make(map[string][]PricingMappedEndpoint)
 	v6kVideoModels := make(map[string]bool)
+	channelCapabilities := pricingChannelCapabilities()
 
 	// 先根据已有能力填充原生端点
 	for _, ability := range enableAbilities {
@@ -215,6 +216,9 @@ func updatePricing() {
 		endpoints := modelSupportEndpointsStr[ability.Model]
 		effectiveModel, _ := resolvePricingMappedModel(ability.Model, ability.ModelMapping)
 		effectiveEndpoints := getPricingIntegrationEndpointsForModels(ability.ChannelType, effectiveModel, ability.Model, metaMap)
+		if capability, ok := channelCapabilities[ability.ChannelId][ability.Model]; ok {
+			effectiveEndpoints = applyPricingChannelCapability(effectiveEndpoints, capability, effectiveModel)
+		}
 		for _, endpoint := range effectiveEndpoints {
 			mappedEndpointCandidates[ability.Model] = appendPricingEndpoint(
 				mappedEndpointCandidates[ability.Model], endpoint,

@@ -1,5 +1,15 @@
 import type { IntegrationParameters, PricingModel } from '../types'
 
+export function isVideoCapabilityUnknown(
+  parameters: IntegrationParameters,
+  field: string
+): boolean {
+  return Boolean(
+    parameters.capabilities_unknown ||
+    parameters.unknown_fields?.includes(field)
+  )
+}
+
 export function getVideoDocumentationParameters(
   model: PricingModel
 ): IntegrationParameters | undefined {
@@ -40,7 +50,7 @@ export function buildVideoDocumentationBody(
   if (
     p?.image_field &&
     p.max_images > 0 &&
-    !p.capabilities_unknown &&
+    !isVideoCapabilityUnknown(p, 'max_images') &&
     ((p.min_images ?? 0) > 0 || example?.imageRequired || includeReferences)
   ) {
     const images = Array.from(
@@ -55,15 +65,21 @@ export function buildVideoDocumentationBody(
       {
         field: p.video_field,
         maximum: p.max_videos,
+        capability: 'max_videos',
         url: 'https://cdn.example.com/reference.mp4',
       },
       {
         field: p.audio_field,
         maximum: p.max_audios,
+        capability: 'max_audios',
         url: 'https://cdn.example.com/reference.mp3',
       },
     ]) {
-      if (item.field && item.maximum > 0) {
+      if (
+        item.field &&
+        item.maximum > 0 &&
+        !isVideoCapabilityUnknown(p, item.capability)
+      ) {
         body[item.field] = item.field.endsWith('_url') ? item.url : [item.url]
       }
     }
@@ -79,8 +95,14 @@ export function hasVideoReferenceMedia(
 ): boolean {
   if (!parameters || parameters.capabilities_unknown) return false
   return Boolean(
-    (parameters.image_field && parameters.max_images > 0) ||
-    (parameters.video_field && parameters.max_videos > 0) ||
-    (parameters.audio_field && parameters.max_audios > 0)
+    (parameters.image_field &&
+      parameters.max_images > 0 &&
+      !isVideoCapabilityUnknown(parameters, 'max_images')) ||
+    (parameters.video_field &&
+      parameters.max_videos > 0 &&
+      !isVideoCapabilityUnknown(parameters, 'max_videos')) ||
+    (parameters.audio_field &&
+      parameters.max_audios > 0 &&
+      !isVideoCapabilityUnknown(parameters, 'max_audios'))
   )
 }

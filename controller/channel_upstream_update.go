@@ -846,6 +846,10 @@ func applyChannelUpstreamModelUpdates(
 		if err := channel.UpdateAbilities(nil); err != nil {
 			return addModels, removeModels, remainingModels, remainingRemoveModels, true, err
 		}
+		model.InvalidatePricingCache()
+		if service.SupportsChannelCapabilitySync(channel.Type, channel.GetBaseURL()) {
+			service.QueueChannelCapabilitySync(channel.Id)
+		}
 	}
 	return addModels, removeModels, remainingModels, remainingRemoveModels, modelsChanged, nil
 }

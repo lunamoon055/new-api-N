@@ -92,6 +92,25 @@ export type CodexCredentialRefreshResponse = {
 // Base Channel CRUD Operations
 // ============================================================================
 
+export type ChannelCapabilitySyncResult = {
+  channel_id: number
+  updated_models: number
+  unconfirmed_models: string[]
+  updated_at: number
+}
+
+export async function refreshChannelCapabilities(
+  id: number
+): Promise<ChannelCapabilitySyncResult> {
+  const response = await api.post<{
+    success: boolean
+    message?: string
+    data: ChannelCapabilitySyncResult
+  }>(`/api/channel/${id}/capabilities/refresh`, undefined, { timeout: 35000 })
+  if (!response.data.success) throw new Error(response.data.message)
+  return response.data.data
+}
+
 /**
  * Get paginated list of channels
  */

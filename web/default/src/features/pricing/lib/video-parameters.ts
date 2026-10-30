@@ -19,7 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import type { IntegrationParameters, PricingModel } from '../types'
 import type { SupportedParameter } from './mock-stats'
 import { getModelEndpointPreset } from './model-endpoint-presets'
-import { getVideoDocumentationParameters } from './video-documentation'
+import {
+  getVideoDocumentationParameters,
+  isVideoCapabilityUnknown,
+} from './video-documentation'
 
 type VideoParameters = {
   parameters: SupportedParameter[]
@@ -113,6 +116,7 @@ export function buildVideoSupportedParameters(
   const media = [
     {
       field: p.image_field,
+      capability: 'max_images',
       max: p.max_images,
       min: p.min_images ?? 0,
       size: p.max_image_size_mb,
@@ -120,6 +124,7 @@ export function buildVideoSupportedParameters(
     },
     {
       field: p.video_field,
+      capability: 'max_videos',
       max: p.max_videos,
       min: 0,
       size: p.max_video_size_mb,
@@ -127,6 +132,7 @@ export function buildVideoSupportedParameters(
     },
     {
       field: p.audio_field,
+      capability: 'max_audios',
       max: p.max_audios,
       min: 0,
       size: p.max_audio_size_mb,
@@ -137,7 +143,7 @@ export function buildVideoSupportedParameters(
     if (!item.field) continue
     const notes: NonNullable<SupportedParameter['notes']> = []
     let availability: SupportedParameter['availability']
-    if (p.capabilities_unknown) {
+    if (isVideoCapabilityUnknown(p, item.capability)) {
       availability = 'unconfirmed'
     } else if (item.max <= 0) {
       availability = 'unsupported'

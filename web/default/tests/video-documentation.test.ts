@@ -2,8 +2,20 @@ import { expect, test } from 'bun:test'
 import {
   buildVideoDocumentationBody,
   hasVideoReferenceMedia,
+  isVideoCapabilityUnknown,
 } from '../src/features/pricing/lib/video-documentation'
 import { getModelEndpointPreset } from '../src/features/pricing/lib/model-endpoint-presets'
+
+test('partially published capabilities retain confirmed references without inventing missing limits', () => {
+  const p = {image_field:'referenceImages',video_field:'referenceVideos',audio_field:'referenceAudios',max_images:3,max_videos:10,max_audios:0,unknown_fields:['max_videos']}
+  expect(isVideoCapabilityUnknown(p,'max_images')).toBe(false)
+  expect(isVideoCapabilityUnknown(p,'max_videos')).toBe(true)
+  expect(hasVideoReferenceMedia(p)).toBe(true)
+  const body = buildVideoDocumentationBody('public-model','demo',p,{includeReferenceMedia:true})
+  expect(body.referenceImages).toEqual(['https://cdn.example.com/reference.jpg'])
+  expect(body.referenceVideos).toBeUndefined()
+  expect(body.referenceAudios).toBeUndefined()
+})
 
 test('Suanliai 005 examples keep public model ID and valid video options', () => {
   expect(

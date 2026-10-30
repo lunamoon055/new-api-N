@@ -221,18 +221,6 @@ func fetchZonghengVideoModelsOnce(ctx context.Context, client *http.Client, base
 	for _, item := range result.Data {
 		if item.ID != "" && item.Capabilities.Type == "video" {
 			models = append(models, item)
-			caps := item.Capabilities
-			limit := func(value *int) int {
-				if value == nil {
-					return 50
-				}
-				return *value
-			}
-			common.SetZonghengVideoParameters(item.ID, &common.ModelIntegrationParameters{
-				Durations: caps.Durations, Resolutions: caps.Resolutions, Ratios: caps.Ratios, OmitRatio: len(caps.Ratios) == 0,
-				DurationField: "duration", RatioField: "ratio", ResolutionField: "resolution", ImageField: "images", VideoField: "reference_videos", AudioField: "reference_audios",
-				MaxImages: limit(caps.MaxImages), MaxVideos: limit(caps.MaxVideos), MaxAudios: limit(caps.MaxAudios), MaxImageSizeMB: 25, MaxVideoSizeMB: 25, MaxAudioSizeMB: 25,
-			})
 		}
 	}
 	return models, nil

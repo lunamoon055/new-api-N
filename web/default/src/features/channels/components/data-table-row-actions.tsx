@@ -64,6 +64,8 @@ import {
 import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
 import type { Channel } from '../types'
 import { useChannels } from './channels-provider'
+import { ChannelCapabilitiesAction } from './channel-capabilities-action'
+import { supportsChannelCapabilitySync } from '../lib/channel-capabilities'
 
 interface DataTableRowActionsProps {
   row: Row<Channel>
@@ -209,6 +211,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           <span className='sr-only'>{t('Open menu')}</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-48'>
+          {supportsChannelCapabilitySync(channel) && (
+            <ChannelCapabilitiesAction channelId={channel.id} />
+          )}
           {/* Edit */}
           <DropdownMenuItem onClick={handleEdit}>
             {t('Edit')}

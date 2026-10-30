@@ -15,5 +15,7 @@ type ModelIntegrationEndpoint struct {
 	Parameters           *ModelIntegrationParameters `json:"parameters,omitempty"`
 	// DocumentationFields is a stable gateway schema for adapters that accept
 	// these aliases. Parameters remains the live relay/Playground contract.
-	DocumentationFields *ModelIntegrationParameters `json:"documentation_fields,omitempty"`
+	DocumentationFields   *ModelIntegrationParameters `json:"documentation_fields,omitempty"`
+	CapabilitySource      string                      `json:"capability_source,omitempty"`
+	CapabilitiesUpdatedAt int64                       `json:"capabilities_updated_at,omitempty"`
 }

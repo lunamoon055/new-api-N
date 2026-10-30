@@ -265,6 +265,7 @@ func migrateDB() error {
 
 	err := DB.AutoMigrate(
 		&Channel{},
+		&ChannelModelCapability{},
 		&Token{},
 		&User{},
 		&AgentApplication{},
@@ -323,6 +324,7 @@ func migrateDBFast() error {
 		name  string
 	}{
 		{&Channel{}, "Channel"},
+		{&ChannelModelCapability{}, "ChannelModelCapability"},
 		{&Token{}, "Token"},
 		{&User{}, "User"},
 		{&AgentApplication{}, "AgentApplication"},

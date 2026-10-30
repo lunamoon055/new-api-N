@@ -5129,6 +5129,13 @@
     "Request Body": "请求体",
     "Some content was omitted because it was oversized, inline media, or unavailable. This snapshot is incomplete.": "部分内容因过大、为内联媒体或无法读取而被省略，此快照不完整。",
     "This historical record only contains saved fields. The original request body was not recorded.": "此历史记录仅展示已保存的字段，未记录原始请求体。",
-    "View request body": "查看请求体"
+    "View request body": "查看请求体",
+    "Refresh model capabilities": "刷新模型能力",
+    "Update documentation and API parameters from the current upstream model catalog. Capabilities also refresh after channel saves and on the server schedule.": "从当前上游模型目录更新文档和 API 参数。保存渠道后及服务器定时任务也会自动刷新能力。",
+    "Failed to refresh model capabilities. Existing information has been retained.": "模型能力刷新失败，已保留原有信息。",
+    "Refreshing model capabilities...": "正在刷新模型能力…",
+    "Updated capability information for {{count}} models.": "已更新 {{count}} 个模型的能力信息。",
+    "The upstream has not published all capabilities for these models. Unconfirmed parameters remain visible:": "上游尚未公布以下模型的完整能力，未确认的参数会继续显示：",
+    "All synchronized models have published capability information.": "所有已同步模型均有已公布的能力信息。"
   }
 }
