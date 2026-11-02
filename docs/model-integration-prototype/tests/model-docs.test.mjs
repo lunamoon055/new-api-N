@@ -4,7 +4,37 @@ import { readFileSync } from 'node:fs'
 import { normalizeCatalog, resolveSelectedModel } from '../src/model-catalog.js'
 import { getAllModelDocs } from '../src/all-model-docs.js'
 import { getCatalogHttpError, getPricingRequestHeaders } from '../src/catalog-auth.js'
-import { getCodeSample, getModelDoc, getModelKind, getRequestBody, getRequestParams } from '../src/model-data.js'
+import { getCodeSample, getImageOperationDocs, getModelDoc, getModelKind, getRequestBody, getRequestParams } from '../src/model-data.js'
+
+test('image generation and file editing are documented together without a route choice', () => {
+  const parameters = {resolutions:['1K','2K','4K'], ratios:['1:1','16:9'], resolution_field:'resolution', ratio_field:'ratio', max_images:0}
+  const model = {model_name:'public-image', mapped_endpoints:[
+    {type:'image-edit',kind:'image',method:'POST',path:'/v1/images/edits',parameters:{...parameters,image_field:'image[]',min_images:1,max_images:20}},
+    {type:'image-generation',kind:'image',method:'POST',path:'/v1/images/generations',parameters},
+  ]}
+  const [generation, edit] = getImageOperationDocs(model,{})
+  assert.equal(generation.path,'/v1/images/generations')
+  assert.equal(edit.path,'/v1/images/edits')
+  assert.equal(generation.alternatives,undefined)
+  assert.equal(edit.alternatives,undefined)
+  assert.equal(getRequestBody(model,generation)['image[]'],undefined)
+  const field = getRequestParams(edit).find(row=>row[0]==='image[]')
+  assert.equal(field[1],'file[]')
+  assert.match(field[3],/1–20/)
+  for (const language of ['cURL','Python','TypeScript']) {
+    const sample = getCodeSample(model,edit,language)
+    assert.match(sample,/reference\.png/)
+    assert.match(sample,/image\[\]/)
+    assert.doesNotMatch(sample,/application\/json|cdn\.example\.com/)
+  }
+  const copied = getAllModelDocs({models:[model],endpoints:{}},'https://gateway.example')
+  assert.match(copied,/文生图 · POST/)
+  assert.match(copied,/参考图编辑 · POST/)
+  assert.doesNotMatch(copied,/按实际协议和使用的渠道选择/)
+  const differentProtocols = {...model,mapped_endpoints:[...model.mapped_endpoints,{type:'openai',kind:'text',path:'/v1/chat/completions'}]}
+  assert.deepEqual(getImageOperationDocs(differentProtocols,{}),[])
+  assert.equal(getModelDoc(differentProtocols,{}).alternatives.length,3)
+})
 
 test('public documentation fields survive a provider mapping change without changing live fields', () => {
   const parameters = {duration_field:'seconds', durations:[5,10,30], ratio_field:'ratio', ratios:['16:9'], resolution_field:'resolution', resolutions:['720p'], image_field:'images', audio_field:'audios', max_images:30, max_videos:0, max_audios:10}

@@ -10,6 +10,8 @@ User ratio policy, 2026-10-26: every video model without configured ratios uses 
 
 User public API stability requirement, 2026-10-27: prefer endpoint `documentation_fields` for documented request fields. Compatible video adapters publish duration, ratio, resolution, referenceImages, referenceVideos, and referenceAudios regardless of provider mapping. Keep the public model ID and gateway route. Show current model limits; do not freeze outdated capabilities or change the live `parameters` used by Playground and existing downstream clients.
 
+User image interface feedback, 2026-11-02: when a model publishes complementary synchronous image generation and multipart reference editing, show both operations with their own parameters and examples. Do not ask users to choose a channel/protocol for that pair. Keep explicit interface selection for genuinely different protocols.
+
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.

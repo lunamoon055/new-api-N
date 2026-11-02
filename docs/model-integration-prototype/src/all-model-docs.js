@@ -1,4 +1,4 @@
-import { getCodeSample, getModelDoc, getRequestParams, getResponseSample } from './model-data.js'
+import { getCodeSample, getImageOperationDocs, getModelDoc, getRequestParams, getResponseSample } from './model-data.js'
 
 export function getAllModelDocs(catalog, baseUrl) {
   const lines = [
@@ -19,11 +19,12 @@ export function getAllModelDocs(catalog, baseUrl) {
     const primaryDoc = getModelDoc(model, catalog.endpoints)
     lines.push(`## ${model.model_name}`, '')
     if (model.description) lines.push(model.description, '')
-    const docs = primaryDoc.alternatives?.length
+    const imageOperations = getImageOperationDocs(model, catalog.endpoints)
+    const docs = imageOperations.length ? imageOperations : primaryDoc.alternatives?.length
       ? primaryDoc.alternatives.map((endpoint) => getModelDoc({...model, mapped_endpoints: [endpoint]}, catalog.endpoints))
       : [primaryDoc]
     for (const doc of docs) {
-      if (docs.length > 1) lines.push(`### ${doc.method} ${doc.path}`, '')
+      if (docs.length > 1) lines.push(`### ${imageOperations.length ? (doc.path.endsWith('/edits') ? '参考图编辑 · ' : '文生图 · ') : ''}${doc.method} ${doc.path}`, '')
     if (!doc.verified) {
       if (doc.alternatives?.length) {
         lines.push('该模型关联多个接口，请按实际协议和使用的渠道选择：')

@@ -96,7 +96,7 @@ export function getModelDoc(model, endpointMap, selectedPath) {
       verified: true,
       mapped: true,
       parameters: endpoint.kind === 'video' ? withVideoRatios(endpoint.documentation_fields || endpoint.parameters) : endpoint.parameters,
-      sampleSupported: endpoint.type === 'image-generation' || endpoint.type === 'openai' ||
+      sampleSupported: (endpoint.path === '/v1/images/edits' && endpoint.parameters?.image_field === 'image[]') || endpoint.type === 'image-generation' || endpoint.type === 'openai' ||
         ['openai-video', 'video-videos', 'video-async', 'video-generations', 'openai-response', 'openai-response-compact', 'anthropic', 'gemini', 'embeddings', 'jina-rerank'].includes(endpoint.type),
       details: endpoint.example_duration ? {
         duration: endpoint.example_duration,
@@ -142,6 +142,20 @@ export function getModelDoc(model, endpointMap, selectedPath) {
   }
 }
 
+// Generation and editing are complementary operations, not competing routes.
+export function getImageOperationDocs(model, endpointMap) {
+  const mapped = getMappedEndpoints(model)
+  if (mapped.length !== 2 || mapped.some((endpoint) => endpoint.kind !== 'image' || (endpoint.method || 'POST') !== 'POST')) return []
+  const paths = ['/v1/images/generations', '/v1/images/edits']
+  if (!paths.every((path) => mapped.some((endpoint) => endpoint.path === path))) return []
+  if (mapped.find((endpoint) => endpoint.path === paths[1]).parameters?.image_field !== 'image[]') return []
+  return paths.map((path) => getModelDoc({...model, mapped_endpoints: mapped.filter((endpoint) => endpoint.path === path)}, endpointMap))
+}
+
+function isFileImageEdit(doc) {
+  return doc.kind === 'image' && doc.path === '/v1/images/edits' && doc.parameters?.image_field === 'image[]'
+}
+
 export function getRequestBody(model, doc) {
   if (!doc.verified || doc.sampleSupported === false) return null
   if (doc.parameters && (doc.kind === 'image' || doc.kind === 'video')) {
@@ -151,7 +165,7 @@ export function getRequestBody(model, doc) {
     if (p.duration_field && p.durations?.length) body[p.duration_field] = p.durations.includes(doc.details?.duration) ? doc.details.duration : p.durations[0]
     if (p.ratio_field && p.ratios?.length) body[p.ratio_field] = p.ratios[0]
     if (p.resolution_field && p.resolutions?.length) body[p.resolution_field] = p.request_resolution || p.resolutions[0]
-    if (p.min_images && p.image_field && !isUnknown(p, 'max_images')) body[p.image_field] = p.image_field.endsWith('_url') ? 'https://cdn.example.com/reference.jpg' : ['https://cdn.example.com/reference.jpg']
+    if (p.min_images && p.image_field && !isUnknown(p, 'max_images')) body[p.image_field] = isFileImageEdit(doc) ? ['reference.png'] : p.image_field.endsWith('_url') ? 'https://cdn.example.com/reference.jpg' : ['https://cdn.example.com/reference.jpg']
     return body
   }
   if (doc.kind === 'image') {
@@ -209,6 +223,11 @@ export function getRequestParams(doc) {
     if (p.resolution_field) rows.push([p.resolution_field, 'string', '按模型', p.resolutions?.length ? `支持分辨率：${p.resolutions.join('、')}` : '未确认：上游未公布分辨率范围'])
     for (const [field, count, label, capability] of [[p.image_field, p.max_images, '图片', 'max_images'], [p.video_field, p.max_videos, '视频', 'max_videos'], [p.audio_field, p.max_audios, '音频', 'max_audios']]) {
       if (!field) continue
+      if (isFileImageEdit(doc) && field === p.image_field) {
+        const limit = isUnknown(p, capability) || count == null ? '数量上限未确认' : `${p.min_images || 1}–${count} 张`
+        rows.push([field, 'file[]', '是', `以 multipart/form-data 上传 PNG、JPEG 或 WebP 图片（${limit}），不传图片 URL`])
+        continue
+      }
       let description = `最多 ${count} 个可公开访问的${label} URL`
       if (isUnknown(p, capability) || count == null) description = `未确认：上游未公布${label}参考能力或数量限制`
       else if (count <= 0) description = `不支持${label}参考`
@@ -245,6 +264,7 @@ export function getRequestParams(doc) {
 export function getCodeSample(model, doc, language) {
   const body = getRequestBody(model, doc)
   if (!body) return ''
+  if (isFileImageEdit(doc)) return getImageEditSample(body, doc, language)
   const json = JSON.stringify(body, null, 2)
   if (language === 'Python') {
     return [
@@ -286,6 +306,31 @@ export function getCodeSample(model, doc, language) {
     '  -H "Content-Type: application/json" \\',
     "  -d '" + json + "'",
   ].join('\n')
+}
+
+function getImageEditSample(body, doc, language) {
+  const fields = {...body}
+  delete fields['image[]']
+  if (language === 'Python') {
+    return ['import os', 'import requests', '', 'with open("reference.png", "rb") as image:',
+      '    response = requests.post(', '        os.environ["API_BASE_URL"] + "' + doc.path + '",',
+      '        headers={"Authorization": "Bearer " + os.environ["API_KEY"]},',
+      '        data=' + JSON.stringify(fields) + ',',
+      '        files=[("image[]", ("reference.png", image, "image/png"))],', '    )',
+      'response.raise_for_status()', 'print(response.json())'].join('\n')
+  }
+  if (language === 'TypeScript') {
+    return ['import { readFile } from "node:fs/promises"', '', 'const body = new FormData()',
+      ...Object.entries(fields).map(([key, value]) => 'body.append(' + JSON.stringify(key) + ', ' + JSON.stringify(String(value)) + ')'),
+      'body.append("image[]", new Blob([new Uint8Array(await readFile("reference.png"))], { type: "image/png" }), "reference.png")', '',
+      'const response = await fetch(process.env.API_BASE_URL! + "' + doc.path + '", {',
+      '  method: "POST",', '  headers: { Authorization: "Bearer " + process.env.API_KEY! },', '  body,', '})',
+      'if (!response.ok) throw new Error(await response.text())', 'console.log(await response.json())'].join('\n')
+  }
+  return ['curl -X POST "$API_BASE_URL' + doc.path + '" \\',
+    '  -H "Authorization: Bearer $API_KEY" \\',
+    ...Object.entries(fields).map(([key, value]) => '  -F ' + "'" + key + '=' + String(value).replaceAll("'", "'\\''") + "' \\") ,
+    "  -F 'image[]=@reference.png'"].join('\n')
 }
 
 export function getResponseSample(doc) {
