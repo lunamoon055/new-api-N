@@ -203,6 +203,13 @@ func getPricingIntegrationEndpointsForModels(channelType int, modelName, origina
 }
 
 func resolvePricingIntegrationEndpoints(channelType int, modelName, originalModelName string, metadata map[string]*Model) []PricingMappedEndpoint {
+	if channelType == constant.ChannelTypeOpenAI && common.IsXJZNativeImageModel(modelName) {
+		generation := makePricingMappedEndpoint("image-generation", common.EndpointInfo{Path: "/v1/images/generations", Method: "POST"})
+		generation.Parameters = common.XJZNativeImageParameters(false)
+		edit := makePricingMappedEndpoint("image-edit", common.EndpointInfo{Path: "/v1/images/edits", Method: "POST"})
+		edit.Parameters = common.XJZNativeImageParameters(true)
+		return []PricingMappedEndpoint{*generation, *edit}
+	}
 	if channelType == constant.ChannelTypeV6K {
 		endpoint := makePricingMappedEndpoint(string(constant.EndpointTypeOpenAIVideo), common.EndpointInfo{Path: "/v1/videos", Method: "POST", QueryPath: "/v1/videos/{task_id}", QueryMethod: "GET"})
 		endpoint.Parameters = common.GetV6KVideoParameters(modelName)

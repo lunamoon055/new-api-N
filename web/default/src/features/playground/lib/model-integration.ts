@@ -70,6 +70,26 @@ export function getPlaygroundIntegration(
   const preferred = integrations.find(
     (endpoint) => endpoint.path === preferredPath
   )
+  const generation =
+    preferred ??
+    integrations.find((endpoint) => endpoint.path === '/v1/images/generations')
+  const edit = integrations.find(
+    (endpoint) => endpoint.path === '/v1/images/edits'
+  )
+  if (
+    generation?.path === '/v1/images/generations' &&
+    generation.parameters &&
+    edit?.parameters?.image_field === 'image[]'
+  )
+    return {
+      ...generation,
+      parameters: {
+        ...generation.parameters,
+        image_field: 'image[]',
+        max_images: edit.parameters.max_images,
+        min_images: 0,
+      },
+    }
   if (preferred) return preferred
   if (!info?.model.mapped_endpoints?.length) return integrations[0]
   return (

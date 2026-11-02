@@ -1,0 +1,229 @@
+{
+  "operations": [
+    {
+      "mode": "move",
+      "from": "output_resolution",
+      "to": "resolution",
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2.5-sunburst-原生4K"
+        },
+        {
+          "path": "output_resolution",
+          "mode": "full",
+          "value": null,
+          "invert": true
+        }
+      ],
+      "logic": "AND"
+    },
+    {
+      "mode": "move",
+      "from": "aspect_ratio",
+      "to": "ratio",
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2.5-sunburst-原生4K"
+        },
+        {
+          "path": "aspect_ratio",
+          "mode": "full",
+          "value": null,
+          "invert": true
+        }
+      ],
+      "logic": "AND"
+    },
+    {
+      "mode": "delete",
+      "path": "size",
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2.5-sunburst-原生4K"
+        }
+      ]
+    },
+    {
+      "mode": "set",
+      "path": "resolution",
+      "value": "1K",
+      "keep_origin": true,
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2.5-sunburst-原生4K"
+        }
+      ]
+    },
+    {
+      "mode": "set",
+      "path": "ratio",
+      "value": "1:1",
+      "keep_origin": true,
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2.5-sunburst-原生4K"
+        }
+      ]
+    },
+    {
+      "mode": "move",
+      "from": "output_resolution",
+      "to": "resolution",
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2.5-flare-原生4K"
+        },
+        {
+          "path": "output_resolution",
+          "mode": "full",
+          "value": null,
+          "invert": true
+        }
+      ],
+      "logic": "AND"
+    },
+    {
+      "mode": "move",
+      "from": "aspect_ratio",
+      "to": "ratio",
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2.5-flare-原生4K"
+        },
+        {
+          "path": "aspect_ratio",
+          "mode": "full",
+          "value": null,
+          "invert": true
+        }
+      ],
+      "logic": "AND"
+    },
+    {
+      "mode": "delete",
+      "path": "size",
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2.5-flare-原生4K"
+        }
+      ]
+    },
+    {
+      "mode": "set",
+      "path": "resolution",
+      "value": "1K",
+      "keep_origin": true,
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2.5-flare-原生4K"
+        }
+      ]
+    },
+    {
+      "mode": "set",
+      "path": "ratio",
+      "value": "1:1",
+      "keep_origin": true,
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2.5-flare-原生4K"
+        }
+      ]
+    },
+    {
+      "mode": "move",
+      "from": "output_resolution",
+      "to": "resolution",
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2-原生4K"
+        },
+        {
+          "path": "output_resolution",
+          "mode": "full",
+          "value": null,
+          "invert": true
+        }
+      ],
+      "logic": "AND"
+    },
+    {
+      "mode": "move",
+      "from": "aspect_ratio",
+      "to": "ratio",
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2-原生4K"
+        },
+        {
+          "path": "aspect_ratio",
+          "mode": "full",
+          "value": null,
+          "invert": true
+        }
+      ],
+      "logic": "AND"
+    },
+    {
+      "mode": "delete",
+      "path": "size",
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2-原生4K"
+        }
+      ]
+    },
+    {
+      "mode": "set",
+      "path": "resolution",
+      "value": "1K",
+      "keep_origin": true,
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2-原生4K"
+        }
+      ]
+    },
+    {
+      "mode": "set",
+      "path": "ratio",
+      "value": "1:1",
+      "keep_origin": true,
+      "conditions": [
+        {
+          "path": "model",
+          "mode": "full",
+          "value": "gpt-image-2-原生4K"
+        }
+      ]
+    }
+  ]
+}

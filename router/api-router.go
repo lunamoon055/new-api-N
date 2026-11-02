@@ -39,6 +39,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/creation/reference-images/:filename", controller.GetCreationReferenceImage)
 		apiRouter.GET("/image-results/:filename", middleware.UserAuth(), controller.GetImageGenerationResult)
 		apiRouter.POST("/creation/images/generations", middleware.UserAuth(), middleware.CreationImageRequestConvert(), middleware.Distribute(), controller.CreationRelayImage)
+		apiRouter.POST("/creation/images/edits", middleware.UserAuth(), middleware.CreationImageEditRequestConvert(), middleware.Distribute(), controller.CreationRelayImage)
 		apiRouter.GET("/creation/images/generations/:task_id", middleware.UserAuth(), middleware.CreationImageAsyncFetchConvert(), controller.CreationRelayTaskFetch)
 		apiRouter.POST("/creation/images/async-generations", middleware.UserAuth(), middleware.CreationImageAsyncRequestConvert(), middleware.Distribute(), controller.CreationRelayImageTask)
 		apiRouter.GET("/creation/images/async-generations/:task_id", middleware.UserAuth(), middleware.CreationImageTaskFetchConvert(), controller.CreationRelayTaskFetch)

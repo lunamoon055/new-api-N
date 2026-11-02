@@ -21,6 +21,7 @@ type ImageRequest struct {
 	OutputResolution  json.RawMessage `json:"output_resolution,omitempty"`
 	Resolution        json.RawMessage `json:"resolution,omitempty"`
 	AspectRatio       json.RawMessage `json:"aspect_ratio,omitempty"`
+	Ratio             *string         `json:"ratio,omitempty"`
 	Messages          json.RawMessage `json:"messages,omitempty"`
 	Style             json.RawMessage `json:"style,omitempty"`
 	User              json.RawMessage `json:"user,omitempty"`

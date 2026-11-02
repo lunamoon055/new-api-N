@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { prepareImageTransport } from '@/features/media-generation/image-transport'
 import {
   asRecord,
   extractMediaErrorMessage,
@@ -170,7 +171,7 @@ export async function submitCreationTask(params: {
       params.imageReferences,
       params.imageOptions
     )
-    const response = await api.post(
+    const request = await prepareImageTransport(
       usesAsyncCreationImageModel(params.model)
         ? '/api/creation/images/async-generations'
         : '/api/creation/images/generations',
@@ -179,9 +180,14 @@ export async function submitCreationTask(params: {
         prompt: promptWithAssets,
         ...(usesAsyncCreationImageModel(params.model) ? {} : { n: 1 }),
         ...imageOptions,
-      },
-      { skipErrorHandler: true } as Record<string, unknown>
+      }
     )
+    const response = await api.post(request.endpoint, request.payload, {
+      skipErrorHandler: true,
+      ...(request.payload instanceof FormData
+        ? { headers: { 'Content-Type': undefined } }
+        : {}),
+    } as Record<string, unknown>)
     return parseImageResult(response.data, params.model.id)
   }
 

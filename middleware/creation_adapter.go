@@ -15,6 +15,14 @@ func CreationImageRequestConvert() func(c *gin.Context) {
 	}
 }
 
+func CreationImageEditRequestConvert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		c.Request.URL.Path = "/v1/images/edits"
+		c.Set("relay_mode", relayconstant.RelayModeImagesEdits)
+		c.Next()
+	}
+}
+
 func CreationImageAsyncRequestConvert() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		c.Request.URL.Path = "/pg/images/async-generations"

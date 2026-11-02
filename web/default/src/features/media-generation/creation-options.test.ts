@@ -50,6 +50,58 @@ const sanbaoImageModel = {
   },
 }
 
+test('native image mapping exposes edit references without requiring them for generation', () => {
+  const model = {
+    id: 'gpt-image-2',
+    mapped_endpoints: [
+      {
+        type: 'image-generation',
+        kind: 'image' as const,
+        path: '/v1/images/generations',
+        method: 'POST',
+        parameters: {
+          ratio_field: 'ratio',
+          resolution_field: 'resolution',
+          ratios: ['1:1', '21:9'],
+          resolutions: ['1K', '2K', '4K'],
+          max_images: 0,
+          max_videos: 0,
+          max_audios: 0,
+        },
+      },
+      {
+        type: 'image-edit',
+        kind: 'image' as const,
+        path: '/v1/images/edits',
+        method: 'POST',
+        parameters: {
+          image_field: 'image[]',
+          min_images: 1,
+          max_images: 20,
+          max_videos: 0,
+          max_audios: 0,
+        },
+      },
+    ],
+  }
+  assert.equal(supportsCreationImageReferences(model), true)
+  assert.equal(getCreationImageReferenceLimits(model).maxImages, 20)
+  assert.deepEqual(getCreationImageRequestOptions('cup', model), {
+    ratio: '1:1',
+    resolution: '1K',
+  })
+  assert.deepEqual(
+    getCreationImageRequestOptions('cup', model, {
+      imageUrls: ['https://example.com/ref.png'],
+    }),
+    {
+      ratio: '1:1',
+      resolution: '1K',
+      'image[]': ['https://example.com/ref.png'],
+    }
+  )
+})
+
 const sanbaoVideoModel = {
   id: 'sanbao-video',
   metadata: {

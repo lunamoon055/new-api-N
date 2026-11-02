@@ -424,9 +424,13 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
+	native := isXJZNativeImageRequest(info, request.Model)
 	switch info.RelayMode {
 	case relayconstant.RelayModeImagesEdits:
 		if isJSONRequest(c) {
+			if native {
+				return nil, errors.New("XJZ native image editing requires multipart image[] files")
+			}
 			return request, nil
 		}
 
@@ -445,7 +449,18 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 
 		// 写入所有非文件字段
 		if mf != nil {
-			for key, values := range mf.Value {
+			valuesToSend := mf.Value
+			if native {
+				var err error
+				valuesToSend, err = xjzImageFormValues(mf.Value)
+				if err != nil {
+					return nil, err
+				}
+				if len(mf.File["mask"]) > 0 {
+					return nil, errors.New("XJZ native image masks are unsupported")
+				}
+			}
+			for key, values := range valuesToSend {
 				if key == "model" {
 					continue
 				}
@@ -480,6 +495,9 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 				}
 			}
 
+			if native && (len(imageFiles) == 0 || len(imageFiles) > 20) {
+				return nil, errors.New("XJZ native image editing requires 1 to 20 images")
+			}
 			// Process all image files
 			for i, fileHeader := range imageFiles {
 				file, err := fileHeader.Open()
@@ -489,7 +507,7 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 
 				// If multiple images, use image[] as the field name
 				fieldName := "image"
-				if len(imageFiles) > 1 {
+				if len(imageFiles) > 1 || native {
 					fieldName = "image[]"
 				}
 
@@ -550,6 +568,9 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		return &requestBody, nil
 
 	default:
+		if native {
+			return convertXJZNativeImageJSON(request)
+		}
 		return request, nil
 	}
 }

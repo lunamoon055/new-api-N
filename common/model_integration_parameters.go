@@ -222,6 +222,9 @@ func GetSiteVideoIntegrationParameters(modelName string) *ModelIntegrationParame
 }
 
 func GetImageIntegrationParameters(modelName string) *ModelIntegrationParameters {
+	if IsXJZNativeImageModel(modelName) {
+		return XJZNativeImageParameters(false)
+	}
 	name := strings.ToLower(strings.TrimSpace(modelName))
 	// XJZ publishes this exact synchronous model under /v1/images/generations.
 	// One request returns its four-image grid at a fixed 1024px size.

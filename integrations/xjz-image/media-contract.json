@@ -1,0 +1,1119 @@
+{
+  "source": "https://api.xjzapi.cc/api/pricing",
+  "request_header": {
+    "X-Xiaojuzi-Media-Contract": "1"
+  },
+  "verified_date": "2026-11-02",
+  "data": [
+    {
+      "model_name": "gpt-image-2.5-sunburst-原生4K",
+      "media_contract": {
+        "version": "1",
+        "scope": "create_request",
+        "kind": "image_generate",
+        "method": "POST",
+        "request_header": {
+          "name": "X-Xiaojuzi-Media-Contract",
+          "value": "1"
+        },
+        "canonical_path": "/v1/images/generations",
+        "request_paths": [
+          "/v1/images/generations"
+        ],
+        "fields": [
+          "model",
+          "prompt",
+          "n",
+          "resolution",
+          "ratio",
+          "quality",
+          "response_format"
+        ],
+        "required_fields": [
+          "model",
+          "prompt"
+        ],
+        "parameters": [
+          {
+            "name": "resolution",
+            "label": "分辨率",
+            "type": "select",
+            "options": [
+              {
+                "value": "1K"
+              },
+              {
+                "value": "2K"
+              },
+              {
+                "value": "4K"
+              }
+            ]
+          },
+          {
+            "name": "ratio",
+            "label": "画面比例",
+            "type": "select",
+            "options": [
+              {
+                "value": "16:9"
+              },
+              {
+                "value": "1:1"
+              },
+              {
+                "value": "21:9"
+              },
+              {
+                "value": "2:3"
+              },
+              {
+                "value": "3:2"
+              },
+              {
+                "value": "3:4"
+              },
+              {
+                "value": "4:3"
+              },
+              {
+                "value": "9:16"
+              }
+            ]
+          }
+        ],
+        "parameter_combinations": [
+          {
+            "resolution": "1K",
+            "ratio": "16:9"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "1:1"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "21:9"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "2:3"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "3:2"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "3:4"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "4:3"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "9:16"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "16:9"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "1:1"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "21:9"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "2:3"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "3:2"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "3:4"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "4:3"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "9:16"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "16:9"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "1:1"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "21:9"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "2:3"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "3:2"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "3:4"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "4:3"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "9:16"
+          }
+        ],
+        "max_reference_images": 0
+      },
+      "additional_operations": [
+        {
+          "version": "1",
+          "scope": "create_request",
+          "kind": "image_edit",
+          "method": "POST",
+          "request_header": {
+            "name": "X-Xiaojuzi-Media-Contract",
+            "value": "1"
+          },
+          "content_type": "multipart/form-data",
+          "canonical_path": "/v1/images/edits",
+          "request_paths": [
+            "/v1/images/edits"
+          ],
+          "fields": [
+            "model",
+            "prompt",
+            "n",
+            "resolution",
+            "ratio",
+            "quality",
+            "response_format",
+            "image[]"
+          ],
+          "required_fields": [
+            "model",
+            "prompt",
+            "image[]"
+          ],
+          "parameters": [
+            {
+              "name": "resolution",
+              "label": "分辨率",
+              "type": "select",
+              "options": [
+                {
+                  "value": "1K"
+                },
+                {
+                  "value": "2K"
+                },
+                {
+                  "value": "4K"
+                }
+              ]
+            },
+            {
+              "name": "ratio",
+              "label": "画面比例",
+              "type": "select",
+              "options": [
+                {
+                  "value": "16:9"
+                },
+                {
+                  "value": "1:1"
+                },
+                {
+                  "value": "21:9"
+                },
+                {
+                  "value": "2:3"
+                },
+                {
+                  "value": "3:2"
+                },
+                {
+                  "value": "3:4"
+                },
+                {
+                  "value": "4:3"
+                },
+                {
+                  "value": "9:16"
+                }
+              ]
+            }
+          ],
+          "input_fields": [
+            {
+              "name": "image[]",
+              "type": "file[]",
+              "required": true,
+              "media_type": "image",
+              "role": "reference",
+              "min_items": 1,
+              "max_items": 20
+            }
+          ],
+          "parameter_combinations": [
+            {
+              "resolution": "1K",
+              "ratio": "16:9"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "1:1"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "21:9"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "2:3"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "3:2"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "3:4"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "4:3"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "9:16"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "16:9"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "1:1"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "21:9"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "2:3"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "3:2"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "3:4"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "4:3"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "9:16"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "16:9"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "1:1"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "21:9"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "2:3"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "3:2"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "3:4"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "4:3"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "9:16"
+            }
+          ],
+          "max_reference_images": 20,
+          "min_reference_images": 1
+        }
+      ]
+    },
+    {
+      "model_name": "gpt-image-2.5-flare-原生4K",
+      "media_contract": {
+        "version": "1",
+        "scope": "create_request",
+        "kind": "image_generate",
+        "method": "POST",
+        "request_header": {
+          "name": "X-Xiaojuzi-Media-Contract",
+          "value": "1"
+        },
+        "canonical_path": "/v1/images/generations",
+        "request_paths": [
+          "/v1/images/generations"
+        ],
+        "fields": [
+          "model",
+          "prompt",
+          "n",
+          "resolution",
+          "ratio",
+          "quality",
+          "response_format"
+        ],
+        "required_fields": [
+          "model",
+          "prompt"
+        ],
+        "parameters": [
+          {
+            "name": "resolution",
+            "label": "分辨率",
+            "type": "select",
+            "options": [
+              {
+                "value": "1K"
+              },
+              {
+                "value": "2K"
+              },
+              {
+                "value": "4K"
+              }
+            ]
+          },
+          {
+            "name": "ratio",
+            "label": "画面比例",
+            "type": "select",
+            "options": [
+              {
+                "value": "16:9"
+              },
+              {
+                "value": "1:1"
+              },
+              {
+                "value": "21:9"
+              },
+              {
+                "value": "2:3"
+              },
+              {
+                "value": "3:2"
+              },
+              {
+                "value": "3:4"
+              },
+              {
+                "value": "4:3"
+              },
+              {
+                "value": "9:16"
+              }
+            ]
+          }
+        ],
+        "parameter_combinations": [
+          {
+            "resolution": "1K",
+            "ratio": "16:9"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "1:1"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "21:9"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "2:3"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "3:2"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "3:4"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "4:3"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "9:16"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "16:9"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "1:1"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "21:9"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "2:3"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "3:2"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "3:4"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "4:3"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "9:16"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "16:9"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "1:1"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "21:9"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "2:3"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "3:2"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "3:4"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "4:3"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "9:16"
+          }
+        ],
+        "max_reference_images": 0
+      },
+      "additional_operations": [
+        {
+          "version": "1",
+          "scope": "create_request",
+          "kind": "image_edit",
+          "method": "POST",
+          "request_header": {
+            "name": "X-Xiaojuzi-Media-Contract",
+            "value": "1"
+          },
+          "content_type": "multipart/form-data",
+          "canonical_path": "/v1/images/edits",
+          "request_paths": [
+            "/v1/images/edits"
+          ],
+          "fields": [
+            "model",
+            "prompt",
+            "n",
+            "resolution",
+            "ratio",
+            "quality",
+            "response_format",
+            "image[]"
+          ],
+          "required_fields": [
+            "model",
+            "prompt",
+            "image[]"
+          ],
+          "parameters": [
+            {
+              "name": "resolution",
+              "label": "分辨率",
+              "type": "select",
+              "options": [
+                {
+                  "value": "1K"
+                },
+                {
+                  "value": "2K"
+                },
+                {
+                  "value": "4K"
+                }
+              ]
+            },
+            {
+              "name": "ratio",
+              "label": "画面比例",
+              "type": "select",
+              "options": [
+                {
+                  "value": "16:9"
+                },
+                {
+                  "value": "1:1"
+                },
+                {
+                  "value": "21:9"
+                },
+                {
+                  "value": "2:3"
+                },
+                {
+                  "value": "3:2"
+                },
+                {
+                  "value": "3:4"
+                },
+                {
+                  "value": "4:3"
+                },
+                {
+                  "value": "9:16"
+                }
+              ]
+            }
+          ],
+          "input_fields": [
+            {
+              "name": "image[]",
+              "type": "file[]",
+              "required": true,
+              "media_type": "image",
+              "role": "reference",
+              "min_items": 1,
+              "max_items": 20
+            }
+          ],
+          "parameter_combinations": [
+            {
+              "resolution": "1K",
+              "ratio": "16:9"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "1:1"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "21:9"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "2:3"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "3:2"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "3:4"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "4:3"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "9:16"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "16:9"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "1:1"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "21:9"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "2:3"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "3:2"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "3:4"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "4:3"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "9:16"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "16:9"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "1:1"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "21:9"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "2:3"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "3:2"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "3:4"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "4:3"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "9:16"
+            }
+          ],
+          "max_reference_images": 20,
+          "min_reference_images": 1
+        }
+      ]
+    },
+    {
+      "model_name": "gpt-image-2-原生4K",
+      "media_contract": {
+        "version": "1",
+        "scope": "create_request",
+        "kind": "image_generate",
+        "method": "POST",
+        "request_header": {
+          "name": "X-Xiaojuzi-Media-Contract",
+          "value": "1"
+        },
+        "canonical_path": "/v1/images/generations",
+        "request_paths": [
+          "/v1/images/generations"
+        ],
+        "fields": [
+          "model",
+          "prompt",
+          "n",
+          "resolution",
+          "ratio",
+          "quality",
+          "response_format"
+        ],
+        "required_fields": [
+          "model",
+          "prompt"
+        ],
+        "parameters": [
+          {
+            "name": "resolution",
+            "label": "分辨率",
+            "type": "select",
+            "options": [
+              {
+                "value": "1K"
+              },
+              {
+                "value": "2K"
+              },
+              {
+                "value": "4K"
+              }
+            ]
+          },
+          {
+            "name": "ratio",
+            "label": "画面比例",
+            "type": "select",
+            "options": [
+              {
+                "value": "16:9"
+              },
+              {
+                "value": "1:1"
+              },
+              {
+                "value": "21:9"
+              },
+              {
+                "value": "2:3"
+              },
+              {
+                "value": "3:2"
+              },
+              {
+                "value": "3:4"
+              },
+              {
+                "value": "4:3"
+              },
+              {
+                "value": "9:16"
+              }
+            ]
+          }
+        ],
+        "parameter_combinations": [
+          {
+            "resolution": "1K",
+            "ratio": "16:9"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "1:1"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "21:9"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "2:3"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "3:2"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "3:4"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "4:3"
+          },
+          {
+            "resolution": "1K",
+            "ratio": "9:16"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "16:9"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "1:1"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "21:9"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "2:3"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "3:2"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "3:4"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "4:3"
+          },
+          {
+            "resolution": "2K",
+            "ratio": "9:16"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "16:9"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "1:1"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "21:9"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "2:3"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "3:2"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "3:4"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "4:3"
+          },
+          {
+            "resolution": "4K",
+            "ratio": "9:16"
+          }
+        ],
+        "max_reference_images": 0
+      },
+      "additional_operations": [
+        {
+          "version": "1",
+          "scope": "create_request",
+          "kind": "image_edit",
+          "method": "POST",
+          "request_header": {
+            "name": "X-Xiaojuzi-Media-Contract",
+            "value": "1"
+          },
+          "content_type": "multipart/form-data",
+          "canonical_path": "/v1/images/edits",
+          "request_paths": [
+            "/v1/images/edits"
+          ],
+          "fields": [
+            "model",
+            "prompt",
+            "n",
+            "resolution",
+            "ratio",
+            "quality",
+            "response_format",
+            "image[]"
+          ],
+          "required_fields": [
+            "model",
+            "prompt",
+            "image[]"
+          ],
+          "parameters": [
+            {
+              "name": "resolution",
+              "label": "分辨率",
+              "type": "select",
+              "options": [
+                {
+                  "value": "1K"
+                },
+                {
+                  "value": "2K"
+                },
+                {
+                  "value": "4K"
+                }
+              ]
+            },
+            {
+              "name": "ratio",
+              "label": "画面比例",
+              "type": "select",
+              "options": [
+                {
+                  "value": "16:9"
+                },
+                {
+                  "value": "1:1"
+                },
+                {
+                  "value": "21:9"
+                },
+                {
+                  "value": "2:3"
+                },
+                {
+                  "value": "3:2"
+                },
+                {
+                  "value": "3:4"
+                },
+                {
+                  "value": "4:3"
+                },
+                {
+                  "value": "9:16"
+                }
+              ]
+            }
+          ],
+          "input_fields": [
+            {
+              "name": "image[]",
+              "type": "file[]",
+              "required": true,
+              "media_type": "image",
+              "role": "reference",
+              "min_items": 1,
+              "max_items": 20
+            }
+          ],
+          "parameter_combinations": [
+            {
+              "resolution": "1K",
+              "ratio": "16:9"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "1:1"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "21:9"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "2:3"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "3:2"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "3:4"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "4:3"
+            },
+            {
+              "resolution": "1K",
+              "ratio": "9:16"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "16:9"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "1:1"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "21:9"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "2:3"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "3:2"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "3:4"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "4:3"
+            },
+            {
+              "resolution": "2K",
+              "ratio": "9:16"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "16:9"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "1:1"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "21:9"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "2:3"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "3:2"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "3:4"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "4:3"
+            },
+            {
+              "resolution": "4K",
+              "ratio": "9:16"
+            }
+          ],
+          "max_reference_images": 20,
+          "min_reference_images": 1
+        }
+      ]
+    }
+  ]
+}

@@ -188,10 +188,22 @@ function getMappedImageParameters(model?: CreationModelInput) {
     getAsyncImageCapability(model)
   )
     return undefined
-  return typeof model === 'object'
-    ? model.mapped_endpoints?.find((endpoint) => endpoint.kind === 'image')
-        ?.parameters
-    : undefined
+  if (typeof model !== 'object') return undefined
+  const endpoints = model.mapped_endpoints
+  const generation = endpoints?.find(
+    (endpoint) => endpoint.kind === 'image'
+  )?.parameters
+  const edit = endpoints?.find(
+    (endpoint) => endpoint.path === '/v1/images/edits'
+  )?.parameters
+  if (generation && edit?.image_field === 'image[]')
+    return {
+      ...generation,
+      image_field: edit.image_field,
+      max_images: edit.max_images,
+      min_images: 0,
+    }
+  return generation
 }
 
 function normalizeModelId(model?: CreationModelInput) {
@@ -387,21 +399,24 @@ export function getCreationImageReferenceError(
   if (imageUrls.some((url) => !isReferenceImage(url))) {
     return 'Reference images must be images or HTTP URLs.'
   }
+  const strictFormat =
+    usesAsyncCreationImageModel(model) ||
+    getMappedImageParameters(model)?.image_field === 'image[]'
   if (
     imageUrls.some(
       (url) =>
         !hasAllowedReferenceFormat(
           url,
-          usesAsyncCreationImageModel(model)
+          strictFormat
             ? IMAGE_REFERENCE_EXTENSIONS
             : LEGACY_IMAGE_REFERENCE_EXTENSIONS,
-          usesAsyncCreationImageModel(model)
+          strictFormat
             ? IMAGE_REFERENCE_MIME_TYPES
             : LEGACY_IMAGE_REFERENCE_MIME_TYPES
         )
     )
   ) {
-    return usesAsyncCreationImageModel(model)
+    return strictFormat
       ? 'Reference image format must be PNG, JPEG, or WebP.'
       : 'Reference image format must be PNG, JPEG, WebP, GIF, or AVIF.'
   }

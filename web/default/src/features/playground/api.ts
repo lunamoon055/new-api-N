@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { prepareImageTransport } from '@/features/media-generation/image-transport'
 import type { PricingData } from '@/features/pricing/types'
 import { pollPlaygroundTask } from './lib/media-task-polling'
 import { API_ENDPOINTS } from './constants'
@@ -113,9 +114,15 @@ export async function sendPlaygroundMediaGeneration(
     throw new Error('Current model does not support media generation')
   }
 
-  const res = await api.post(endpoint, payload, {
+  const request = await prepareImageTransport(endpoint, payload, options.signal)
+  const res = await api.post(request.endpoint, request.payload, {
     skipErrorHandler: true,
-    headers: { 'X-Playground-Group': config.group },
+    headers: {
+      'X-Playground-Group': config.group,
+      ...(request.payload instanceof FormData
+        ? { 'Content-Type': undefined }
+        : {}),
+    },
     signal: options.signal,
   } as Record<string, unknown>)
   const resolvedMode = resolvePlaygroundMode(
