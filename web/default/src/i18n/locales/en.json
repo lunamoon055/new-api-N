@@ -5136,6 +5136,9 @@
     "Refreshing model capabilities...": "Refreshing model capabilities...",
     "Updated capability information for {{count}} models.": "Updated capability information for {{count}} models.",
     "The upstream has not published all capabilities for these models. Unconfirmed parameters remain visible:": "The upstream has not published all capabilities for these models. Unconfirmed parameters remain visible:",
-    "All synchronized models have published capability information.": "All synchronized models have published capability information."
+    "All synchronized models have published capability information.": "All synchronized models have published capability information.",
+    "New Announcements": "New Announcements",
+    "Closing applies only to these notices. Newly published notices will still be shown.": "Closing applies only to these notices. Newly published notices will still be shown.",
+    "Unable to load notifications. Please try again.": "Unable to load notifications. Please try again."
   }
 }

@@ -1,10 +1,12 @@
 // GHLINK video node for Infinite Canvas / 视觉工坊. No bundled credentials or dependencies.
 const ORIGIN = 'https://ghlink.top';
+const DRAWING_LOG = `${ORIGIN}/usage-logs/drawing`;
 const DONE = new Set(['completed', 'succeeded', 'success', 'settled', 'done']);
 const FAILED = new Set(['failed', 'failure', 'error', 'cancelled', 'canceled', 'released']);
 const unwrap = value => value?.data && !Array.isArray(value.data) ? value.data : value;
 const strings = value => Array.isArray(value) ? value.filter(x => typeof x === 'string' && x.trim()) : [];
 const statusOf = value => String(value?.status || value?.state || '').toLowerCase();
+const awaitingImage = metadata => metadata?.ghMode === 'image' && ['submitting', 'uncertain'].includes(metadata.ghPhase);
 const safeURL = value => {
     try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''; }
     catch { return ''; }
@@ -45,7 +47,13 @@ export function catalog(models, pricing, kind = 'video') {
     if (!Array.isArray(models?.data) || !Array.isArray(pricing?.data)) throw new Error('模型或价格目录格式不正确');
     const authorized = new Set(models.data.map(item => item.id));
     return pricing.data.filter(item => authorized.has(item.model_name)).flatMap(item => {
-        const path = kind === 'image' ? '/v1/images/generations' : '/v1/videos';
+        if (kind === 'image') {
+            const routes = imageRoutes(item);
+            const endpoint = routes.find(e => e.path === '/v1/images/generations') || routes[0];
+            if (!endpoint) return [];
+            return [{ ...item, id: item.model_name, kind, endpoint: endpoint.path, parameters: endpoint.parameters || {}, image_routes: routes, currency: pricing.currency || 'CNY', price_scope: pricing.price_scope }];
+        }
+        const path = '/v1/videos';
         const endpoint = item.mapped_endpoints?.find(e => e.kind === kind && e.path === path);
         if (!endpoint && !item.supported_endpoint_types?.includes(kind === 'image' ? 'image-generation' : 'openai-video')) return [];
         if (!endpoint && item.mapped_endpoints?.some(e => e.kind === kind)) return [];
@@ -55,10 +63,40 @@ export function catalog(models, pricing, kind = 'video') {
 
 const FIELD_NAMES = {
     duration: ['seconds', 'duration'], ratio: ['ratio', 'aspect_ratio'], resolution: ['resolution', 'size', 'output_resolution'],
-    image: ['images', 'referenceImages', 'reference_images', 'image_urls', 'reference_image_urls', 'image_url'],
+    image: ['images', 'referenceImages', 'reference_images', 'image_urls', 'reference_image_urls', 'image_url', 'image[]', 'image'],
     video: ['videos', 'referenceVideos', 'reference_videos', 'video_urls', 'reference_video_urls', 'video_url'],
     audio: ['audios', 'referenceAudios', 'reference_audios', 'audio_urls', 'audio_reference', 'audio_url'],
 };
+const IMAGE_GENERATIONS = '/v1/images/generations';
+const IMAGE_EDITS = '/v1/images/edits';
+const IMAGE_FILE_FIELDS = new Set(['image[]', 'image']);
+function imageRoutes(model) {
+    if (Array.isArray(model.image_routes)) return model.image_routes;
+    const mapped = model.mapped_endpoints?.filter(e => ['image', 'image-edit'].includes(e.kind));
+    if (mapped?.length) return mapped.filter(e => (!e.method || e.method.toUpperCase() === 'POST') && (
+        e.path === IMAGE_GENERATIONS || (e.path === IMAGE_EDITS && IMAGE_FILE_FIELDS.has(e.parameters?.image_field))
+    ));
+    if (model.kind === 'image' || model.supported_endpoint_types?.includes('image-generation')) return [{ path: IMAGE_GENERATIONS, parameters: model.parameters || {} }];
+    return [];
+}
+function supportsReferenceCount(route, count) {
+    const p = route.parameters || {};
+    const supported = route.path === IMAGE_EDITS ? IMAGE_FILE_FIELDS.has(p.image_field) : FIELD_NAMES.image.includes(p.image_field) && !IMAGE_FILE_FIELDS.has(p.image_field);
+    return supported && (!p.image_field.endsWith('_url') || count === 1) && count >= (p.min_images || 0) && (p.capabilities_unknown || p.unknown_fields?.includes('max_images') || typeof p.max_images !== 'number' || p.max_images >= count);
+}
+// Resolve before file preparation or POST. A failed request never selects another route.
+export function imageModelForReferences(model, count = 0) {
+    if (!model || model.kind !== 'image') throw new Error('请先选择图片模型');
+    const routes = imageRoutes(model);
+    const generation = routes.find(e => e.path === IMAGE_GENERATIONS);
+    const preferred = [generation, ...routes.filter(e => e !== generation)].filter(Boolean);
+    const referenceRoutes = preferred.filter(e => supportsReferenceCount(e, Math.max(1, e.parameters?.min_images || 0)));
+    const largest = referenceRoutes.reduce((best, route) => !best || (route.parameters?.max_images || 0) > (best.parameters?.max_images || 0) ? route : best, null);
+    const route = count ? referenceRoutes.find(e => supportsReferenceCount(e, count)) || largest || preferred[0] : generation || preferred[0];
+    if (!route) throw new Error('模型目录未声明插件支持的图片接口，请刷新模型目录');
+    const parameters = route.path === IMAGE_EDITS ? { ...route.parameters, min_images: Math.max(1, route.parameters?.min_images || 0) } : route.parameters || {};
+    return { ...model, endpoint: route.path, parameters, image_routes: [{ ...route, parameters }] };
+}
 function field(parameters, kind, fallback) {
     const value = parameters[`${kind}_field`] || fallback;
     if (!FIELD_NAMES[kind].includes(value)) throw new Error(`该模型的 ${kind} 字段暂不支持：${value}`);
@@ -88,7 +126,7 @@ export function buildPayload(model, values) {
         if (urls.some(url => !safeURL(url))) throw new Error('参考素材必须是 HTTP(S) 链接，每行一个');
         counts[plural] = urls.length;
         const maximum = p[`max_${plural}`];
-        if (!p.capabilities_unknown && typeof maximum === 'number' && urls.length > maximum) throw new Error(`${plural} 最多支持 ${maximum} 个参考素材（已连接和手填素材合计 ${urls.length} 个）`);
+        if (!p.capabilities_unknown && !p.unknown_fields?.includes(`max_${plural}`) && typeof maximum === 'number' && urls.length > maximum) throw new Error(`${plural} 最多支持 ${maximum} 个参考素材（已连接和手填素材合计 ${urls.length} 个）`);
         if (image && urls.length && (kind !== 'image' || !p.image_field)) throw new Error('该图片模型未声明此类参考素材接口，请选择支持参考图的模型；素材不会被忽略');
         if (urls.length) {
             const name = field(p, kind, plural);
@@ -109,14 +147,43 @@ export function buildImageRequest(model, values, protocol = '') {
     if (!model || model.kind !== 'image') throw new Error('请先选择图片模型');
     if (protocol && !['generations', 'chat'].includes(protocol)) throw new Error('不支持的图片调用方式');
     const images = referenceURLs(values.images);
-    // Reuse bounds checks, but do not require a generations-only image field for chat.
-    const validated = buildPayload(protocol === 'chat' ? { ...model, parameters: { ...model.parameters, image_field: 'images' } } : model, values);
-    if (protocol !== 'chat') return { path: '/v1/images/generations', body: validated, referenceCount: images.length };
+    // Legacy adapter calls remain explicit; the generator always chooses from the catalog.
+    const selected = protocol ? { ...model, endpoint: IMAGE_GENERATIONS } : imageModelForReferences(model, images.length);
+    const validated = buildPayload(protocol === 'chat' ? { ...selected, parameters: { ...selected.parameters, image_field: 'images' } } : selected, values);
+    if (protocol !== 'chat') return { path: selected.endpoint, body: validated, referenceCount: images.length };
     if (!supportsImageChat(model)) throw new Error('模型目录未声明对话接口，无法使用对话参考图方式');
     const instructions = ['请生成图片并返回图片结果。', values.ratio ? `画面比例：${values.ratio}。` : '', values.resolution ? `期望分辨率：${values.resolution}。` : '', validated.prompt].filter(Boolean).join('\n');
     const content = [{ type: 'text', text: instructions }];
     images.forEach((url, index) => content.push({ type: 'text', text: `参考图片 @图${index + 1}：` }, { type: 'image_url', image_url: { url } }));
     return { path: '/v1/chat/completions', body: { model: model.id, messages: [{ role: 'user', content }], stream: false }, referenceCount: images.length };
+}
+
+export async function prepareImageRequest(request, parameters, signal, { files = new Map(), fetcher = fetch } = {}) {
+    if (request.path !== IMAGE_EDITS) return request;
+    const imageField = parameters.image_field;
+    if (!IMAGE_FILE_FIELDS.has(imageField)) throw new Error('该图片编辑接口未声明支持的文件字段');
+    const urls = referenceURLs(request.body[imageField]);
+    if (!urls.length) throw new Error('图片编辑至少需要 1 张参考图');
+    const form = new FormData();
+    for (const [name, value] of Object.entries(request.body)) if (name !== imageField && value !== undefined && value !== null) form.append(name, String(value));
+    const types = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+    const maxMB = parameters.max_image_size_mb > 0 ? parameters.max_image_size_mb : 20;
+    for (let index = 0; index < urls.length; index++) {
+        signal.throwIfAborted();
+        let blob = files.get(urls[index]);
+        if (!blob) {
+            if (!safeURL(urls[index])) throw new Error('参考素材必须是 HTTP(S) 链接');
+            const response = await fetcher(urls[index], { credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', signal: AbortSignal.any([signal, AbortSignal.timeout(120000)]) });
+            if (!response.ok) throw new Error(`无法读取第 ${index + 1} 张参考图（HTTP ${response.status}），尚未提交生成请求`);
+            blob = await response.blob();
+        }
+        signal.throwIfAborted();
+        if (!(blob instanceof Blob) || !blob.size) throw new Error(`第 ${index + 1} 张参考图为空，尚未提交生成请求`);
+        if (!types[blob.type]) throw new Error('图片编辑参考图须为 PNG、JPEG 或 WebP，尚未提交生成请求');
+        if (blob.size > maxMB * 1024 * 1024) throw new Error(`参考图超过模型 ${maxMB} MB 限制，尚未提交生成请求`);
+        form.append(imageField, blob, `reference-${index + 1}.${types[blob.type]}`);
+    }
+    return { ...request, body: form };
 }
 
 export function imageRequestResults(response, path, references = []) {
@@ -260,8 +327,8 @@ export async function prepareReferences(items, manual, signal, options = {}) {
     for (const item of items.filter(x => x.kind !== 'text')) {
         signal.throwIfAborted();
         options.onProgress?.(`读取${{ image: '图片', video: '视频', audio: '音频' }[item.kind]}：${item.title}`);
-        let url = safeURL(item.source) || cache.get(item.identity);
-        if (!url && item.storageKey) url = safeURL((await read('public_media_urls', item.storageKey))?.url);
+        let url = safeURL(item.source) || (options.files ? '' : cache.get(item.identity));
+        if (!url && item.storageKey && !options.files) url = safeURL((await read('public_media_urls', item.storageKey))?.url);
         if (!url) {
             let blob = item.storageKey ? await read(item.kind === 'image' ? 'image_files' : 'media_files', item.storageKey) : null;
             if (!(blob instanceof Blob) && /^(blob:|data:(image|video|audio)\/)/.test(item.source)) {
@@ -273,10 +340,17 @@ export async function prepareReferences(items, manual, signal, options = {}) {
             const limit = options.parameters?.[`max_${item.kind}_size_mb`];
             if (limit > 0 && blob.size > limit * 1024 * 1024) throw new Error(`素材「${item.title}」超过模型 ${limit} MB 限制`);
             if (!blob.type || blob.type === 'application/octet-stream') blob = new Blob([blob], { type: item.mimeType || `${item.kind}/${item.kind === 'image' ? 'png' : item.kind === 'video' ? 'mp4' : 'mpeg'}` });
-            options.onProgress?.(`上传参考素材：${item.title}`);
-            url = await upload(blob, item, signal);
-            signal.throwIfAborted();
-            cache.set(item.identity, url);
+            if (options.files) {
+                // These identifiers are used only for deduplication and @ binding.
+                // The transport replaces them with file bytes, never network requests.
+                url = `https://local.invalid/${encodeURIComponent(item.identity)}`;
+                options.files.set(url, blob);
+            } else {
+                options.onProgress?.(`上传参考素材：${item.title}`);
+                url = await upload(blob, item, signal);
+                signal.throwIfAborted();
+                cache.set(item.identity, url);
+            }
         }
         options.onResolved?.(item, url);
         result[`${item.kind}s`].push(url);
@@ -383,13 +457,78 @@ export default function createPlugin(runtime) {
         if ([...sessions.values()].some(session => session.generation && session.busy)) window.addEventListener('beforeunload', preventReload);
         else window.removeEventListener('beforeunload', preventReload);
     }
-    function PromptEditor({ value, bindings, items, disabled, theme, onChange }) {
+    function MentionThumbnail({ item, ctxRef }) {
+        const { kind, source, storageKey, pluginBlobKey } = item;
+        const visual = kind === 'image' || kind === 'video';
+        const inlineSource = /^blob:/.test(source) || (kind === 'image' && /^data:image\/(?:png|jpeg|webp|gif|avif);base64,/i.test(source));
+        const direct = visual && (safeURL(source) || (inlineSource ? source : ''));
+        const [local, setLocal] = R.useState('');
+        const [failed, setFailed] = R.useState('');
+        R.useEffect(() => {
+            setLocal('');
+            if (!visual || (direct && !direct.startsWith('blob:')) || (!storageKey && !pluginBlobKey)) return;
+            let closed = false;
+            let url;
+            async function read() {
+                const blob = pluginBlobKey ? await ctxRef.current.storage.get(pluginBlobKey) :
+                    await readCanvasRecord(kind === 'image' ? 'image_files' : 'media_files', storageKey);
+                if (closed || !(blob instanceof Blob) || !blob.size) return;
+                url = URL.createObjectURL(blob);
+                setLocal(url);
+            }
+            read().catch(() => {});
+            return () => {
+                closed = true;
+                if (url) URL.revokeObjectURL(url);
+            };
+        }, [ctxRef, visual, kind, direct, storageKey, pluginBlobKey]);
+        const src = local || direct;
+        const media = src && src !== failed ? (kind === 'image' ?
+            h('img', { src, alt: '', loading: 'lazy', decoding: 'async', referrerPolicy: 'no-referrer', draggable: false, onError: () => setFailed(src) }) :
+            h('video', { src, muted: true, playsInline: true, preload: 'metadata', onError: () => setFailed(src) })) :
+            { image: '▧', video: '▷', audio: '♫' }[kind];
+        return h('span', { className: 'ghlink-mention-thumbnail', 'aria-hidden': true }, media);
+    }
+    function PromptEditor(props) {
+        const [expanded, setExpanded] = R.useState(false);
+        const dialog = R.useRef(null);
+        const selection = R.useRef(null);
+        const titleId = R.useId();
+        R.useEffect(() => {
+            if (!expanded) return;
+            const modal = dialog.current;
+            if (!modal.open) modal.showModal();
+            const textarea = modal.querySelector('textarea');
+            textarea?.focus();
+            if (selection.current) textarea?.setSelectionRange(...selection.current);
+        }, [expanded]);
+        const close = () => { dialog.current?.close(); setExpanded(false); };
+        const { theme } = props;
+        return h(R.Fragment, null,
+            h(PromptField, { ...props, onExpand: (start, end) => {
+                selection.current = [start, end];
+                setExpanded(true);
+            } }),
+            expanded ? h('dialog', {
+                ref: dialog, className: 'ghlink-viewer ghlink-prompt-dialog', 'aria-labelledby': titleId,
+                style: { '--gh-button-panel': theme.toolbar.panel, '--gh-button-text': theme.node.text, '--gh-button-border': theme.node.stroke, '--gh-button-muted': theme.node.muted },
+                onPointerDown: e => e.stopPropagation(), onMouseDown: e => e.stopPropagation(), onWheel: e => e.stopPropagation(), onKeyDown: e => e.stopPropagation(),
+                onCancel: e => { e.preventDefault(); close(); }, onClose: () => setExpanded(false),
+            },
+                h('header', { className: 'ghlink-viewer-header' }, h('strong', { id: titleId }, '编辑提示词'),
+                    h('button', { type: 'button', className: 'ghlink-action ghlink-action--secondary', onClick: close }, '完成')),
+                h(PromptField, props),
+            ) : null,
+        );
+    }
+    function PromptField({ value, bindings, items, disabled, theme, ctxRef, onChange, onExpand }) {
         const input = R.useRef(null);
         const list = R.useRef(null);
         const composing = R.useRef(false);
         const [mention, setMention] = R.useState(null);
         const [active, setActive] = R.useState(0);
         const listId = R.useId();
+        const inputId = `${listId}-prompt`;
         const options = mentionOptions(items, bindings);
         const query = mention?.query.toLowerCase() || '';
         const candidates = options.filter(x => `${x.token} ${x.title} ${x.kind}`.toLowerCase().includes(query));
@@ -417,33 +556,34 @@ export default function createPlugin(runtime) {
             requestAnimationFrame(() => { element.focus(); element.setSelectionRange(next.cursor, next.cursor); });
         }
         const small = { fontSize: 11, color: theme.node.muted };
-        return h('div', { style: { display: 'grid', gap: 6 } },
-            h('label', { style: { display: 'grid', gap: 4 } }, h('span', { style: small }, '提示词'),
-                h('textarea', {
-                    ref: input, value, disabled, placeholder: '描述画面、动作；输入 @ 选择参考素材',
-                    'aria-autocomplete': 'list', 'aria-controls': mention ? listId : undefined, 'aria-expanded': !!mention,
-                    'aria-activedescendant': mention && candidates.length ? `${listId}-${selected}` : undefined,
-                    style: { width: '100%', boxSizing: 'border-box', minHeight: 100, padding: '9px 10px', borderRadius: 7, border: `1px solid ${theme.node.stroke}`, color: theme.node.text, background: theme.toolbar.panel, fontSize: 12, lineHeight: 1.7, resize: 'vertical' },
-                    onChange: e => { onChange(e.target.value, bindings); if (!composing.current) sync(e.target); },
-                    onClick: e => sync(e.target), onFocus: e => sync(e.target), onBlur: () => setMention(null),
-                    onCompositionStart: () => { composing.current = true; setMention(null); },
-                    onCompositionEnd: e => { composing.current = false; sync(e.target); },
-                    onKeyUp: e => { if (!composing.current && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) sync(e.target); },
-                    onKeyDown: e => {
-                        if (composing.current || e.nativeEvent.isComposing || e.keyCode === 229 || !mention) return;
-                        if (e.key === 'Escape') { e.preventDefault(); setMention(null); }
-                        else if (candidates.length && ['ArrowDown', 'ArrowUp'].includes(e.key)) { e.preventDefault(); setActive((selected + (e.key === 'ArrowDown' ? 1 : candidates.length - 1)) % candidates.length); }
-                        else if (candidates.length && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); insert(candidates[selected], true); }
-                    },
-                })),
+        return h('div', { className: 'ghlink-prompt-editor', style: { '--gh-button-panel': theme.toolbar.panel, '--gh-button-text': theme.node.text, '--gh-button-border': theme.node.stroke, '--gh-button-muted': theme.node.muted } },
+            onExpand ? h('div', { className: 'ghlink-prompt-heading' }, h('label', { htmlFor: inputId, style: small }, '提示词'),
+                h('button', { type: 'button', className: 'ghlink-action ghlink-action--secondary ghlink-expand-prompt', disabled, onClick: () => onExpand(input.current.selectionStart, input.current.selectionEnd) }, '↗ 放大编辑')) : null,
+            h('textarea', {
+                ref: input, id: inputId, className: 'ghlink-prompt-text', value, disabled, placeholder: '描述画面、动作；输入 @ 选择参考素材',
+                'aria-label': onExpand ? undefined : '提示词',
+                'aria-autocomplete': 'list', 'aria-controls': mention ? listId : undefined, 'aria-expanded': !!mention,
+                'aria-activedescendant': mention && candidates.length ? `${listId}-${selected}` : undefined,
+                onChange: e => { onChange(e.target.value, bindings); if (!composing.current) sync(e.target); },
+                onClick: e => sync(e.target), onFocus: e => sync(e.target), onBlur: () => setMention(null),
+                onCompositionStart: () => { composing.current = true; setMention(null); },
+                onCompositionEnd: e => { composing.current = false; sync(e.target); },
+                onKeyUp: e => { if (!composing.current && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) sync(e.target); },
+                onKeyDown: e => {
+                    if (composing.current || e.nativeEvent.isComposing || e.keyCode === 229 || !mention) return;
+                    if (e.key === 'Escape') { e.preventDefault(); setMention(null); }
+                    else if (candidates.length && ['ArrowDown', 'ArrowUp'].includes(e.key)) { e.preventDefault(); setActive((selected + (e.key === 'ArrowDown' ? 1 : candidates.length - 1)) % candidates.length); }
+                    else if (candidates.length && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); insert(candidates[selected], true); }
+                },
+            }),
             mention ? h('div', { style: { border: `1px solid ${theme.node.stroke}`, borderRadius: 8, padding: 6, background: theme.toolbar.panel } },
                 h('div', { style: { ...small, padding: '3px 5px 7px' } }, '选择参考素材 · ↑↓ 选择 · Enter 插入'),
-                h('div', { ref: list, id: listId, role: 'listbox', 'aria-label': '参考素材', style: { position: 'relative', maxHeight: 180, overflowY: 'auto', display: 'grid', gap: 3 } },
+                h('div', { ref: list, id: listId, className: 'ghlink-mention-list', role: 'listbox', 'aria-label': '参考素材' },
                     candidates.length ? candidates.map((item, index) => h('button', {
                         key: item.id, id: `${listId}-${index}`, role: 'option', type: 'button', 'aria-selected': index === selected,
                         onMouseDown: e => e.preventDefault(), onClick: () => insert(item, true),
                         style: { display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', border: index === selected ? '1px solid #5686f7' : '1px solid transparent', borderRadius: 6, padding: '7px 8px', background: index === selected ? '#5686f718' : 'transparent', color: theme.node.text, cursor: 'pointer' },
-                    }, h('span', { style: { fontSize: 18 } }, { image: '▧', video: '▷', audio: '♫' }[item.kind]), h('span', { style: { minWidth: 0, display: 'grid', gap: 3 } }, h('strong', { style: { fontSize: 12 } }, `${item.token} · ${item.title}`), h('span', { style: small }, `已连接${MENTION_NAMES[item.kind]}`)))) : h('div', { style: { ...small, padding: 8 } }, options.length ? '没有匹配素材，试试文件名或素材类型。' : '请先把图片、视频或音频节点连入插件左侧接口。')),
+                    }, h(MentionThumbnail, { item, ctxRef }), h('span', { style: { minWidth: 0, display: 'grid', gap: 3 } }, h('strong', { style: { fontSize: 12, overflowWrap: 'anywhere' } }, `${item.token} · ${item.title}`), h('span', { style: small }, `已连接${MENTION_NAMES[item.kind]}`)))) : h('div', { style: { ...small, padding: 8 } }, options.length ? '没有匹配素材，试试文件名或素材类型。' : '请先把图片、视频或音频节点连入插件左侧接口。')),
             ) : null,
             tokens.length ? h('div', { 'aria-label': '提示词中的素材引用', style: { display: 'flex', flexWrap: 'wrap', gap: 5 } }, ...tokens.map(token => {
                 const bound = bindings.find(x => x.token === token);
@@ -507,7 +647,11 @@ export default function createPlugin(runtime) {
         const [downloading, setDownloading] = R.useState(false);
         const [downloadMessage, setDownloadMessage] = R.useState('');
         const downloadController = R.useRef(null);
-        const pending = ['preparing', 'submitting', 'generating', 'loading'].includes(progress.phase);
+        const recoveryInput = R.useRef(null);
+        const recoveryLock = R.useRef(false);
+        const image = m.ghMode === 'image';
+        const sourceBusy = sessions.get(m.ghSourceNodeId)?.busy;
+        const pending = ['preparing', 'submitting', 'generating', 'loading'].includes(progress.phase) && (!image || sourceBusy);
         R.useEffect(() => {
             let disposed = false;
             if (m.ghBlobKey) ctx.storage.get(m.ghBlobKey).then(blob => {
@@ -524,10 +668,44 @@ export default function createPlugin(runtime) {
             tick(); const timer = setInterval(tick, 1000); return () => clearInterval(timer);
         }, [pending, progress.started]);
         R.useEffect(() => () => downloadController.current?.abort(), []);
-        const titles = { preparing: '正在准备参考素材', submitting: '正在提交请求', generating: `${m.ghMode === 'image' ? '图片' : '视频'}正在生成`, loading: '正在读取结果', completed: '生成完成', error: '生成未完成', paused: '查询已暂停' };
+        const titles = { preparing: '正在准备参考素材', submitting: '正在提交请求', generating: `${image ? '图片' : '视频'}正在生成`, loading: '正在读取结果', completed: '生成完成', error: '生成未完成', paused: '查询已暂停', uncertain: '等待核对 GH 结果' };
         const preview = m.ghResultURL || localURL;
         R.useEffect(() => { setDownloadMessage(''); setViewer(false); }, [preview]);
-        const image = m.ghMode === 'image', ready = preview && progress.phase === 'completed';
+        const ready = preview && progress.phase === 'completed';
+        const recoverable = image && !pending && (ready ? failed === preview : Boolean(m.ghLastRequest));
+        async function recoverImage(event) {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            if (!file || recoveryLock.current || sessions.get(m.ghSourceNodeId)?.busy) return;
+            recoveryLock.current = true;
+            setDownloadMessage('正在补回图片…');
+            try {
+                if (!file.size || file.size > 30 * 1024 * 1024 || !/^image\/(png|jpeg|webp|gif|avif)$/.test(file.type)) throw new Error('请选择 30 MB 以内的 PNG、JPEG、WebP、GIF 或 AVIF 图片');
+                const bitmap = await createImageBitmap(file).catch(() => { throw new Error('文件无法解码为图片'); });
+                bitmap.close();
+                const id = ctx.node.id, blobKey = `result:${id}`;
+                await ctx.storage.set(blobKey, file);
+                const current = ctx.getNode(id), source = ctx.getNode(m.ghSourceNodeId);
+                if (!current) return;
+                const previous = resultURLs.get(id);
+                if (previous) URL.revokeObjectURL(previous);
+                const url = URL.createObjectURL(file);
+                resultURLs.set(id, url); setLocalURL(url);
+                const metadata = { ghBlobKey: blobKey, ghResultURL: '' };
+                const message = '已补回 GH 生成的图片。';
+                const ops = [{ type: 'update_node', id, metadata: { ...metadata, ghProgress: { ...progress, phase: 'completed', message } } }];
+                const resolvesSource = source?.metadata?.ghResultNodeId === id && awaitingImage(source.metadata);
+                if (resolvesSource) {
+                    ops.push({ type: 'update_node', id: source.id, metadata: { ...metadata, ghPhase: 'completed' } });
+                }
+                ctx.applyOps(ops);
+                if (resolvesSource) {
+                    const session = sessions.get(source.id);
+                    if (session) { session.message = message; notify(session); }
+                }
+            } catch (error) { setDownloadMessage(`补回图片失败：${publicError(error)}`); }
+            finally { recoveryLock.current = false; }
+        }
         async function download() {
             if (downloadController.current) return;
             const controller = new AbortController(); downloadController.current = controller;
@@ -541,12 +719,16 @@ export default function createPlugin(runtime) {
             ready ? h('div', { className: 'ghlink-result-media' }, image ? (failed === preview ? h('div', { role: 'alert', className: 'ghlink-media-empty' }, '图片暂未加载', action('重新加载', () => { setFailed(''); setRetry(value => value + 1); })) : h('button', { type: 'button', className: 'ghlink-image-preview', 'aria-label': '查看生成图片大图', onClick: () => setViewer(true) },
                 h('img', { key: `${preview}:${retry}`, src: preview, alt: '生成的图片', draggable: false, onLoad: e => setDimensions({ src: preview, text: `${e.currentTarget.naturalWidth} × ${e.currentTarget.naturalHeight}` }), onError: () => setFailed(preview) }), h('span', { className: 'ghlink-image-hint' }, '点击查看大图'))) : h('video', { src: preview, controls: true, style: { width: '100%', height: '100%', objectFit: 'contain' } })) : h('div', { style: { flex: 1, minHeight: 70, display: 'grid', placeContent: 'center', textAlign: 'center', gap: 12 } },
                 h('span', { style: { fontSize: 28, color: ctx.theme.node.muted } }, m.ghMode === 'image' ? '▧' : '▷'),
-                h('strong', { style: { fontSize: 15 } }, titles[progress.phase] || '等待生成'),
+                h('strong', { style: { fontSize: 15 } }, recoverable ? '等待核对 GH 结果' : titles[progress.phase] || '等待生成'),
                 pending ? h('progress', { max: 100, ...(Number.isFinite(progress.percent) ? { value: progress.percent } : {}), 'aria-label': '生成进度', style: { width: 220, height: 6, accentColor: '#5285f6' } }) : null,
                 pending ? h('span', { style: { fontSize: 12, color: ctx.theme.node.muted } }, `${Math.floor(elapsed / 60)} 分 ${elapsed % 60} 秒${Number.isFinite(progress.percent) ? ` · ${progress.percent}%` : ''}`) : null),
             ready ? h('div', { className: 'ghlink-result-caption' }, h('strong', null, '生成完成'), h('span', { className: 'ghlink-media-meta' }, image ? dimensions.src === preview ? dimensions.text : '' : '视频')) : null,
             ready ? h('div', { className: 'ghlink-actions' }, image ? action('查看大图', () => setViewer(true)) : null, action(downloading ? '下载中…' : image ? '下载图片' : '下载视频', download, downloading)) : null,
-            h('div', { role: 'status', className: 'ghlink-media-meta' }, downloadMessage || (ready ? '' : progress.message)),
+            recoverable ? h('div', { className: 'ghlink-actions' },
+                h('a', { href: DRAWING_LOG, target: '_blank', rel: 'noopener noreferrer', className: 'ghlink-log-link' }, '查看 GH 绘图日志'),
+                action('补回图片', () => recoveryInput.current?.click()),
+                h('input', { ref: recoveryInput, type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/avif', hidden: true, onChange: recoverImage })) : null,
+            h('div', { role: 'status', className: 'ghlink-media-meta' }, downloadMessage || (recoverable ? '若 GH 已生成，请下载原图后补回此节点。' : ready ? '' : progress.message)),
             progress.taskId ? h('details', { onPointerDown: e => e.stopPropagation(), style: { fontSize: 11, color: ctx.theme.node.muted, overflowWrap: 'anywhere' } }, h('summary', null, '任务信息'), progress.taskId, h('div', null, '刷新或停止等待后，可在原插件节点继续查询。')) : null,
             ready && image && viewer ? h(ImageViewer, { src: preview, theme: ctx.theme, downloading, onDownload: download, downloadMessage, onClose: () => setViewer(false) }) : null,
         );
@@ -570,9 +752,13 @@ export default function createPlugin(runtime) {
         const setMessage = value => { session.message = value; notify(session); };
         const [connected, setConnected] = R.useState(() => connectedResources(ctx.getUpstream()));
         const mode = m.ghMode || 'video';
+        const imageUncertain = awaitingImage(m);
         const visibleModels = models.filter(item => item.kind === mode);
         const model = visibleModels.find(item => item.id === m.ghModel);
-        const p = model?.parameters || {};
+        const imageCount = [...new Set([...connected.filter(x => x.kind === 'image').map(x => safeURL(x.source) || x.identity), ...referenceURLs(m.ghImages)])].length;
+        const activeModel = model?.kind === 'image' ? imageModelForReferences(model, imageCount) : model;
+        const p = activeModel?.parameters || {};
+        const referenceParameters = model?.kind === 'image' ? imageModelForReferences(model, imageCount || 1).parameters : p;
         const labels = new Map(mentionOptions(connected, m.ghMentionBindings || []).map(item => [item.id, item.token]));
         R.useEffect(() => {
             const listener = () => redraw(value => value + 1);
@@ -606,8 +792,12 @@ export default function createPlugin(runtime) {
             progressRef.current = { phase: 'preparing', message: '正在读取连接素材与模型参数…', started: Date.now() };
             updateResult({ ghProgress: progressRef.current });
         }
+        function hasTask() {
+            const node = ctxRef.current.getNode(ctx.node.id);
+            return !node || Boolean(node.metadata?.ghTaskId || node.metadata?.ghPhase);
+        }
         async function run(action, generation = false) {
-            if (lock.current) return;
+            if (lock.current || (action === submit && hasTask())) return;
             session.generation = generation;
             lock.current = true; setBusy(true);
 
@@ -617,7 +807,8 @@ export default function createPlugin(runtime) {
             try { if (generation) ensureResult(); await action(aborter.signal); }
             catch (error) {
                 const text = aborter.signal.aborted ? '已停止本页等待；已提交的 GH 任务不会被取消，请通过任务 ID 或 GH 记录核对。' : publicError(error, key);
-                if (generation) report(text, aborter.signal.aborted ? 'paused' : 'error'); else setMessage(text);
+                const uncertain = awaitingImage(ctxRef.current.getNode(ctx.node.id)?.metadata);
+                if (generation) report(text, aborter.signal.aborted ? 'paused' : uncertain ? 'uncertain' : 'error'); else setMessage(text);
             }
             finally { clearInterval(timer); controller.current = null; lock.current = false; setBusy(false); }
         }
@@ -630,7 +821,7 @@ export default function createPlugin(runtime) {
             setMessage(`已读取 ${available.filter(x => x.kind === 'video').length} 个视频模型、${available.filter(x => x.kind === 'image').length} 个图片模型`);
         }
         function choose(next) {
-            const spec = next?.parameters || {};
+            const spec = (next?.kind === 'image' ? imageModelForReferences(next, imageCount) : next)?.parameters || {};
             patch({ ghModel: next?.id || '', ghSeconds: String(spec.durations?.[0] || ''), ghRatio: spec.ratios?.[0] || '', ghResolution: spec.resolutions?.[0] || '' });
         }
         async function finish(id, signal) {
@@ -658,7 +849,7 @@ export default function createPlugin(runtime) {
             report('视频已完成，可预览或下载。任务 ID 已保留。', 'completed', { taskId: id });
         }
         async function submit(signal) {
-            if (m.ghTaskId || m.ghPhase) throw new Error('已有任务，请继续查询或先确认任务状态');
+            if (hasTask()) throw new Error('已有任务，请先核对任务状态');
             if (!key.trim()) throw new Error('请填写 API Key');
             const inputs = await Promise.all(connectedResources(ctxRef.current.getUpstream()).map(async item => {
                 if (item.kind === 'text' || safeURL(item.source)) return item;
@@ -677,17 +868,20 @@ export default function createPlugin(runtime) {
             const previewRefs = {};
             for (const [kind, plural] of [['image', 'images'], ['video', 'videos'], ['audio', 'audios']]) previewRefs[plural] = [...new Set([...inputs.filter(x => x.kind === kind).map(x => previewURLs.get(x.id)), ...referenceURLs(manual[plural])])];
             const previewValues = { ...values, ...previewRefs, prompt: compileMentions(values.prompt, bindings, inputs, previewRefs, previewURLs) };
-            if (mode === 'image') buildImageRequest(model, previewValues);
-            else buildPayload(model, previewValues); // Validate bindings and combined limits before uploading files.
+            const selectedModel = mode === 'image' ? imageModelForReferences(model, previewRefs.images.length) : model;
+            if (mode === 'image') buildImageRequest(selectedModel, previewValues);
+            else buildPayload(selectedModel, previewValues); // Validate bindings and combined limits before uploading files.
             const resolvedURLs = new Map();
-            const refs = await prepareReferences(inputs, manual, signal, { cache: uploadedReferences, parameters: p, onResolved: (item, url) => resolvedURLs.set(item.id, url), onProgress: text => report(text, 'preparing') });
+            const files = selectedModel.endpoint === IMAGE_EDITS ? new Map() : undefined;
+            const refs = await prepareReferences(inputs, manual, signal, { files, cache: uploadedReferences, parameters: selectedModel.parameters, onResolved: (item, url) => resolvedURLs.set(item.id, url), onProgress: text => report(text, 'preparing') });
             const finalValues = { ...values, ...refs, prompt: compileMentions(values.prompt, bindings, inputs, refs, resolvedURLs) };
             // The catalog's image route is automatic. Do not reuse obsolete
             // per-node protocol overrides or switch routes after a failure.
-            const request = mode === 'image' ? buildImageRequest(model, finalValues) : { path: '/v1/videos', body: buildPayload(model, finalValues) };
+            const request = mode === 'image' ? await prepareImageRequest(buildImageRequest(selectedModel, finalValues), selectedModel.parameters, signal, { files }) : { path: '/v1/videos', body: buildPayload(model, finalValues) };
             const summary = { path: request.path, model: model.id, images: refs.images.length, videos: refs.videos.length, audios: refs.audios.length };
             patch({ ghLastRequest: summary }); updateResult({ ghLastRequest: summary });
             signal.throwIfAborted();
+            if (hasTask()) throw new Error('已有任务，请先核对任务状态');
             patch({ ghPhase: 'submitting', ghResultURL: '' });
             report(`正在提交${mode === 'image' ? '图片' : '视频'}生成请求…`, 'submitting');
             let response;
@@ -712,8 +906,12 @@ export default function createPlugin(runtime) {
             patch({ ghTaskId: String(id), ghPhase: 'pending' });
             await finish(String(id), signal);
         }
-        function reset() {
-            if (!['completed', 'failed'].includes(m.ghPhase) && !window.confirm('请先在 GH 确认旧请求未受理或任务已经结束。新提交可能再次计费，确定重置？')) return;
+        function reset(confirmUnaccepted = false) {
+            const live = ctxRef.current.getNode(ctx.node.id)?.metadata;
+            if (lock.current || !live) return;
+            if (awaitingImage(live)) {
+                if (!confirmUnaccepted || !window.confirm('仅在确认 GH 未受理、未生成且未扣费时解除锁定。若已生成，请在原结果节点补回图片。确认 GH 未受理？')) return;
+            } else if (!['completed', 'failed'].includes(live.ghPhase) && !window.confirm('请先在 GH 确认旧请求未受理或任务已经结束。新提交可能再次计费，确定重置？')) return;
             patch({ ghTaskId: '', ghPhase: '', ghResultURL: '', ghResultNodeId: '', ghBlobKey: '', ghLastRequest: null }); resultId.current = '';
             setMessage('可创建新任务');
         }
@@ -737,30 +935,43 @@ export default function createPlugin(runtime) {
             label('生成类型', h('select', { style: inputStyle, value: mode, disabled: busy || !!m.ghPhase || !!m.ghTaskId, onChange: e => { const kind = e.target.value; patch({ ghMode: kind }); choose(models.find(item => item.kind === kind)); } }, h('option', { value: 'video' }, '视频'), h('option', { value: 'image' }, '图片'))),
             label(mode === 'image' ? '图片模型' : '视频模型', h('select', { style: inputStyle, value: m.ghModel || '', disabled: busy || !visibleModels.length, onChange: e => choose(visibleModels.find(item => item.id === e.target.value)) }, h('option', { value: '' }, '刷新后选择模型'), ...visibleModels.map(item => h('option', { key: item.id, value: item.id, disabled: item.price_configured === false }, item.id)))),
             h('div', { style: { color: ctx.theme.node.muted, fontSize: 11, lineHeight: 1.5 } }, priceLabel(model, m.ghResolution)),
-            h(PromptEditor, { value: m.ghPrompt || '', bindings: m.ghMentionBindings || [], items: connected, disabled: busy, theme: ctx.theme, onChange: (prompt, bindings) => patch({ ghPrompt: prompt, ghMentionBindings: bindings }) }),
+            h(PromptEditor, { value: m.ghPrompt || '', bindings: m.ghMentionBindings || [], items: connected, disabled: busy, theme: ctx.theme, ctxRef, onChange: (prompt, bindings) => patch({ ghPrompt: prompt, ghMentionBindings: bindings }) }),
             h('div', { style: { display: 'grid', gridTemplateColumns: `repeat(${mode === 'image' ? 2 : 3}, minmax(0, 1fr))`, gap: 8 } }, mode === 'image' ? null : select('ghSeconds', '时长 / 秒', p.durations || []), p.omit_ratio || (mode === 'image' && !p.ratio_field) ? null : select('ghRatio', '画面比例', strings(p.ratios)), select('ghResolution', mode === 'image' && !p.resolution_field ? '图片尺寸（可选）' : '分辨率', strings(p.resolutions))),
             h('div', { 'aria-label': '已连接素材', style: { display: 'grid', gap: 5, fontSize: 12, lineHeight: 1.6 } }, h('strong', null, `已连接素材 · ${connected.length} 个`), connected.length ? connected.map((item, index) => h('div', { key: item.id, style: { overflowWrap: 'anywhere', color: ctx.theme.node.muted } }, `${labels.get(item.id) || '文本'} · ${item.title}${safeURL(item.source) ? '' : item.kind === 'text' ? '（提示词为空时使用）' : '（生成时读取本地素材）'}`)) : h('span', { style: { color: ctx.theme.node.muted } }, '将图片、视频或音频节点连入左侧接口，即可自动读取。')),
-            h('details', null, h('summary', { style: { fontSize: 12, cursor: 'pointer' } }, '补充参考素材链接'), h('div', { style: { display: 'grid', gap: 8, marginTop: 8 } }, ...[['ghImages', '图片', 'max_images'], ['ghVideos', '视频', 'max_videos'], ['ghAudios', '音频', 'max_audios']].map(([name, title, limit]) => label(`${title}${!p.capabilities_unknown && p[limit] !== undefined ? ` · 最多 ${p[limit]} 个（含连接素材）` : ' · 数量限制未公布'}`, h('textarea', { style: inputStyle, rows: 2, disabled: busy || (!p.capabilities_unknown && p[limit] === 0), value: m[name] || '', placeholder: '连接素材会自动读取；此处可额外补充链接', onChange: e => patch({ [name]: e.target.value }) }))))),
+            h('details', null, h('summary', { style: { fontSize: 12, cursor: 'pointer' } }, '补充参考素材链接'), h('div', { style: { display: 'grid', gap: 8, marginTop: 8 } }, ...[['ghImages', '图片', 'max_images'], ['ghVideos', '视频', 'max_videos'], ['ghAudios', '音频', 'max_audios']].map(([name, title, limit]) => label(`${title}${!referenceParameters.capabilities_unknown && !referenceParameters.unknown_fields?.includes(limit) && referenceParameters[limit] !== undefined ? ` · 最多 ${referenceParameters[limit]} 个（含连接素材）` : ' · 数量限制未公布'}`, h('textarea', { style: inputStyle, rows: 2, disabled: busy || (!referenceParameters.capabilities_unknown && !referenceParameters.unknown_fields?.includes(limit) && referenceParameters[limit] === 0), value: m[name] || '', placeholder: '连接素材会自动读取；此处可额外补充链接', onChange: e => patch({ [name]: e.target.value }) }))))),
             h('div', { className: 'ghlink-actions' },
                 button(mode === 'image' ? '生成图片' : '生成视频', () => run(submit, true), busy || !model || !key.trim() || !!m.ghTaskId || !!m.ghPhase || model?.price_configured === false, 'primary'),
                 mode === 'video' ? button('继续查询', () => run(signal => finish(m.ghTaskId, signal), true), busy || !m.ghTaskId || !key.trim(), 'secondary') : null,
-                busy ? button('停止本页等待', () => controller.current?.abort(), false, 'secondary') : (m.ghTaskId || m.ghPhase) ? button('新任务', reset, false, 'secondary') : null,
+                busy ? button('停止本页等待', () => controller.current?.abort(), false, 'secondary') : !imageUncertain && (m.ghTaskId || m.ghPhase) ? button('新任务', () => reset(), false, 'secondary') : null,
                 m.ghResultNodeId ? button('选中结果节点', () => ctx.applyOps([{ type: 'select_nodes', ids: [m.ghResultNodeId] }]), false, 'secondary') : null),
             mode === 'video' ? label('任务 ID（用于恢复查询）', input('ghTaskId', '提交后自动保存，也可粘贴已有 GH 任务 ID')) : null,
-            h('div', { role: 'status', style: { fontSize: 12, lineHeight: 1.6, overflowWrap: 'anywhere' } }, message),
+            h('div', { role: 'status', style: { fontSize: 12, lineHeight: 1.6, overflowWrap: 'anywhere' } }, !busy && imageUncertain ? '图片请求可能已受理。请先核对 GH 绘图日志，若已完成，在结果节点补回图片。' : message),
+            !busy && imageUncertain ? h('div', null,
+                h('a', { href: DRAWING_LOG, target: '_blank', rel: 'noopener noreferrer', className: 'ghlink-log-link' }, '查看 GH 绘图日志'),
+                h('details', { style: { marginTop: 6, fontSize: 12 } }, h('summary', null, 'GH 未受理这次请求？'), button('确认未受理并解锁', () => reset(true)))) : null,
             m.ghLastRequest ? h('details', null, h('summary', { style: { fontSize: 12, cursor: 'pointer' } }, '生成信息'), h('div', { style: { fontSize: 11, lineHeight: 1.7, overflowWrap: 'anywhere' } }, m.ghLastRequest.model, h('br'), `参考图片 ${m.ghLastRequest.images} 张、视频 ${m.ghLastRequest.videos} 个、音频 ${m.ghLastRequest.audios} 个。`)) : null,
         );
     }
     return {
-        id: 'ghlink-video', name: 'GHLINK 视频与图片', version: '1.3.3', description: '站内大图预览和文件下载、清晰的任务按钮，支持 @ 参考素材及节点重建后继续等待。',
+        id: 'ghlink-video', name: 'GHLINK 视频与图片', version: '1.3.6', description: '支持放大编辑提示词、@ 素材缩略图，以及站内预览、下载和补回图片。',
         css: `
             .ghlink-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0; }
+            .ghlink-log-link { padding: 6px 0; color: var(--gh-button-text); font-size: 12px; text-decoration: underline; }
             button.ghlink-action { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 36px; padding: 8px 14px; border: 1px solid var(--gh-button-border); border-radius: 8px; background: var(--gh-button-panel); color: var(--gh-button-text); font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; cursor: pointer; transition: background-color .15s, border-color .15s, box-shadow .15s; }
             button.ghlink-action--primary { background: #2563eb; border-color: #2563eb; color: #fff; box-shadow: 0 2px 5px #2563eb26; }
             button.ghlink-action--secondary:hover:not(:disabled) { border-color: #3b82f6; box-shadow: 0 1px 4px #2563eb1a; }
             button.ghlink-action--primary:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; }
             button.ghlink-action:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
             button.ghlink-action:disabled { background: var(--gh-button-panel); color: var(--gh-button-muted); border-color: var(--gh-button-border); box-shadow: none; opacity: .6; cursor: not-allowed; }
+            .ghlink-prompt-editor { display: flex; flex-direction: column; min-width: 0; gap: 6px; }
+            .ghlink-prompt-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+            button.ghlink-expand-prompt { min-height: 28px; padding: 4px 9px; font-size: 11px; border-radius: 6px; }
+            .ghlink-prompt-text { width: 100%; box-sizing: border-box; min-height: 168px; padding: 10px 11px; border: 1px solid var(--gh-button-border); border-radius: 7px; background: var(--gh-button-panel); color: var(--gh-button-text); font: inherit; font-size: 13px; line-height: 1.7; resize: vertical; }
+            .ghlink-prompt-text:focus-visible { outline: 2px solid #5686f7; outline-offset: -1px; }
+            .ghlink-mention-list { position: relative; max-height: 180px; overflow-y: auto; display: grid; gap: 3px; }
+            .ghlink-prompt-editor, .ghlink-prompt-text, .ghlink-mention-list { scrollbar-width: thin; scrollbar-color: var(--gh-button-muted) transparent; }
+            .ghlink-mention-thumbnail { flex: 0 0 44px; height: 36px; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--gh-button-border); border-radius: 5px; color: var(--gh-button-muted); font-size: 17px; }
+            .ghlink-mention-thumbnail img, .ghlink-mention-thumbnail video { display: block; width: 100%; height: 100%; min-width: 0; object-fit: cover; pointer-events: none; }
             .ghlink-result { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow: auto; color: var(--gh-button-text); }
             .ghlink-result-media { position: relative; flex: 1; min-height: 80px; overflow: hidden; border: 1px solid var(--gh-button-border); border-radius: 8px; }
             .ghlink-image-preview { display: block; position: relative; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; color: var(--gh-button-text); cursor: zoom-in; }
@@ -774,6 +985,9 @@ export default function createPlugin(runtime) {
             dialog.ghlink-viewer { box-sizing: border-box; width: min(1100px, calc(100vw - 32px)); height: min(840px, calc(100dvh - 32px)); max-width: none; max-height: none; margin: auto; padding: 0; border: 1px solid var(--gh-button-border); border-radius: 12px; background: var(--gh-button-panel); color: var(--gh-button-text); box-shadow: 0 20px 70px #0005; overflow: hidden; }
             dialog.ghlink-viewer[open] { display: flex; flex-direction: column; }
             dialog.ghlink-viewer::backdrop { background: #0009; }
+            dialog.ghlink-prompt-dialog { width: min(880px, calc(100vw - 32px)); height: min(650px, calc(100dvh - 32px)); }
+            .ghlink-prompt-dialog .ghlink-prompt-editor { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; }
+            .ghlink-prompt-dialog .ghlink-prompt-text { flex: 1; min-height: 140px; font-size: 14px; resize: none; }
             .ghlink-viewer-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--gh-button-border); }
             .ghlink-viewer-tools { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
             .ghlink-viewer-scale { min-width: 42px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }

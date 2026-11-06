@@ -214,9 +214,38 @@ export async function getNotice(): Promise<{
   success: boolean
   message?: string
   data?: string
+  published_at?: number
 }> {
   const res = await api.get('/api/notice')
   return res.data
+}
+
+export async function getNotificationFeed() {
+  let response
+  try {
+    response = await api.get<{
+      success: boolean
+      data: import('./notifications').NotificationFeed
+    }>('/api/notifications', {
+      skipErrorHandler: true,
+      skipBusinessError: true,
+    } as Record<string, unknown>)
+  } catch {
+    // Public background polling must not trigger the query cache's global
+    // Axios 401 sign-out or 500 page redirect.
+    throw new Error('Notification feed unavailable')
+  }
+  if (
+    !response.data.success ||
+    !response.data.data ||
+    !Number.isFinite(response.data.data.server_time) ||
+    response.data.data.server_time <= 0 ||
+    typeof response.data.data.notice?.content !== 'string' ||
+    !Number.isFinite(response.data.data.notice.published_at) ||
+    !Array.isArray(response.data.data.announcements)
+  )
+    throw new Error('Notification feed unavailable')
+  return response.data.data
 }
 
 // ----------------------------------------------------------------------------

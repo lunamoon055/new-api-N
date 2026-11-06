@@ -51,6 +51,7 @@ interface NotificationDialogProps {
   announcements: AnnouncementItem[]
   loading: boolean
   onCloseToday: () => void
+  recentOnly?: boolean
 }
 
 /**
@@ -241,42 +242,53 @@ export function NotificationDialog({
   announcements,
   loading,
   onCloseToday,
+  recentOnly = false,
 }: NotificationDialogProps) {
   const { t } = useTranslation()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='max-h-[90vh] sm:max-w-2xl'>
         <DialogHeader>
-          <DialogTitle>{t('System Announcements')}</DialogTitle>
+          <DialogTitle>
+            {recentOnly ? t('New Announcements') : t('System Announcements')}
+          </DialogTitle>
         </DialogHeader>
 
-        <Tabs
-          value={activeTab}
-          onValueChange={onTabChange as (value: string) => void}
-        >
-          <TabsList className='grid w-full grid-cols-2'>
-            <TabsTrigger value='notice' className='gap-1.5'>
-              <Bell className='h-3.5 w-3.5' />
-              {t('Notice')}
-            </TabsTrigger>
-            <TabsTrigger value='announcements' className='gap-1.5'>
-              <Megaphone className='h-3.5 w-3.5' />
-              {t('Timeline')}
-            </TabsTrigger>
-          </TabsList>
+        {recentOnly ? (
+          <AnnouncementsContent
+            announcements={announcements}
+            loading={loading}
+            t={t}
+          />
+        ) : (
+          <Tabs
+            value={activeTab}
+            onValueChange={onTabChange as (value: string) => void}
+          >
+            <TabsList className='grid w-full grid-cols-2'>
+              <TabsTrigger value='notice' className='gap-1.5'>
+                <Bell className='h-3.5 w-3.5' />
+                {t('Notice')}
+              </TabsTrigger>
+              <TabsTrigger value='announcements' className='gap-1.5'>
+                <Megaphone className='h-3.5 w-3.5' />
+                {t('Timeline')}
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value='notice' className='mt-4'>
-            <NoticeContent notice={notice} loading={loading} t={t} />
-          </TabsContent>
+            <TabsContent value='notice' className='mt-4'>
+              <NoticeContent notice={notice} loading={loading} t={t} />
+            </TabsContent>
 
-          <TabsContent value='announcements' className='mt-4'>
-            <AnnouncementsContent
-              announcements={announcements}
-              loading={loading}
-              t={t}
-            />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value='announcements' className='mt-4'>
+              <AnnouncementsContent
+                announcements={announcements}
+                loading={loading}
+                t={t}
+              />
+            </TabsContent>
+          </Tabs>
+        )}
 
         <DialogFooter className='gap-2'>
           <Button variant='outline' onClick={onCloseToday}>

@@ -271,14 +271,7 @@ func GetAllMidjourney(c *gin.Context) {
 	items := model.GetAllTasks(pageInfo.GetStartIdx(), pageInfo.GetPageSize(), queryParams)
 	total := model.CountAllTasks(queryParams)
 
-	if setting.MjForwardUrlEnabled {
-		for i, midjourney := range items {
-			if shouldForwardMidjourneyImage(midjourney) {
-				midjourney.ImageUrl = system_setting.ServerAddress + "/mj/image/" + midjourney.MjId
-			}
-			items[i] = midjourney
-		}
-	}
+	prepareDrawingLogImages(items)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(items)
 	common.ApiSuccess(c, pageInfo)
@@ -298,17 +291,21 @@ func GetUserMidjourney(c *gin.Context) {
 	items := model.GetAllUserTask(userId, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), queryParams)
 	total := model.CountAllUserTask(userId, queryParams)
 
-	if setting.MjForwardUrlEnabled {
-		for i, midjourney := range items {
-			if shouldForwardMidjourneyImage(midjourney) {
-				midjourney.ImageUrl = system_setting.ServerAddress + "/mj/image/" + midjourney.MjId
-			}
-			items[i] = midjourney
-		}
-	}
+	prepareDrawingLogImages(items)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(items)
 	common.ApiSuccess(c, pageInfo)
+}
+
+func prepareDrawingLogImages(items []*model.Midjourney) {
+	origins := service.DrawingLogMediaOrigins()
+	for _, task := range items {
+		proxyURL := ""
+		if setting.MjForwardUrlEnabled && shouldForwardMidjourneyImage(task) && task.MjId != "" {
+			proxyURL = system_setting.ServerAddress + "/mj/image/" + task.MjId
+		}
+		service.PrepareDrawingLogImages(task, origins, proxyURL)
+	}
 }
 
 func shouldForwardMidjourneyImage(task *model.Midjourney) bool {

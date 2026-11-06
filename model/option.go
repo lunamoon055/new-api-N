@@ -237,6 +237,9 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
+	if key == "Notice" {
+		return updateNoticeOption(value, time.Now())
+	}
 	if key == operation_setting.PurchaseLinksOptionKey {
 		links, err := operation_setting.ParsePurchaseLinks(value)
 		if err != nil {

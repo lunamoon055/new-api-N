@@ -151,6 +151,7 @@ export function AppHeader({
           announcements={notifications.announcements}
           loading={notifications.loading}
           onCloseToday={notifications.closeToday}
+          recentOnly={notifications.recentOnly}
         />
       )}
     </>

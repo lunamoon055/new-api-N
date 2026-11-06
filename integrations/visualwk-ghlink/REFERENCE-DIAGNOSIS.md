@@ -1,6 +1,16 @@
 # 图片参考问题排查 · 2026-10-28
 
-## 当前结论：默认选项拦截已取消（v1.3.3 源码）
+## 2026-11-02：双端点模型参考图链路修复（v1.3.4 源码）
+
+用户截图中 `gpt-image-2` 连接图片后被 `images 最多支持 0 个参考素材` 拦截。插件的 `catalog` 只读取 `/v1/images/generations`，未保留同一模型 `/v1/images/edits` 的参考图能力，导致按文生图限制校验参考图。
+
+已核对本地 `model/pricing_mapping.go`、`common/xjz_image_spec.go` 及当前 GH 在线文档（`https://ghlink.top/docs/model-integration.html`）中的 `gpt-image-2`：无参考图以 JSON 调用 generations，有参考图以 multipart 上传 `image[]` 文件到 edits，支持 1–20 张 PNG/JPEG/WebP。不能仅把图片 URL 换字段发送到原生成端点。
+
+v1.3.4 在提交前按参考图数量选择目录已声明的链路，按该端点参数校验、构建请求；本地素材直接作为文件，公共链接先读取为文件，媒体 GET 不发送 GH Key。原支持 URL 参考的模型保持原有提交方式。没有失败后自动切换或补发。
+
+61 项离线测试与隔离 React StrictMode 页面验收通过：本地 PNG 通过单次 edits POST 提交、节点重建不打断，移除参考图后的下一次生成使用单次 generations JSON POST。未真实生成；修复已按用户后续要求打包为 v1.3.4，本轮未安装或改动 GH 后端。以下保留历史记录。
+
+## v1.3.3：默认选项拦截已取消（历史记录）
 
 用户最新反馈 sunburst 默认选项会显示错误，而显式选择「图片接口 · URL 参考图」可以成功，其他图片模型默认可用。核对源码发现两种选项构建的图片请求本来相同，差别是 v1.3.1 的 imageReferenceIssue 在默认选项时提前抛错，导致未提交。该检查不适合作为持续的生成限制。
 

@@ -20,7 +20,7 @@ import { Grainient } from '../grainient'
 
 export function Hero() {
   return (
-    <section className='relative z-10 flex min-h-svh flex-col items-center justify-center overflow-hidden bg-[#5227ff] px-6 pt-24 pb-16 md:pt-28 md:pb-20'>
+    <section className='relative z-10 flex min-h-svh flex-col items-center justify-center overflow-hidden bg-[#5227ff] px-6 py-24'>
       <div className='absolute inset-0 z-0'>
         <Grainient
           color1='#f1cdef'
@@ -49,15 +49,14 @@ export function Hero() {
       </div>
       <div className='absolute inset-0 z-10 bg-slate-950/20' />
 
-      <div className='relative z-20 flex max-w-4xl flex-col items-center text-center'>
+      <div className='relative z-20 max-w-7xl text-center'>
         <h1
-          className='landing-animate-fade-up text-[clamp(2.25rem,6vw,5.25rem)] leading-[1.03] font-semibold tracking-normal text-white drop-shadow-[0_18px_40px_rgba(15,23,42,0.35)]'
+          className='landing-animate-fade-up text-[clamp(2.25rem,8vw,7rem)] leading-[1.08] font-semibold tracking-normal text-white drop-shadow-[0_18px_40px_rgba(15,23,42,0.35)]'
           style={{ animationDelay: '0ms' }}
         >
-          <span className='block'>欢迎使用GHLINK API</span>
-          <span className='mt-3 block text-[clamp(1.75rem,4.6vw,4.25rem)] font-medium text-white/95 md:mt-4'>
-            尽情发挥你的想象力
-          </span>
+          <span className='inline-block'>欢迎使用</span>
+          <wbr />
+          <span className='inline-block'>GHLINK API</span>
         </h1>
       </div>
     </section>

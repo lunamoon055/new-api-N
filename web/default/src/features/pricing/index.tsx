@@ -135,7 +135,10 @@ export function Pricing() {
 
   if (isLoading) {
     return (
-      <PublicLayout showMainContainer={false}>
+      <PublicLayout
+        showMainContainer={false}
+        headerProps={{ autoOpenRecentNotifications: true }}
+      >
         <div className='mx-auto w-full max-w-[1800px] px-3 pt-16 pb-8 sm:px-6 sm:pt-20 sm:pb-10 xl:px-8'>
           <LoadingSkeleton viewMode={viewMode} />
         </div>
@@ -144,7 +147,10 @@ export function Pricing() {
   }
 
   return (
-    <PublicLayout showMainContainer={false}>
+    <PublicLayout
+      showMainContainer={false}
+      headerProps={{ autoOpenRecentNotifications: true }}
+    >
       <div className='relative'>
         <div
           aria-hidden

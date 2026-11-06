@@ -21,6 +21,7 @@ import i18next from 'i18next'
 import { toast } from 'sonner'
 import { updateSystemOption } from '../api'
 import type { UpdateOptionRequest } from '../types'
+import { requestNotificationRefresh } from '@/lib/notifications'
 
 // Configuration keys that require status refresh
 const STATUS_RELATED_KEYS = [
@@ -52,6 +53,20 @@ export function useUpdateOption() {
         // If updating frontend-display-related config, also refresh status
         if (STATUS_RELATED_KEYS.includes(variables.key)) {
           queryClient.invalidateQueries({ queryKey: ['status'] })
+        }
+        if (variables.key.startsWith('console_setting.')) {
+          queryClient.invalidateQueries({ queryKey: ['status'] })
+        }
+        if (variables.key === 'Notice') {
+          queryClient.invalidateQueries({ queryKey: ['notice'] })
+        }
+        if (
+          variables.key === 'Notice' ||
+          variables.key === 'console_setting.announcements' ||
+          variables.key === 'console_setting.announcements_enabled'
+        ) {
+          queryClient.invalidateQueries({ queryKey: ['notifications'] })
+          requestNotificationRefresh()
         }
 
         toast.success(i18next.t('Setting updated successfully'))

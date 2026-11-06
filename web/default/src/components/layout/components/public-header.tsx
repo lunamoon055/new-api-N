@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/hooks/use-notifications'
+import { requestNotificationRefresh } from '@/lib/notifications'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
 import { Button } from '@/components/ui/button'
@@ -64,6 +65,7 @@ export interface PublicHeaderProps {
   showNavigation?: boolean
   showAuthButtons?: boolean
   showNotifications?: boolean
+  autoOpenRecentNotifications?: boolean
   className?: string
 }
 
@@ -95,9 +97,11 @@ export function PublicHeader(props: PublicHeaderProps) {
     logoLoaded,
   } = useSystemConfig()
   const dynamicLinks = useTopNavLinks()
-  const notifications = useNotifications()
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
+  const notifications = useNotifications({
+    autoOpenRecent: showNotifications && props.autoOpenRecentNotifications,
+  })
 
   const user = auth.user
   const isAuthenticated = !!user
@@ -175,6 +179,7 @@ export function PublicHeader(props: PublicHeaderProps) {
       if (closeMobile) {
         setMobileOpen(false)
       }
+      if (link.href === '/pricing') requestNotificationRefresh()
     },
     [t]
   )
@@ -457,6 +462,7 @@ export function PublicHeader(props: PublicHeaderProps) {
           announcements={notifications.announcements}
           loading={notifications.loading}
           onCloseToday={notifications.closeToday}
+          recentOnly={notifications.recentOnly}
         />
       )}
     </>

@@ -170,12 +170,12 @@ func GetStatus(c *gin.Context) {
 }
 
 func GetNotice(c *gin.Context) {
-	common.OptionMapRWMutex.RLock()
-	defer common.OptionMapRWMutex.RUnlock()
+	content, publishedAt := model.GetNoticeWithPublication()
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    common.OptionMap["Notice"],
+		"success":      true,
+		"message":      "",
+		"data":         content,
+		"published_at": publishedAt,
 	})
 	return
 }

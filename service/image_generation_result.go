@@ -38,11 +38,12 @@ var imageGenerationResultExtensions = map[string]string{
 }
 
 type imageGenerationLogProperties struct {
-	Source    string   `json:"source"`
-	Model     string   `json:"model"`
-	Size      string   `json:"size,omitempty"`
-	Quality   string   `json:"quality,omitempty"`
-	ImageURLs []string `json:"image_urls,omitempty"`
+	Source            string   `json:"source"`
+	Model             string   `json:"model"`
+	Size              string   `json:"size,omitempty"`
+	Quality           string   `json:"quality,omitempty"`
+	ImageURLs         []string `json:"image_urls,omitempty"`
+	ImageURLsResolved bool     `json:"image_urls_resolved,omitempty"`
 }
 
 // CaptureImageGenerationResponse extracts previewable image results without
@@ -261,21 +262,22 @@ func buildImageGenerationLog(c *gin.Context, info *relaycommon.RelayInfo, reques
 		taskID = fmt.Sprintf("image-%d-%d", now.UnixNano(), info.UserId)
 	}
 
+	imageURL := ""
+	if len(imageURLs) > 0 {
+		imageURL = imageURLs[0]
+	}
 	propertiesJSON, err := common.Marshal(imageGenerationLogProperties{
-		Source:    "image_generation",
-		Model:     info.OriginModelName,
-		Size:      request.Size,
-		Quality:   request.Quality,
-		ImageURLs: imageURLs,
+		Source:            "image_generation",
+		Model:             info.OriginModelName,
+		Size:              request.Size,
+		Quality:           request.Quality,
+		ImageURLs:         imageURLs,
+		ImageURLsResolved: len(imageURLs) > 0,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("image generation log: encode properties: %w", err)
 	}
 
-	imageURL := ""
-	if len(imageURLs) > 0 {
-		imageURL = imageURLs[0]
-	}
 	channelID := 0
 	if info.ChannelMeta != nil {
 		channelID = info.ChannelId

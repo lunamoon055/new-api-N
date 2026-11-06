@@ -5136,6 +5136,9 @@
     "Refreshing model capabilities...": "正在刷新模型能力…",
     "Updated capability information for {{count}} models.": "已更新 {{count}} 个模型的能力信息。",
     "The upstream has not published all capabilities for these models. Unconfirmed parameters remain visible:": "上游尚未公布以下模型的完整能力，未确认的参数会继续显示：",
-    "All synchronized models have published capability information.": "所有已同步模型均有已公布的能力信息。"
+    "All synchronized models have published capability information.": "所有已同步模型均有已公布的能力信息。",
+    "New Announcements": "最新通知",
+    "Closing applies only to these notices. Newly published notices will still be shown.": "关闭仅作用于当前这批通知，之后发布的新通知仍会提醒。",
+    "Unable to load notifications. Please try again.": "暂时无法加载通知，请稍后重试。"
   }
 }

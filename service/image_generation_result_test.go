@@ -73,4 +73,5 @@ func TestBuildImageGenerationLogIncludesAllPreviewURLs(t *testing.T) {
 	require.Equal(t, start.UnixMilli(), task.SubmitTime)
 	require.Equal(t, now.UnixMilli(), task.FinishTime)
 	require.Contains(t, task.Properties, `"image_urls":["https://cdn.example/one.png","/api/image-results/two.png"]`)
+	require.Contains(t, task.Properties, `"image_urls_resolved":true`)
 }
