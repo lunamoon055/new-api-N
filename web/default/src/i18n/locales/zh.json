@@ -5139,6 +5139,20 @@
     "All synchronized models have published capability information.": "所有已同步模型均有已公布的能力信息。",
     "New Announcements": "最新通知",
     "Closing applies only to these notices. Newly published notices will still be shown.": "关闭仅作用于当前这批通知，之后发布的新通知仍会提醒。",
-    "Unable to load notifications. Please try again.": "暂时无法加载通知，请稍后重试。"
+    "Unable to load notifications. Please try again.": "暂时无法加载通知，请稍后重试。",
+    "Image quality": "图片质量",
+    "Image count": "生成张数",
+    "Custom image size": "自定义图片尺寸",
+    "Output compression": "输出压缩率",
+    "Image edit mask": "图片编辑蒙版",
+    "Image edit markup": "图片编辑标注层",
+    "Unsupported image option": "不支持的图片参数",
+    "Image count must be between 1 and {{count}}": "生成张数必须在 1 至 {{count}} 之间",
+    "Image compression must be between 0 and 100": "图片压缩率必须在 0 至 100 之间",
+    "Transparent backgrounds require PNG or WebP": "透明背景需要使用 PNG 或 WebP 格式",
+    "Image must not exceed {{count}} MB": "图片不能超过 {{count}} MB",
+    "Output format": "输出格式",
+    "Background": "背景",
+    "Image size does not meet the model requirements": "图片尺寸不符合该模型要求"
   }
 }

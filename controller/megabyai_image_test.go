@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -9,8 +11,22 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestImageRetryFilterKeepsStandardOptionsOnCompatibleChannels(t *testing.T) {
+	mega := &model.Channel{Type: constant.ChannelTypeOpenAI, BaseURL: common.GetPointer("https://newapi.megabyai.cc"), ModelMapping: common.GetPointer(`{"public-alias":"gpt-image-2.5-sunburst"}`)}
+	xjz := &model.Channel{Type: constant.ChannelTypeOpenAI, BaseURL: common.GetPointer("https://api.xjzapi.cc"), ModelMapping: common.GetPointer(`{"public-alias":"gpt-image-2.5-sunburst-原生4K"}`)}
+	for _, mode := range []int{relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest("POST", "/v1/images/generations", strings.NewReader(`{"model":"public-alias","n":2,"quality":"max","output_compression":0}`))
+		c.Request.Header.Set("Content-Type", "application/json")
+		filter := relayTaskChannelFilter(&relaycommon.RelayInfo{OriginModelName: "public-alias", RelayMode: mode}, c)
+		require.True(t, filter(mega))
+		require.False(t, filter(xjz), "retry must not silently drop standard options")
+	}
+}
 
 func TestMegaBYAIImageRetryKeepsEndpointAndMappedModelScope(t *testing.T) {
 	mapping := `{"public-alias":"intermediate","intermediate":"gpt-image-2.5-sunburst"}`

@@ -53,6 +53,29 @@ function modelInfo(name: string, paths: string[]): PlaygroundModelInfo {
 }
 
 describe('Playground image endpoint follows the current channel contract', () => {
+  it('restores standard options and preserves compression zero in actual request construction', () => {
+    const info = modelInfo('gpt-image-2.5-flare', ['/v1/images/generations'])
+    const options = {
+      source: 'https://developers.openai.com/api/docs/guides/image-generation',
+      sizes: ['auto','1536x864'], qualities: ['auto','low','medium','high','xhigh','max'],
+      output_formats: ['png','jpeg','webp'], backgrounds: ['auto','opaque','transparent'],
+      max_outputs: 10, max_references: 16, max_input_size_mb: 50,
+      supports_mask: true, supports_markup: true,
+      min_pixels: 655360, max_pixels: 8294400, max_edge: 3840, size_multiple: 16, max_aspect_ratio: 3, max_prompt_length: 32000,
+    }
+    info.model.mapped_endpoints![0].parameters!.image_options = options
+    const payload = buildPlaygroundMediaRequest('gpt-image-2.5-flare',messages,'image','auto',{},undefined,info,{
+      size:'1536x864',count:2,quality:'xhigh',background:'transparent',outputFormat:'webp',outputCompression:0,
+    })
+    expect(payload).toMatchObject({size:'1536x864',n:2,quality:'xhigh',background:'transparent',output_format:'webp',output_compression:0})
+    expect(buildSupportedParameters(info.model).find(parameter=>parameter.name==='quality')?.enumValues).toContain('max')
+    expect(buildSupportedParameters(info.model).find(parameter=>parameter.name==='aspect_ratio')?.enumValues).toContain('16:9')
+    expect(buildPlaygroundMediaRequest('gpt-image-2.5-flare',messages,'image','auto',{},undefined,info,{outputFormat:'png',outputCompression:0})).not.toHaveProperty('output_compression')
+    expect(()=>buildPlaygroundMediaRequest('gpt-image-2.5-flare',messages,'image','auto',{},undefined,info,{size:'4096x4096'})).toThrow()
+    expect(()=>buildPlaygroundMediaRequest('gpt-image-2.5-flare',messages,'image','auto',{},undefined,info,{count:11})).toThrow()
+    expect(()=>buildPlaygroundMediaRequest('gpt-image-2.5-flare',messages,'image','auto',{},undefined,info,{background:'transparent',outputFormat:'jpeg'})).toThrow()
+  })
+
   it('sends the verified single reference as a file-edit input without unconfirmed size options', () => {
     const info = modelInfo('gpt-image-2.5-flare', ['/v1/images/generations'])
     info.model.mapped_endpoints![0].parameters = {

@@ -198,16 +198,7 @@ func requestChannelFilter(c *gin.Context, modelName string) model.ChannelFilter 
 	}
 	if strings.HasPrefix(requestPath, "/v1/images/generations") ||
 		strings.HasPrefix(requestPath, "/v1/images/edits") {
-		return func(channel *model.Channel) bool {
-			if channel == nil {
-				return false
-			}
-			upstream, _, err := common.ResolveModelMapping(modelName, channel.GetModelMapping())
-			if err != nil {
-				return false
-			}
-			return common.IsSyncImageChannelCompatible(channel.GetBaseURL(), upstream)
-		}
+		return service.SynchronousImageChannelFilter(c, modelName)
 	}
 	return nil
 }

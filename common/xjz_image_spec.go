@@ -15,6 +15,7 @@ func XJZNativeImageParameters(edit bool) *ModelIntegrationParameters {
 		Resolutions:     []string{"1K", "2K", "4K"},
 		Ratios:          []string{"16:9", "1:1", "21:9", "2:3", "3:2", "3:4", "4:3", "9:16"},
 		ResolutionField: "resolution", RatioField: "ratio",
+		MaxImageSizeMB: 20,
 	}
 	if edit {
 		p.ImageField, p.MinImages, p.MaxImages = "image[]", 1, 20

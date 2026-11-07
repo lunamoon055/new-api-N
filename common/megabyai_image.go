@@ -18,17 +18,12 @@ func IsMegaBYAIImageChannel(channelType int, baseURL, modelName string) bool {
 	return channelType == constant.ChannelTypeOpenAI && IsBaseURLHost(baseURL, MegaBYAIProviderHost) && IsMegaBYAIImageModel(modelName)
 }
 
-func MegaBYAIImageParameters() *ModelIntegrationParameters {
-	// /docs#images only documents model, prompt and n. Missing reference limits
-	// are unknown, not confirmed zero, and must not inherit another supplier's
-	// resolution/ratio/reference fields merely because model IDs are identical.
-	return &ModelIntegrationParameters{CapabilitiesUnknown: true}
+func MegaBYAIImageParameters(modelName string) *ModelIntegrationParameters {
+	return OpenAIImageParameters(modelName, false)
 }
 
-func MegaBYAIImageEditParameters() *ModelIntegrationParameters {
-	// All three models passed a single-file reference edit on 2026-11-07.
-	// One is the currently verified client upload bound, not the upstream maximum.
-	return &ModelIntegrationParameters{ImageField: "image[]", MinImages: 1, MaxImages: 1, UnknownFields: []string{"max_images"}}
+func MegaBYAIImageEditParameters(modelName string) *ModelIntegrationParameters {
+	return OpenAIImageParameters(modelName, true)
 }
 
 // Shared by initial selection, affinity and retry. This is the set of image

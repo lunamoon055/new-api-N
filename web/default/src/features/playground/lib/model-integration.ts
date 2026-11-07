@@ -100,6 +100,12 @@ export function getPlaygroundIntegration(
 }
 
 export type PlaygroundReferenceSelection = {
+  quality?: string
+  count?: number
+  size?: string
+  outputFormat?: string
+  background?: string
+  outputCompression?: number | ''
   aspectRatio?: string
   resolution?: string
   images?: string

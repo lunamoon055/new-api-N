@@ -96,6 +96,24 @@ export type PricingModel = {
 
 /** Public model-specific request contract shared with relay validation. */
 export type IntegrationParameters = {
+  image_options?: {
+    source: string
+    sizes: string[]
+    qualities: string[]
+    output_formats: string[]
+    backgrounds: string[]
+    max_outputs: number
+    max_references: number
+    max_input_size_mb: number
+    supports_mask: boolean
+    supports_markup: boolean
+    min_pixels: number
+    max_pixels: number
+    max_edge: number
+    size_multiple: number
+    max_aspect_ratio: number
+    max_prompt_length: number
+  }
   capabilities_unknown?: boolean
   unknown_fields?: string[]
   omit_ratio?: boolean

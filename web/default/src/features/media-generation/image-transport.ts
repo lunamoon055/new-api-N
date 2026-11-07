@@ -46,7 +46,7 @@ export async function prepareImageTransport(
     if (!response.ok) throw new Error(t('Request failed'))
     const blob = await response.blob()
     if (
-      blob.size > 20 * 1024 * 1024 ||
+      blob.size > 50 * 1024 * 1024 ||
       !['image/png', 'image/jpeg', 'image/webp'].includes(blob.type)
     )
       throw new Error(t('Request failed'))

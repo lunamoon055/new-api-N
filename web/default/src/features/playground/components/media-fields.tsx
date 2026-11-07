@@ -42,6 +42,7 @@ import {
   parsePlaygroundReferenceURLs,
 } from '../lib/model-integration'
 import type { PlaygroundConfig, PlaygroundModelInfo } from '../types'
+import { ImageStandardFields } from './image-standard-fields'
 
 type MediaFieldsProps = {
   config: PlaygroundConfig
@@ -101,6 +102,15 @@ export function PlaygroundMediaFields(props: MediaFieldsProps) {
       props.onUploadingChange(true)
       // Save each successful upload so a later failed file can be retried.
       for (const file of Array.from(files)) {
+        if (
+          reference.kind === 'image' &&
+          file.size > (parameters?.max_image_size_mb ?? 20) * 1024 * 1024
+        )
+          throw new Error(
+            t('Image must not exceed {{count}} MB', {
+              count: parameters?.max_image_size_mb ?? 20,
+            })
+          )
         existing.push(await uploadCreationReferenceFile(file, reference.kind))
         props.onChange({ [reference.key]: existing.join('\n') })
       }
@@ -164,6 +174,14 @@ export function PlaygroundMediaFields(props: MediaFieldsProps) {
             ) : null
           )}
         </div>
+      )}
+      {props.mode === 'image' && parameters.image_options && (
+        <ImageStandardFields
+          options={parameters.image_options}
+          config={props.config}
+          disabled={disabled}
+          onChange={props.onChange}
+        />
       )}
       {!!references.length && (
         <details>

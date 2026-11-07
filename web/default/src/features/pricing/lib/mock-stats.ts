@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { PricingModel } from '../types'
+import { buildStandardImageParameters } from './image-parameters'
 import {
   hashStringToSeed,
   randomInRange,
@@ -505,6 +506,8 @@ export type SupportedParameter = {
     | 'object'
     | 'array'
     | 'enum'
+    | 'file[]'
+    | 'file / object'
   defaultValue?: string | number | boolean
   range?: string
   enumValues?: string[]
@@ -799,6 +802,8 @@ export function buildSupportedParameters(
   if (cat === 'reasoning') return REASONING_PARAMS
   if (cat === 'embedding') return EMBEDDING_PARAMS
   if (cat === 'image') {
+    const standard = buildStandardImageParameters(model)
+    if (standard) return standard
     const generation = model.mapped_endpoints?.find(
       (endpoint) => endpoint.path === '/v1/images/generations'
     )

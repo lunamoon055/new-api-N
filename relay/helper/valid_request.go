@@ -219,6 +219,9 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 		//}
 
 		if imageRequest.N == nil || *imageRequest.N == 0 {
+			if imageRequest.N != nil && *imageRequest.N == 0 && common.OpenAIImageStandardOptions(imageRequest.Model) != nil {
+				return nil, errors.New("n must be between 1 and 10")
+			}
 			imageRequest.N = common.GetPointer(uint(1))
 		}
 	}

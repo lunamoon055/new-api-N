@@ -134,6 +134,12 @@ export interface PlaygroundConfig {
   videoResolution: string
   imageAspectRatio: string
   imageResolution: string
+  imageQuality?: string
+  imageCount?: number
+  imageSize?: string
+  imageOutputFormat?: string
+  imageBackground?: string
+  imageOutputCompression?: number | ''
   referenceImages: string
   referenceVideos: string
   referenceAudios: string

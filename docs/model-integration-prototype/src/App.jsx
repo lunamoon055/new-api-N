@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, Check, ChevronDown, ChevronRight, Copy, FileCode2, FileText, Image, Info, Menu, MessageSquare, Search, ShieldCheck, Terminal, Video, X, Box, RefreshCw } from 'lucide-react'
-import { getCodeSample, getImageOperationDocs, getModelDoc, getModelKind, getRequestParams, getResponseSample } from './model-data.js'
+import { getCodeSample, getImageOperationDocs, getModelDoc, getModelKind, getRequestParams, getResponseSample, standardImageOverview } from './model-data.js'
 import { useModelCatalog } from './use-model-catalog.js'
 import { getAllModelDocs } from './all-model-docs.js'
 
@@ -124,7 +124,7 @@ export function App() {
         <div className='page-heading'><h1>模型接入指南</h1><button className='copy-all-button' onClick={copyAllModels} disabled={loading || !!error || !catalog.models.length}><Copy size={15} />复制全部模型对接</button></div><p className='page-subtitle'>{selectedName ? `查看 ${selectedName} 的接入接口、参数和调用示例。` : '根据网站当前模型列表展示接入接口、参数和调用示例。'}</p>
         <div className='notice'><Info size={20} /><p>模型可用性与令牌权限有关，请通过 <code>GET</code> <code>/v1/models</code> 获取当前可用模型。</p></div>
         {selectedModel && doc ? <>
-          <section className='about-model'><div className='section-heading'><h2>关于 {selectedName}</h2><button className='small-copy' onClick={() => copy(selectedName, '模型 ID')} aria-label='复制完整模型 ID'><Copy size={14} /></button></div><p>{selectedModel.description || (doc.kind === 'image' ? '通过图片生成接口，将文字描述转换为图像。请使用完整模型 ID，并根据该模型的能力设置画面比例和分辨率。' : doc.kind === 'video' ? '通过视频任务接口提交生成请求。创建成功后保存任务 ID，再查询处理进度与最终结果。' : '根据站点公开的接口信息接入此模型。模型名称中的大小写、中文与符号都是 ID 的一部分。')}</p></section>
+          <section className='about-model'><div className='section-heading'><h2>关于 {selectedName}</h2><button className='small-copy' onClick={() => copy(selectedName, '模型 ID')} aria-label='复制完整模型 ID'><Copy size={14} /></button></div><p>{doc.parameters?.image_options ? standardImageOverview : selectedModel.description || (doc.kind === 'image' ? '通过图片生成接口，将文字描述转换为图像。请使用完整模型 ID，并根据该模型的能力设置画面比例和分辨率。' : doc.kind === 'video' ? '通过视频任务接口提交生成请求。创建成功后保存任务 ID，再查询处理进度与最终结果。' : '根据站点公开的接口信息接入此模型。模型名称中的大小写、中文与符号都是 ID 的一部分。')}</p>{doc.parameters?.image_options && selectedModel.description && <details><summary>管理员备注（实际能力以当前参数表为准）</summary><p>{selectedModel.description}</p></details>}</section>
           <section id='endpoint' className='endpoint-section'>
             <h2>请求接口</h2>
             {imageEditDoc && <h3 className='operation-heading'>文生图</h3>}

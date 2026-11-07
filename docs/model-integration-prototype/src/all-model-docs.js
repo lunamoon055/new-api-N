@@ -18,7 +18,8 @@ export function getAllModelDocs(catalog, baseUrl) {
   for (const model of catalog.models) {
     const primaryDoc = getModelDoc(model, catalog.endpoints)
     lines.push(`## ${model.model_name}`, '')
-    if (model.description) lines.push(model.description, '')
+    if (primaryDoc.parameters?.image_options) lines.push('支持文字生成与参考图编辑。标准能力与当前可用范围见下方参数表。', '')
+    if (model.description) lines.push(primaryDoc.parameters?.image_options ? `管理员备注（旧渠道描述请以当前参数表为准）：${model.description}` : model.description, '')
     const imageOperations = getImageOperationDocs(model, catalog.endpoints)
     const docs = imageOperations.length ? imageOperations : primaryDoc.alternatives?.length
       ? primaryDoc.alternatives.map((endpoint) => getModelDoc({...model, mapped_endpoints: [endpoint]}, catalog.endpoints))

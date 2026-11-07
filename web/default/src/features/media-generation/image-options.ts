@@ -267,8 +267,8 @@ export function getCreationImageReferenceLimits(
   if (mapped)
     return {
       maxImages: mapped.max_images,
-      maxImageSizeMB: 20,
-      maxImageSizeBytes: CREATION_IMAGE_REFERENCE_MAX_BYTES,
+      maxImageSizeMB: mapped.max_image_size_mb ?? 20,
+      maxImageSizeBytes: (mapped.max_image_size_mb ?? 20) * 1024 * 1024,
     }
   if (isSanbaoImageModel(model)) {
     const maxImageSizeMB = metadata?.max_image_size_mb ?? 20

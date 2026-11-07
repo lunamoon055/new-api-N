@@ -45,7 +45,11 @@ export function buildNativeImageSample(
     body[parameters.resolution_field] = parameters.resolutions[0]
   if (parameters.ratio_field && parameters.ratios?.length)
     body[parameters.ratio_field] = parameters.ratios[0]
-  if (parameters.resolution_field === 'resolution') body.response_format = 'url'
+  if (
+    parameters.resolution_field === 'resolution' &&
+    !options.parameters?.image_options
+  )
+    body.response_format = 'url'
   if (lang === 'curl') {
     const lines = [
       `curl ${url} \\`,

@@ -188,7 +188,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		Ctx:           c,
 		TokenGroup:    relayInfo.TokenGroup,
 		ModelName:     relayInfo.OriginModelName,
-		ChannelFilter: relayTaskChannelFilter(relayInfo),
+		ChannelFilter: relayTaskChannelFilter(relayInfo, c),
 		Retry:         common.GetPointer(0),
 	}
 	relayInfo.RetryIndex = 0
@@ -254,7 +254,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 }
 
-func relayTaskChannelFilter(info *relaycommon.RelayInfo) model.ChannelFilter {
+func relayTaskChannelFilter(info *relaycommon.RelayInfo, contexts ...*gin.Context) model.ChannelFilter {
 	if info == nil {
 		return nil
 	}
@@ -264,13 +264,11 @@ func relayTaskChannelFilter(info *relaycommon.RelayInfo) model.ChannelFilter {
 			return channel != nil && common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
 		}
 	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:
-		return func(channel *model.Channel) bool {
-			if channel == nil {
-				return false
-			}
-			upstream, _, err := common.ResolveModelMapping(info.OriginModelName, channel.GetModelMapping())
-			return err == nil && common.IsSyncImageChannelCompatible(channel.GetBaseURL(), upstream)
+		var context *gin.Context
+		if len(contexts) > 0 {
+			context = contexts[0]
 		}
+		return service.SynchronousImageChannelFilter(context, info.OriginModelName)
 	}
 	return nil
 }
@@ -532,7 +530,7 @@ func RelayTask(c *gin.Context) {
 		Ctx:           c,
 		TokenGroup:    relayInfo.TokenGroup,
 		ModelName:     relayInfo.OriginModelName,
-		ChannelFilter: relayTaskChannelFilter(relayInfo),
+		ChannelFilter: relayTaskChannelFilter(relayInfo, c),
 		Retry:         common.GetPointer(0),
 	}
 

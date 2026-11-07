@@ -105,6 +105,12 @@ export async function sendPlaygroundMediaGeneration(
     {
       aspectRatio: config.imageAspectRatio,
       resolution: config.imageResolution,
+      quality: config.imageQuality,
+      count: config.imageCount,
+      size: config.imageSize,
+      outputFormat: config.imageOutputFormat,
+      background: config.imageBackground,
+      outputCompression: config.imageOutputCompression,
       images: config.referenceImages,
       videos: config.referenceVideos,
       audios: config.referenceAudios,

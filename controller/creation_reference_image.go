@@ -19,7 +19,7 @@ import (
 
 const (
 	creationReferenceImageFormField = "image"
-	creationReferenceImageMaxBytes  = 20 << 20
+	creationReferenceImageMaxBytes  = 50 << 20
 	creationReferenceImageDir       = "new-api-creation-reference-images"
 )
 
@@ -43,7 +43,7 @@ func UploadCreationReferenceImage(c *gin.Context) {
 	if fileHeader.Size > creationReferenceImageMaxBytes {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"message": "image must not exceed 20 MB",
+			"message": "image must not exceed 50 MB",
 		})
 		return
 	}
@@ -143,7 +143,7 @@ func readCreationReferenceImage(
 		return "", nil, fmt.Errorf("image is empty")
 	}
 	if len(data) > creationReferenceImageMaxBytes {
-		return "", nil, fmt.Errorf("image must not exceed 20 MB")
+		return "", nil, fmt.Errorf("image must not exceed 50 MB")
 	}
 
 	mimeType := http.DetectContentType(data)

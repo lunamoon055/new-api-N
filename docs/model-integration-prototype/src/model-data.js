@@ -2,6 +2,8 @@
 // cover endpoint families documented in this repository; they do not imply that
 // a particular token can use a model or that upstream generation was tested.
 
+export const standardImageOverview = '支持文字生成与参考图编辑。OpenAI 标准能力与当前可用渠道参数见下表；比例、分辨率预设和自定义尺寸均可使用。'
+
 const imageNames = new Set([
   'gpt-image-2',
   'gpt-image-2.5-flare',
@@ -78,11 +80,12 @@ export function getModelKind(model) {
 }
 
 function getCapabilitySource(endpoint) {
+  if (endpoint.capability_source === 'openai_documentation') return 'OpenAI 官方模型标准（渠道具体差异另行保留）'
   if (endpoint.capability_source === 'upstream_catalog') return '当前渠道的上游模型目录'
   if (endpoint.capability_source === 'upstream_capabilities') return '当前渠道的上游能力接口'
   if (endpoint.capability_source === 'upstream_documentation') return '当前渠道的上游公开文档'
   if (endpoint.capability_source === 'upstream_verified') return '当前渠道已完成的真实调用验证'
-  if (endpoint.capability_source === 'multiple_channels') return '多渠道共用接口；示例仅包含共同确认的参数'
+  if (endpoint.capability_source === 'multiple_channels') return '同名模型的渠道能力合并；按请求参数自动选择兼容渠道'
   return endpoint.documentation_fields ? '本站统一视频接口' : '渠道映射对应的上游模型'
 }
 
@@ -222,7 +225,22 @@ export function getRequestParams(doc) {
   if (doc.parameters) {
     const p = doc.parameters
     const rows = [['model', 'string', '是', '从当前令牌的模型列表复制完整 ID'], ['prompt', 'string', '是', '希望生成的内容描述']]
-    if (doc.kind === 'image') rows.push(['n', 'integer', '否', '生成数量；示例为 1，上限以模型实际支持为准'])
+    if (doc.kind === 'image') {
+      const options = p.image_options
+      rows.push(['n', 'integer', '否', options ? `支持 1–${options.max_outputs} 张，默认 1` : '生成数量；示例为 1，上限以模型实际支持为准'])
+      if (options) {
+        rows.push(['size','string','否',`auto 或 WIDTHxHEIGHT；边长为 ${options.size_multiple} 的倍数，最长边 ${options.max_edge}，总像素 ${options.min_pixels}–${options.max_pixels}，比例 1:${options.max_aspect_ratio}–${options.max_aspect_ratio}:1；超过 2560×1440 属于官方实验规格；显式 size 优先于比例和分辨率预设`])
+        rows.push(['quality','string','否',options.qualities.join('、')])
+        rows.push(['background','string','否',`${options.backgrounds.join('、')}；透明背景请用 png/webp`])
+        rows.push(['output_format','string','否',options.output_formats.join('、')])
+        rows.push(['output_compression','integer','否','0–100，仅用于 jpeg/webp；显式 0 保留'])
+        if (doc.path === '/v1/images/edits') {
+          rows.push(['images','object[]','JSON 编辑必填',`JSON 编辑请求使用此字段，与 image[] 文件上传二选一；最多 ${options.max_references} 张，每项提供 image_url 或 file_id`])
+          rows.push(['mask','file / object','否','可选编辑蒙版；适用于首张参考图，透明区域用于指定编辑位置'])
+          if (options.supports_markup) rows.push(['markup','file / object','否','2.5 的透明 PNG 标注层，与首图同尺寸；不可与 mask 同时使用'])
+        }
+      }
+    }
     if (p.duration_field) {
       const values = p.durations || []
       const contiguous = values.length > 1 && values.every((value, index) => index === 0 || value === values[index - 1] + 1)
@@ -236,7 +254,9 @@ export function getRequestParams(doc) {
       if (isFileImageEdit(doc) && field === p.image_field) {
         const limit = isUnknown(p, capability) || count == null ? '数量上限未确认' : `${p.min_images || 1}–${count} 张`
         const format = isUnknown(p, capability) ? '图片文件' : 'PNG、JPEG 或 WebP 图片'
-        rows.push([field, 'file[]', '是', `以 multipart/form-data 上传${format}（${limit}），不传图片 URL`])
+        const standardLimit = p.image_options && count > p.image_options.max_references ? `；OpenAI 标准渠道最多 ${p.image_options.max_references} 张，更多参考图自动选择兼容渠道，不能与标准渠道专属参数组合` : ''
+        const fileSize = p.max_image_size_mb ? `；单文件不超过 ${p.max_image_size_mb} MB，按文件大小选择兼容渠道` : ''
+        rows.push([field, 'file[]', '是', `以 multipart/form-data 上传${format}（${limit}），不传图片 URL${standardLimit}${fileSize}`])
         continue
       }
       let description = `最多 ${count} 个可公开访问的${label} URL`

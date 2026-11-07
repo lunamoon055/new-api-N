@@ -5,6 +5,7 @@ import "strings"
 // ModelIntegrationParameters describes public request fields, never channel IDs
 // or upstream mapping tables. The same XJZ spec also validates relay requests.
 type ModelIntegrationParameters struct {
+	ImageOptions *ImageStandardOptions `json:"image_options,omitempty"`
 	// CapabilitiesUnknown distinguishes an unpublished profile from explicit
 	// zero reference limits. Consumers must not interpret unknown zeros as unsupported.
 	CapabilitiesUnknown bool `json:"capabilities_unknown,omitempty"`

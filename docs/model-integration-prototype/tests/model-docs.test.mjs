@@ -6,7 +6,7 @@ import { getAllModelDocs } from '../src/all-model-docs.js'
 import { getCatalogHttpError, getPricingRequestHeaders } from '../src/catalog-auth.js'
 import { getCodeSample, getImageOperationDocs, getModelDoc, getModelKind, getRequestBody, getRequestParams } from '../src/model-data.js'
 
-test('MegaAi image docs use only the published minimum and retain complementary XJZ editing', () => {
+test('unknown supplier image metadata retains conservative fallback and complementary editing', () => {
   for (const name of ['gpt-image-2','gpt-image-2.5-flare','gpt-image-2.5-sunburst']) {
     const model = {model_name:name,mapped_endpoints:[{type:'image-generation',kind:'image',method:'POST',path:'/v1/images/generations',parameters:{capabilities_unknown:true,max_images:0,max_videos:0,max_audios:0}}]}
     const doc = getModelDoc(model,{})
@@ -24,6 +24,31 @@ test('MegaAi image docs use only the published minimum and retain complementary 
     assert.match(edit.source,/真实调用验证/)
     assert.match(getRequestParams(edit).find(row=>row[0]==='image[]')[3],/数量上限未确认/)
     assert.doesNotMatch(getRequestParams(edit).find(row=>row[0]==='image[]')[3],/JPEG|WebP/)
+    assert.match(getCodeSample(model,edit,'cURL'),/image\[\]=@reference.png/)
+  }
+})
+
+test('standard GPT Image docs preserve merged references and distinguish 2.5 quality and markup', () => {
+  for (const name of ['gpt-image-2','gpt-image-2.5-flare','gpt-image-2.5-sunburst']) {
+    const upgraded = name.includes('2.5')
+    const options = {max_outputs:10,max_references:16,size_multiple:16,max_edge:3840,min_pixels:655360,max_pixels:8294400,max_aspect_ratio:3,qualities:['auto','low','medium','high',...(upgraded?['xhigh','max']:[])],backgrounds:['auto','opaque','transparent'],output_formats:['png','jpeg','webp'],supports_markup:upgraded}
+    const model = {model_name:name,mapped_endpoints:[
+      {type:'image-generation',kind:'image',path:'/v1/images/generations',capability_source:'multiple_channels',parameters:{resolution_field:'resolution',resolutions:['1K','2K','4K'],ratio_field:'ratio',ratios:['1:1','16:9','5:4'],image_options:options}},
+      {type:'image-edit',kind:'image',path:'/v1/images/edits',capability_source:'multiple_channels',parameters:{image_field:'image[]',min_images:1,max_images:20,max_image_size_mb:50,image_options:options}},
+    ]}
+    const [generation,edit] = getImageOperationDocs(model,{})
+    const rows = getRequestParams(generation)
+    assert.match(rows.find(row=>row[0]==='n')[3],/1–10/)
+    assert.match(rows.find(row=>row[0]==='size')[3],/8294400/)
+    assert.equal(rows.find(row=>row[0]==='quality')[3].includes('xhigh'),upgraded)
+    const editRows=getRequestParams(edit)
+    assert.equal(editRows.some(row=>row[0]==='markup'),upgraded)
+    assert.match(editRows.find(row=>row[0]==='image[]')[3],/1–20.*最多 16/)
+    assert.match(editRows.find(row=>row[0]==='image[]')[3],/50 MB/)
+    assert.match(getRequestParams(generation).find(row=>row[0]==='ratio')[3],/5:4/)
+    const copied=getAllModelDocs({models:[model],endpoints:{}},'https://gateway.example')
+    assert.match(copied,/output_compression/)
+    assert.match(copied,/OpenAI 标准渠道最多 16/)
     assert.match(getCodeSample(model,edit,'cURL'),/image\[\]=@reference.png/)
   }
 })

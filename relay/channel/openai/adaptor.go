@@ -425,12 +425,28 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
 	native := isXJZNativeImageRequest(info, request.Model)
-	mega := info != nil && info.ChannelMeta != nil && common.IsMegaBYAIImageChannel(info.ChannelType, info.ChannelBaseUrl, request.Model)
+	standard := info != nil && info.ChannelMeta != nil && common.IsOpenAIStandardImageChannel(info.ChannelType, info.ChannelBaseUrl, request.Model)
+	if standard {
+		var err error
+		request, err = normalizeStandardImageRequest(request)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if standard && info.RelayMode == relayconstant.RelayModeImagesGenerations && (len(request.Images) > 0 || len(request.Image) > 0) {
+		return nil, errors.New("reference images require POST /v1/images/edits")
+	}
 	switch info.RelayMode {
 	case relayconstant.RelayModeImagesEdits:
 		if isJSONRequest(c) {
 			if native {
 				return nil, errors.New("XJZ native image editing requires multipart image[] files")
+			}
+			if standard {
+				var images []interface{}
+				if err := common.Unmarshal(request.Images, &images); err != nil || len(images) < 1 || len(images) > 16 {
+					return nil, errors.New("JSON image edits require 1 to 16 images references")
+				}
 			}
 			return request, nil
 		}
@@ -450,6 +466,12 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 
 		// 写入所有非文件字段
 		if mf != nil {
+			if standard && (len(mf.File["mask"]) > 1 || len(mf.File["markup"]) > 1 || (len(mf.File["mask"]) > 0 && len(mf.File["markup"]) > 0)) {
+				return nil, errors.New("provide one mask or one markup layer, not both")
+			}
+			if standard && len(mf.File["markup"]) > 0 && !common.OpenAIImageStandardOptions(request.Model).SupportsMarkup {
+				return nil, errors.New("markup requires GPT Image 2.5")
+			}
 			valuesToSend := mf.Value
 			if native {
 				var err error
@@ -459,6 +481,13 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 				}
 				if len(mf.File["mask"]) > 0 {
 					return nil, errors.New("XJZ native image masks are unsupported")
+				}
+			}
+			if standard {
+				var err error
+				valuesToSend, err = standardImageFormValues(mf.Value, request.Model)
+				if err != nil {
+					return nil, err
 				}
 			}
 			for key, values := range valuesToSend {
@@ -499,6 +528,9 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 			if native && (len(imageFiles) == 0 || len(imageFiles) > 20) {
 				return nil, errors.New("XJZ native image editing requires 1 to 20 images")
 			}
+			if standard && (len(imageFiles) == 0 || len(imageFiles) > 16) {
+				return nil, errors.New("standard GPT Image editing requires 1 to 16 images")
+			}
 			// Process all image files
 			for i, fileHeader := range imageFiles {
 				file, err := fileHeader.Open()
@@ -508,7 +540,7 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 
 				// If multiple images, use image[] as the field name
 				fieldName := "image"
-				if len(imageFiles) > 1 || native || mega {
+				if len(imageFiles) > 1 || native || standard {
 					fieldName = "image[]"
 				}
 
@@ -534,6 +566,22 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 			}
 
 			// Handle mask file if present
+			if standard {
+				for _, fileHeader := range mf.File["markup"] {
+					file, err := fileHeader.Open()
+					if err != nil {
+						return nil, err
+					}
+					part, err := writer.CreateFormFile("markup", fileHeader.Filename)
+					if err == nil {
+						_, err = io.Copy(part, file)
+					}
+					file.Close()
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
 			if maskFiles, exists := mf.File["mask"]; exists && len(maskFiles) > 0 {
 				maskFile, err := maskFiles[0].Open()
 				if err != nil {

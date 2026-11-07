@@ -32,7 +32,7 @@ type creationReferenceFileType struct {
 var creationReferenceFileTypes = map[string]creationReferenceFileType{
 	"image": {
 		kind:       "image",
-		maxBytes:   20 << 20,
+		maxBytes:   50 << 20,
 		extensions: creationReferenceImageExtensions,
 	},
 	"video": {

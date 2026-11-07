@@ -418,6 +418,74 @@ export function buildPlaygroundMediaRequest(
             ),
           }
     if (resolvedMode === 'image') payload.n = 1
+    if (resolvedMode === 'image' && parameters.image_options) {
+      const options = parameters.image_options
+      const count = mediaSelection.count ?? extraBody.n ?? 1
+      if (
+        typeof count !== 'number' ||
+        !Number.isInteger(count) ||
+        count < 1 ||
+        count > options.max_outputs
+      )
+        throw new Error(
+          t('Image count must be between 1 and {{count}}', {
+            count: options.max_outputs,
+          })
+        )
+      payload.n = count
+      for (const [field, value, choices] of [
+        ['quality', mediaSelection.quality, options.qualities],
+        ['output_format', mediaSelection.outputFormat, options.output_formats],
+        ['background', mediaSelection.background, options.backgrounds],
+      ] as const) {
+        if (!value) continue
+        if (!choices.includes(value))
+          throw new Error(t('Unsupported image option'))
+        payload[field] = value
+      }
+      if (mediaSelection.size?.trim()) {
+        const size = mediaSelection.size.trim()
+        if (size !== 'auto') {
+          const match = /^(\d+)x(\d+)$/.exec(size)
+          const width = Number(match?.[1]),
+            height = Number(match?.[2])
+          if (
+            !match ||
+            !Number.isSafeInteger(width) ||
+            !Number.isSafeInteger(height) ||
+            width <= 0 ||
+            height <= 0 ||
+            width > options.max_edge ||
+            height > options.max_edge ||
+            width % options.size_multiple ||
+            height % options.size_multiple ||
+            Math.max(width, height) >
+              options.max_aspect_ratio * Math.min(width, height) ||
+            width * height < options.min_pixels ||
+            width * height > options.max_pixels
+          )
+            throw new Error(
+              t('Image size does not meet the model requirements')
+            )
+        }
+        payload.size = size
+      }
+      if (
+        mediaSelection.outputCompression !== undefined &&
+        mediaSelection.outputCompression !== '' &&
+        ['jpeg', 'webp'].includes(String(payload.output_format ?? 'png'))
+      ) {
+        const value = mediaSelection.outputCompression
+        if (!Number.isInteger(value) || value < 0 || value > 100)
+          throw new Error(t('Image compression must be between 0 and 100'))
+        payload.output_compression = value
+      }
+      if (
+        payload.background === 'transparent' &&
+        payload.output_format === 'jpeg'
+      )
+        throw new Error(t('Transparent backgrounds require PNG or WebP'))
+    }
     if (parameters.duration_field && resolvedMode === 'video')
       payload[parameters.duration_field] = Number(
         (selection as PlaygroundVideoSelection).duration

@@ -5139,6 +5139,20 @@
     "All synchronized models have published capability information.": "All synchronized models have published capability information.",
     "New Announcements": "New Announcements",
     "Closing applies only to these notices. Newly published notices will still be shown.": "Closing applies only to these notices. Newly published notices will still be shown.",
-    "Unable to load notifications. Please try again.": "Unable to load notifications. Please try again."
+    "Unable to load notifications. Please try again.": "Unable to load notifications. Please try again.",
+    "Image quality": "Image quality",
+    "Image count": "Image count",
+    "Custom image size": "Custom image size",
+    "Output compression": "Output compression",
+    "Image edit mask": "Image edit mask",
+    "Image edit markup": "Image edit markup",
+    "Unsupported image option": "Unsupported image option",
+    "Image count must be between 1 and {{count}}": "Image count must be between 1 and {{count}}",
+    "Image compression must be between 0 and 100": "Image compression must be between 0 and 100",
+    "Transparent backgrounds require PNG or WebP": "Transparent backgrounds require PNG or WebP",
+    "Image must not exceed {{count}} MB": "Image must not exceed {{count}} MB",
+    "Output format": "Output format",
+    "Background": "Background",
+    "Image size does not meet the model requirements": "Image size does not meet the model requirements"
   }
 }

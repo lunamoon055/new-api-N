@@ -179,13 +179,13 @@ func getPricingIntegrationEndpoints(channelType int, modelName string, metadata 
 }
 
 func getPricingIntegrationEndpointsForChannel(channelType int, baseURL, modelName, originalModelName string, metadata map[string]*Model) []PricingMappedEndpoint {
-	if common.IsMegaBYAIImageChannel(channelType, baseURL, modelName) {
+	if common.IsOpenAIStandardImageChannel(channelType, baseURL, modelName) {
 		endpoint := makePricingMappedEndpoint("image-generation", common.EndpointInfo{Path: "/v1/images/generations", Method: "POST"})
-		endpoint.Parameters = common.MegaBYAIImageParameters()
-		endpoint.CapabilitySource = "upstream_documentation"
+		endpoint.Parameters = common.MegaBYAIImageParameters(modelName)
+		endpoint.CapabilitySource = "openai_documentation"
 		edit := makePricingMappedEndpoint("image-edit", common.EndpointInfo{Path: "/v1/images/edits", Method: "POST"})
-		edit.Parameters = common.MegaBYAIImageEditParameters()
-		edit.CapabilitySource = "upstream_verified"
+		edit.Parameters = common.MegaBYAIImageEditParameters(modelName)
+		edit.CapabilitySource = "openai_documentation"
 		return []PricingMappedEndpoint{*endpoint, *edit}
 	}
 	return getPricingIntegrationEndpointsForModels(channelType, modelName, originalModelName, metadata)
@@ -305,9 +305,9 @@ func appendPricingEndpoint(endpoints []PricingMappedEndpoint, candidate PricingM
 				left, _ := common.Marshal(existing.Parameters)
 				right, _ := common.Marshal(candidate.Parameters)
 				if string(left) != string(right) {
-					// A shared public ID can use suppliers with different image
-					// schemas. Keep the portable minimum instead of publishing
-					// the first supplier's parameters for every routed request.
+					// Preserve advertised image options across matching public IDs.
+					// Initial selection and retry filter incompatible channels by
+					// the actual parameters, rather than discarding capabilities.
 					endpoints[i].Parameters = mergeSupplierImageParameters(existing.Parameters, candidate.Parameters)
 					endpoints[i].DocumentationFields = nil
 					endpoints[i].CapabilitySource = "multiple_channels"
@@ -350,19 +350,65 @@ func appendPricingEndpoint(endpoints []PricingMappedEndpoint, candidate PricingM
 }
 
 func isSupplierImageCapability(source string) bool {
-	return source == "upstream_documentation" || source == "upstream_verified" || source == "multiple_channels"
+	return source == "upstream_documentation" || source == "upstream_verified" || source == "multiple_channels" || source == "openai_documentation"
 }
 
 func mergeSupplierImageParameters(left, right *common.ModelIntegrationParameters) *common.ModelIntegrationParameters {
 	p := &common.ModelIntegrationParameters{CapabilitiesUnknown: true}
+	if left == nil || right == nil {
+		return p
+	}
+	// Only standard GPT Image profiles have matching per-request channel
+	// filtering. Keep the existing conservative merge for unrelated protocols.
+	if left.ImageOptions == nil && right.ImageOptions == nil {
+		if left.ImageField != "" && left.ImageField == right.ImageField && left.MaxImages > 0 && right.MaxImages > 0 {
+			p.CapabilitiesUnknown = false
+			p.ImageField = left.ImageField
+			p.MinImages = max(left.MinImages, right.MinImages)
+			p.MaxImages = min(left.MaxImages, right.MaxImages)
+			p.UnknownFields = []string{"max_images"}
+		}
+		return p
+	}
+	p.CapabilitiesUnknown = left.CapabilitiesUnknown && right.CapabilitiesUnknown
+	union := func(a, b []string) []string {
+		values := append([]string(nil), a...)
+		for _, v := range b {
+			if !common.StringsContains(values, v) {
+				values = append(values, v)
+			}
+		}
+		sort.Strings(values)
+		return values
+	}
+	if left.RatioField == right.RatioField {
+		p.RatioField = left.RatioField
+		p.Ratios = union(left.Ratios, right.Ratios)
+	}
+	if left.ResolutionField == right.ResolutionField {
+		p.ResolutionField = left.ResolutionField
+		p.Resolutions = union(left.Resolutions, right.Resolutions)
+	}
+	p.ImageOptions = left.ImageOptions
+	if p.ImageOptions == nil {
+		p.ImageOptions = right.ImageOptions
+	}
+	if left.ImageOptions != nil && right.ImageOptions != nil {
+		options := *left.ImageOptions
+		options.Sizes = union(left.ImageOptions.Sizes, right.ImageOptions.Sizes)
+		options.Qualities = union(left.ImageOptions.Qualities, right.ImageOptions.Qualities)
+		options.OutputFormats = union(left.ImageOptions.OutputFormats, right.ImageOptions.OutputFormats)
+		options.Backgrounds = union(left.ImageOptions.Backgrounds, right.ImageOptions.Backgrounds)
+		options.MaxOutputs = max(left.ImageOptions.MaxOutputs, right.ImageOptions.MaxOutputs)
+		options.SupportsMarkup = left.ImageOptions.SupportsMarkup || right.ImageOptions.SupportsMarkup
+		p.ImageOptions = &options
+	}
+	p.MaxImageSizeMB = max(left.MaxImageSizeMB, right.MaxImageSizeMB)
 	if left != nil && right != nil && left.ImageField != "" && left.ImageField == right.ImageField && left.MaxImages > 0 && right.MaxImages > 0 {
-		// Preserve the mutually verified file transport, without claiming the
-		// other supplier's unpublished sizes, ratios or reference maximum.
 		p.CapabilitiesUnknown = false
 		p.ImageField = left.ImageField
 		p.MinImages = max(left.MinImages, right.MinImages)
-		p.MaxImages = min(left.MaxImages, right.MaxImages)
-		p.UnknownFields = []string{"max_images"}
+		p.MaxImages = max(left.MaxImages, right.MaxImages)
 	}
 	return p
 }
