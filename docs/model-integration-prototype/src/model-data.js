@@ -77,6 +77,15 @@ export function getModelKind(model) {
   return 'text'
 }
 
+function getCapabilitySource(endpoint) {
+  if (endpoint.capability_source === 'upstream_catalog') return '当前渠道的上游模型目录'
+  if (endpoint.capability_source === 'upstream_capabilities') return '当前渠道的上游能力接口'
+  if (endpoint.capability_source === 'upstream_documentation') return '当前渠道的上游公开文档'
+  if (endpoint.capability_source === 'upstream_verified') return '当前渠道已完成的真实调用验证'
+  if (endpoint.capability_source === 'multiple_channels') return '多渠道共用接口；示例仅包含共同确认的参数'
+  return endpoint.documentation_fields ? '本站统一视频接口' : '渠道映射对应的上游模型'
+}
+
 export function getModelDoc(model, endpointMap, selectedPath) {
   const name = model.model_name || ''
   const kind = getModelKind(model)
@@ -92,7 +101,7 @@ export function getModelDoc(model, endpointMap, selectedPath) {
       method: endpoint.method || 'POST',
       path,
       queryPath: endpoint.query_path?.replace('{model}', encodeURIComponent(name)),
-      source: endpoint.capability_source === 'upstream_catalog' ? '当前渠道的上游模型目录' : endpoint.capability_source === 'upstream_capabilities' ? '当前渠道的上游能力接口' : endpoint.documentation_fields ? '本站统一视频接口' : '渠道映射对应的上游模型',
+      source: getCapabilitySource(endpoint),
       verified: true,
       mapped: true,
       parameters: endpoint.kind === 'video' ? withVideoRatios(endpoint.documentation_fields || endpoint.parameters) : endpoint.parameters,
@@ -213,6 +222,7 @@ export function getRequestParams(doc) {
   if (doc.parameters) {
     const p = doc.parameters
     const rows = [['model', 'string', '是', '从当前令牌的模型列表复制完整 ID'], ['prompt', 'string', '是', '希望生成的内容描述']]
+    if (doc.kind === 'image') rows.push(['n', 'integer', '否', '生成数量；示例为 1，上限以模型实际支持为准'])
     if (p.duration_field) {
       const values = p.durations || []
       const contiguous = values.length > 1 && values.every((value, index) => index === 0 || value === values[index - 1] + 1)
@@ -225,7 +235,8 @@ export function getRequestParams(doc) {
       if (!field) continue
       if (isFileImageEdit(doc) && field === p.image_field) {
         const limit = isUnknown(p, capability) || count == null ? '数量上限未确认' : `${p.min_images || 1}–${count} 张`
-        rows.push([field, 'file[]', '是', `以 multipart/form-data 上传 PNG、JPEG 或 WebP 图片（${limit}），不传图片 URL`])
+        const format = isUnknown(p, capability) ? '图片文件' : 'PNG、JPEG 或 WebP 图片'
+        rows.push([field, 'file[]', '是', `以 multipart/form-data 上传${format}（${limit}），不传图片 URL`])
         continue
       }
       let description = `最多 ${count} 个可公开访问的${label} URL`

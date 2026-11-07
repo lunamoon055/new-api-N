@@ -52,7 +52,7 @@ func NewChannelModelCapability(channel *Channel, publicModel, modelName string, 
 	for i := range metadata {
 		metaMap[metadata[i].ModelName] = &metadata[i]
 	}
-	endpoints := getPricingIntegrationEndpointsForModels(channel.Type, modelName, publicModel, metaMap)
+	endpoints := getPricingIntegrationEndpointsForChannel(channel.Type, channel.GetBaseURL(), modelName, publicModel, metaMap)
 	var template *PricingMappedEndpoint
 	for i := range endpoints {
 		if endpoints[i].Kind == "video" && endpoints[i].Path == "/v1/videos" {

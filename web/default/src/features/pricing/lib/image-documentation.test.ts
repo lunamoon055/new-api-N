@@ -43,3 +43,27 @@ test('image examples keep edits multipart and generation JSON for every language
     assert.doesNotMatch(generation, /image\[\]/)
   }
 })
+
+test('verified MegaAi file edits do not invent XJZ size and ratio options', () => {
+  for (const lang of ['curl', 'python', 'typescript', 'javascript'] as const) {
+    const sample = buildNativeImageSample(lang, {
+      baseUrl: 'https://gateway.example',
+      endpointPath: '/v1/images/edits',
+      modelName: 'gpt-image-2',
+      apiKeyEnv: 'NEW_API_KEY',
+      parameters: {
+        image_field: 'image[]',
+        min_images: 1,
+        max_images: 1,
+        max_videos: 0,
+        max_audios: 0,
+        unknown_fields: ['max_images'],
+      },
+    })
+    assert.match(sample, /image\[\]/)
+    assert.doesNotMatch(
+      sample,
+      /resolution|ratio|response_format|application\/json/
+    )
+  }
+})

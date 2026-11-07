@@ -178,6 +178,19 @@ func getPricingIntegrationEndpoints(channelType int, modelName string, metadata 
 	return getPricingIntegrationEndpointsForModels(channelType, modelName, modelName, metadata)
 }
 
+func getPricingIntegrationEndpointsForChannel(channelType int, baseURL, modelName, originalModelName string, metadata map[string]*Model) []PricingMappedEndpoint {
+	if common.IsMegaBYAIImageChannel(channelType, baseURL, modelName) {
+		endpoint := makePricingMappedEndpoint("image-generation", common.EndpointInfo{Path: "/v1/images/generations", Method: "POST"})
+		endpoint.Parameters = common.MegaBYAIImageParameters()
+		endpoint.CapabilitySource = "upstream_documentation"
+		edit := makePricingMappedEndpoint("image-edit", common.EndpointInfo{Path: "/v1/images/edits", Method: "POST"})
+		edit.Parameters = common.MegaBYAIImageEditParameters()
+		edit.CapabilitySource = "upstream_verified"
+		return []PricingMappedEndpoint{*endpoint, *edit}
+	}
+	return getPricingIntegrationEndpointsForModels(channelType, modelName, originalModelName, metadata)
+}
+
 func getPricingIntegrationEndpointsForModels(channelType int, modelName, originalModelName string, metadata map[string]*Model) []PricingMappedEndpoint {
 	endpoints := resolvePricingIntegrationEndpoints(channelType, modelName, originalModelName, metadata)
 	// Only adapters with verified public aliases receive stable documentation
@@ -288,6 +301,19 @@ func appendPricingEndpoint(endpoints []PricingMappedEndpoint, candidate PricingM
 	}
 	for i, existing := range endpoints {
 		if existing.Type == candidate.Type && existing.Path == candidate.Path && existing.Method == candidate.Method && existing.QueryPath == candidate.QueryPath {
+			if candidate.Kind == "image" && (isSupplierImageCapability(existing.CapabilitySource) || isSupplierImageCapability(candidate.CapabilitySource)) {
+				left, _ := common.Marshal(existing.Parameters)
+				right, _ := common.Marshal(candidate.Parameters)
+				if string(left) != string(right) {
+					// A shared public ID can use suppliers with different image
+					// schemas. Keep the portable minimum instead of publishing
+					// the first supplier's parameters for every routed request.
+					endpoints[i].Parameters = mergeSupplierImageParameters(existing.Parameters, candidate.Parameters)
+					endpoints[i].DocumentationFields = nil
+					endpoints[i].CapabilitySource = "multiple_channels"
+					endpoints[i].CapabilitiesUpdatedAt = 0
+				}
+			}
 			if candidate.Kind == "video" {
 				left, _ := common.Marshal(existing.Parameters)
 				right, _ := common.Marshal(candidate.Parameters)
@@ -321,4 +347,22 @@ func appendPricingEndpoint(endpoints []PricingMappedEndpoint, candidate PricingM
 		}
 	}
 	return append(endpoints, candidate)
+}
+
+func isSupplierImageCapability(source string) bool {
+	return source == "upstream_documentation" || source == "upstream_verified" || source == "multiple_channels"
+}
+
+func mergeSupplierImageParameters(left, right *common.ModelIntegrationParameters) *common.ModelIntegrationParameters {
+	p := &common.ModelIntegrationParameters{CapabilitiesUnknown: true}
+	if left != nil && right != nil && left.ImageField != "" && left.ImageField == right.ImageField && left.MaxImages > 0 && right.MaxImages > 0 {
+		// Preserve the mutually verified file transport, without claiming the
+		// other supplier's unpublished sizes, ratios or reference maximum.
+		p.CapabilitiesUnknown = false
+		p.ImageField = left.ImageField
+		p.MinImages = max(left.MinImages, right.MinImages)
+		p.MaxImages = min(left.MaxImages, right.MaxImages)
+		p.UnknownFields = []string{"max_images"}
+	}
+	return p
 }

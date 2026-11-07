@@ -215,7 +215,11 @@ func updatePricing() {
 		}
 		endpoints := modelSupportEndpointsStr[ability.Model]
 		effectiveModel, _ := resolvePricingMappedModel(ability.Model, ability.ModelMapping)
-		effectiveEndpoints := getPricingIntegrationEndpointsForModels(ability.ChannelType, effectiveModel, ability.Model, metaMap)
+		baseURL := ""
+		if ability.BaseURL != nil {
+			baseURL = *ability.BaseURL
+		}
+		effectiveEndpoints := getPricingIntegrationEndpointsForChannel(ability.ChannelType, baseURL, effectiveModel, ability.Model, metaMap)
 		if capability, ok := channelCapabilities[ability.ChannelId][ability.Model]; ok {
 			effectiveEndpoints = applyPricingChannelCapability(effectiveEndpoints, capability, effectiveModel)
 		}

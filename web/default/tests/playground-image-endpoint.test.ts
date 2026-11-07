@@ -9,6 +9,8 @@ import type {
   Message,
   PlaygroundModelInfo,
 } from '../src/features/playground/types'
+import { buildSupportedParameters } from '../src/features/pricing/lib/mock-stats'
+import { getCreationImageRequestOptions } from '../src/features/media-generation/image-options'
 
 const messages: Message[] = [
   {
@@ -51,6 +53,80 @@ function modelInfo(name: string, paths: string[]): PlaygroundModelInfo {
 }
 
 describe('Playground image endpoint follows the current channel contract', () => {
+  it('sends the verified single reference as a file-edit input without unconfirmed size options', () => {
+    const info = modelInfo('gpt-image-2.5-flare', ['/v1/images/generations'])
+    info.model.mapped_endpoints![0].parameters = {
+      capabilities_unknown: true,
+      max_images: 0,
+      max_videos: 0,
+      max_audios: 0,
+    }
+    info.model.mapped_endpoints!.push({
+      type: 'image-edit',
+      kind: 'image',
+      path: '/v1/images/edits',
+      method: 'POST',
+      parameters: {
+        image_field: 'image[]',
+        min_images: 1,
+        max_images: 1,
+        max_videos: 0,
+        max_audios: 0,
+        unknown_fields: ['max_images'],
+      },
+    })
+    expect(
+      buildPlaygroundMediaRequest(
+        'gpt-image-2.5-flare', messages, 'image', 'auto', {}, undefined, info,
+        { images: 'https://example.com/reference.png', aspectRatio: '16:9', resolution: '4K' }
+      )
+    ).toEqual({
+      model: 'gpt-image-2.5-flare', prompt: 'a quiet landscape', n: 1,
+      'image[]': ['https://example.com/reference.png'],
+    })
+  })
+
+  it('uses the published minimum for MegaAi without borrowing other provider fields', () => {
+    for (const name of [
+      'gpt-image-2',
+      'gpt-image-2.5-flare',
+      'gpt-image-2.5-sunburst',
+    ]) {
+      const info = modelInfo(name, ['/v1/images/generations'])
+      info.model.mapped_endpoints![0].parameters = {
+        capabilities_unknown: true,
+        max_images: 0,
+        max_videos: 0,
+        max_audios: 0,
+      }
+      expect(
+        buildPlaygroundMediaRequest(
+          name,
+          messages,
+          'image',
+          'auto',
+          {},
+          undefined,
+          info,
+          { aspectRatio: '16:9', resolution: '4K' }
+        )
+      ).toEqual({ model: name, prompt: 'a quiet landscape', n: 1 })
+      expect(
+        getCreationImageRequestOptions('cup', {
+          id: name,
+          mapped_endpoints: info.model.mapped_endpoints,
+        })
+      ).toEqual({})
+      const parameters = buildSupportedParameters(info.model)
+      expect(parameters.map((parameter) => parameter.name)).toEqual([
+        'model',
+        'prompt',
+        'n',
+      ])
+      expect(parameters.find((parameter) => parameter.name === 'n')?.range).toBeUndefined()
+    }
+  })
+
   it('recovers a persisted async selection for the GHLINK synchronous image models and aliases', () => {
     for (const name of [
       'gpt-image-2',

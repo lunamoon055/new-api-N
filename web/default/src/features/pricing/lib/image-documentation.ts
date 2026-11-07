@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { IntegrationParameters } from '../types'
+
 export function buildNativeImageSample(
   lang: 'curl' | 'python' | 'typescript' | 'javascript',
   options: {
@@ -23,18 +25,27 @@ export function buildNativeImageSample(
     endpointPath: string
     modelName: string
     apiKeyEnv: string
+    parameters?: IntegrationParameters
   }
 ): string {
   const url = `${options.baseUrl}${options.endpointPath}`
   const edit = options.endpointPath === '/v1/images/edits'
-  const body = {
+  const parameters = options.parameters ?? {
+    resolution_field: 'resolution',
+    resolutions: ['1K'],
+    ratio_field: 'ratio',
+    ratios: ['1:1'],
+  }
+  const body: Record<string, string | number> = {
     model: options.modelName,
     prompt: 'A red ceramic cup on a white background.',
     n: 1,
-    resolution: '1K',
-    ratio: '1:1',
-    response_format: 'url',
   }
+  if (parameters.resolution_field && parameters.resolutions?.length)
+    body[parameters.resolution_field] = parameters.resolutions[0]
+  if (parameters.ratio_field && parameters.ratios?.length)
+    body[parameters.ratio_field] = parameters.ratios[0]
+  if (parameters.resolution_field === 'resolution') body.response_format = 'url'
   if (lang === 'curl') {
     const lines = [
       `curl ${url} \\`,

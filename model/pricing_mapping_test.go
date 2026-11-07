@@ -141,13 +141,16 @@ func TestEnabledAbilityIncludesChannelMapping(t *testing.T) {
 	t.Cleanup(func() { DB = previous })
 
 	mapping := `{"Grok":"grok-imagine-video-1.5"}`
-	require.NoError(t, database.Create(&Channel{Id: 42, Type: constant.ChannelTypeOpenAI, ModelMapping: &mapping}).Error)
+	baseURL := "https://newapi.megabyai.cc"
+	require.NoError(t, database.Create(&Channel{Id: 42, Type: constant.ChannelTypeOpenAI, BaseURL: &baseURL, ModelMapping: &mapping}).Error)
 	require.NoError(t, database.Create(&Ability{Model: "Grok", Group: "default", ChannelId: 42, Enabled: true}).Error)
 	abilities, err := GetAllEnableAbilityWithChannels()
 	require.NoError(t, err)
 	require.Len(t, abilities, 1)
 	require.NotNil(t, abilities[0].ModelMapping)
 	require.Equal(t, mapping, *abilities[0].ModelMapping)
+	require.NotNil(t, abilities[0].BaseURL)
+	require.Equal(t, baseURL, *abilities[0].BaseURL)
 }
 
 func TestMappedPricingEndpointFollowsFinalUpstreamModel(t *testing.T) {

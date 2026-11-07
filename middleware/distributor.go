@@ -206,7 +206,7 @@ func requestChannelFilter(c *gin.Context, modelName string) model.ChannelFilter 
 			if err != nil {
 				return false
 			}
-			return !common.IsLinkskyAsyncImageModelName(upstream) || !common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
+			return common.IsSyncImageChannelCompatible(channel.GetBaseURL(), upstream)
 		}
 	}
 	return nil

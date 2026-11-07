@@ -798,7 +798,29 @@ export function buildSupportedParameters(
   const cat = apiCategoryOf(model)
   if (cat === 'reasoning') return REASONING_PARAMS
   if (cat === 'embedding') return EMBEDDING_PARAMS
-  if (cat === 'image') return IMAGE_PARAMS
+  if (cat === 'image') {
+    const generation = model.mapped_endpoints?.find(
+      (endpoint) => endpoint.path === '/v1/images/generations'
+    )
+    if (generation?.parameters?.capabilities_unknown)
+      return [
+        {
+          name: 'model',
+          type: 'string',
+          required: true,
+          enumValues: [model.model_name],
+          descriptionKey: 'Model name',
+        },
+        ...IMAGE_PARAMS.filter((parameter) => parameter.name === 'prompt'),
+        {
+          name: 'n',
+          type: 'integer',
+          defaultValue: 1,
+          descriptionKey: 'Number of images to generate',
+        },
+      ]
+    return IMAGE_PARAMS
+  }
   if (cat === 'video') return VIDEO_PARAMS
   return COMMON_CHAT_PARAMS
 }

@@ -402,11 +402,15 @@ function buildEmbeddingSample(lang: Lang, ctx: SampleContext): string {
 function buildImageSample(lang: Lang, ctx: SampleContext): string {
   if (
     ctx.mapped &&
-    ctx.videoParameters?.resolution_field === 'resolution' &&
-    ctx.videoParameters?.ratio_field === 'ratio' &&
+    (ctx.endpointPath === '/v1/images/edits' ||
+      (ctx.videoParameters?.resolution_field === 'resolution' &&
+        ctx.videoParameters?.ratio_field === 'ratio')) &&
     ['/v1/images/generations', '/v1/images/edits'].includes(ctx.endpointPath)
   )
-    return buildNativeImageSample(lang, ctx)
+    return buildNativeImageSample(lang, {
+      ...ctx,
+      parameters: ctx.videoParameters,
+    })
   const url = `${ctx.baseUrl}${ctx.endpointPath}`
   const prompt = 'A serene koi pond at sunset, ukiyo-e style.'
   const optionalFields = ctx.mapped ? {} : { size: '1024x1024', n: 1 }

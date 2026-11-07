@@ -517,6 +517,7 @@ func testChannelWithPayload(channel *model.Channel, requester channelTestUserInf
 		relayRequest.SetModelName(testModel)
 		if imageRequest, ok := relayRequest.(*dto.ImageRequest); ok {
 			applyImageGenerationTestDefaults(imageRequest)
+			applyImageChannelTestDefaults(channel, imageRequest, len(payload) == 0 || string(payload) == "null")
 		}
 	} else if taskReq, ok := request.(relaycommon.TaskSubmitReq); ok {
 		taskReq.Model = testModel
@@ -1740,6 +1741,14 @@ func applyImageGenerationTestDefaults(request *dto.ImageRequest) {
 	request.Size = ""
 	request.OutputResolution = json.RawMessage(`"1K"`)
 	request.AspectRatio = json.RawMessage(`"1:1"`)
+}
+
+func applyImageChannelTestDefaults(channel *model.Channel, request *dto.ImageRequest, defaultRequest bool) {
+	if channel != nil && request != nil && defaultRequest && common.IsMegaBYAIImageChannel(channel.Type, channel.GetBaseURL(), request.Model) {
+		// Follow MegaAi's published minimum. An explicit custom request keeps
+		// its size and other options; no supplier-specific defaults are added.
+		request.Size = ""
+	}
 }
 
 func TestChannel(c *gin.Context) {

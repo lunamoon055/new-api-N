@@ -264,10 +264,12 @@ func relayTaskChannelFilter(info *relaycommon.RelayInfo) model.ChannelFilter {
 			return channel != nil && common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
 		}
 	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:
-		if common.IsLinkskyAsyncImageModelName(info.OriginModelName) {
-			return func(channel *model.Channel) bool {
-				return channel != nil && !common.IsBaseURLHost(channel.GetBaseURL(), common.LinkskyProviderHost)
+		return func(channel *model.Channel) bool {
+			if channel == nil {
+				return false
 			}
+			upstream, _, err := common.ResolveModelMapping(info.OriginModelName, channel.GetModelMapping())
+			return err == nil && common.IsSyncImageChannelCompatible(channel.GetBaseURL(), upstream)
 		}
 	}
 	return nil

@@ -425,6 +425,7 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
 	native := isXJZNativeImageRequest(info, request.Model)
+	mega := info != nil && info.ChannelMeta != nil && common.IsMegaBYAIImageChannel(info.ChannelType, info.ChannelBaseUrl, request.Model)
 	switch info.RelayMode {
 	case relayconstant.RelayModeImagesEdits:
 		if isJSONRequest(c) {
@@ -507,7 +508,7 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 
 				// If multiple images, use image[] as the field name
 				fieldName := "image"
-				if len(imageFiles) > 1 || native {
+				if len(imageFiles) > 1 || native || mega {
 					fieldName = "image[]"
 				}
 

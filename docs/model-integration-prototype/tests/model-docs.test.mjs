@@ -6,6 +6,28 @@ import { getAllModelDocs } from '../src/all-model-docs.js'
 import { getCatalogHttpError, getPricingRequestHeaders } from '../src/catalog-auth.js'
 import { getCodeSample, getImageOperationDocs, getModelDoc, getModelKind, getRequestBody, getRequestParams } from '../src/model-data.js'
 
+test('MegaAi image docs use only the published minimum and retain complementary XJZ editing', () => {
+  for (const name of ['gpt-image-2','gpt-image-2.5-flare','gpt-image-2.5-sunburst']) {
+    const model = {model_name:name,mapped_endpoints:[{type:'image-generation',kind:'image',method:'POST',path:'/v1/images/generations',parameters:{capabilities_unknown:true,max_images:0,max_videos:0,max_audios:0}}]}
+    const doc = getModelDoc(model,{})
+    assert.deepEqual(getRequestBody(model,doc),{model:name,prompt:'一张简洁的海边日落电影海报',n:1})
+    assert.deepEqual(getRequestParams(doc).map(row=>row[0]),['model','prompt','n'])
+    for (const language of ['cURL','Python','TypeScript']) {
+      const sample = getCodeSample(model,doc,language)
+      assert.match(sample,/images\/generations/)
+      assert.doesNotMatch(sample,/output_resolution|aspect_ratio|image\[\]/)
+    }
+    model.mapped_endpoints.push({type:'image-edit',kind:'image',method:'POST',path:'/v1/images/edits',capability_source:'upstream_verified',parameters:{image_field:'image[]',min_images:1,max_images:1,max_videos:0,max_audios:0,unknown_fields:['max_images']}})
+    const [generation,edit] = getImageOperationDocs(model,{})
+    assert.equal(generation.path,'/v1/images/generations')
+    assert.equal(edit.path,'/v1/images/edits')
+    assert.match(edit.source,/真实调用验证/)
+    assert.match(getRequestParams(edit).find(row=>row[0]==='image[]')[3],/数量上限未确认/)
+    assert.doesNotMatch(getRequestParams(edit).find(row=>row[0]==='image[]')[3],/JPEG|WebP/)
+    assert.match(getCodeSample(model,edit,'cURL'),/image\[\]=@reference.png/)
+  }
+})
+
 test('image generation and file editing are documented together without a route choice', () => {
   const parameters = {resolutions:['1K','2K','4K'], ratios:['1:1','16:9'], resolution_field:'resolution', ratio_field:'ratio', max_images:0}
   const model = {model_name:'public-image', mapped_endpoints:[

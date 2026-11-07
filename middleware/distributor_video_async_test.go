@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -114,6 +115,19 @@ func TestAsyncImageVariantsKeepOtherProviderSyncRouting(t *testing.T) {
 			require.Equal(t, async, filter(&model.Channel{BaseURL: common.GetPointer("https://linksky.top")}))
 			require.Equal(t, !async, filter(&model.Channel{BaseURL: common.GetPointer("https://other-provider.example")}))
 		}
+	}
+}
+
+func TestMegaBYAIImageSelectionIncludesVerifiedGenerationAndEditRoutes(t *testing.T) {
+	mapping := `{"public-alias":"gpt-image-2.5-flare"}`
+	for _, path := range []string{"/v1/images/generations", "/pg/images/generations", "/v1/images/edits", "/pg/images/edits"} {
+		filter := requestChannelFilter(newDistributorTestContext(http.MethodPost, path, ""), "public-alias")
+		require.NotNil(t, filter)
+		mega := &model.Channel{Type: constant.ChannelTypeOpenAI, BaseURL: common.GetPointer("https://newapi.megabyai.cc"), ModelMapping: &mapping}
+		require.True(t, filter(mega), path)
+		xjz := *mega
+		xjz.BaseURL = common.GetPointer("https://api.xjzapi.cc")
+		require.True(t, filter(&xjz), path)
 	}
 }
 
