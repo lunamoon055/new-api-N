@@ -126,6 +126,8 @@ ZH 中映射到 `TTTseadanco2.5/720`（当前公开别名 `Seedance2.5:720（条
 
 注意：其他渠道文档中也出现过 `nano-banana*` 和 `gpt-image2` 的异步图片接口。那是独立的渠道预设，不能覆盖当前线上模型的同步图片映射；实际调用时以当前 Key 的 `/v1/models` 和模型详情页为准。
 
+视觉工坊提交 `POST /v1/images/edits` 时可附加 `Idempotency-Key: vw-edit-<UUID>`。连接中断后，用提交时的 API Key 调用 `GET /v1/images/edits/requests/{request_key}` 读取原响应。处理中返回 `425` 和 `Retry-After`，找不到或已过期返回 `404`，完成后返回原状态和 JSON。查询不创建生成任务。幂等记录保存七天，超过 16 MiB 的响应需在绘图日志查看。
+
 ## 4. 视频生成接口
 
 ### 4.1 创建任务

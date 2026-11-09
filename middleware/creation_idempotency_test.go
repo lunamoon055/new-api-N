@@ -75,3 +75,64 @@ func TestCreationIdempotencyRejectsDifferentRequest(t *testing.T) {
 	require.Contains(t, second.Body.String(), "idempotency_conflict")
 	require.EqualValues(t, 1, calls.Load())
 }
+
+func TestImageEditResponseCanBeReadWithoutRepeatingSubmission(t *testing.T) {
+	var calls atomic.Int32
+	engine := setupCreationIdempotencyRouter(t, &calls)
+	const path = "/v1/images/edits"
+	const key = "vw-edit-297510ea-805c-4b0c-a5d7-8f93a626219c"
+	const result = `{"data":[{"b64_json":"aW1hZ2U="}]}`
+	entered := make(chan struct{})
+	release := make(chan struct{}, 1)
+	defer close(release)
+	auth := func(c *gin.Context) {
+		tokenID := 22
+		if c.GetHeader("Authorization") == "Bearer other" {
+			tokenID = 23
+		}
+		c.Set("token_id", tokenID)
+		c.Set("id", 11)
+		c.Next()
+	}
+	engine.POST(path, auth, ImageEditIdempotency(), func(c *gin.Context) {
+		calls.Add(1)
+		close(entered)
+		<-release
+		c.Data(http.StatusOK, "application/json", []byte(result))
+		c.Writer.Flush()
+	})
+	engine.GET(path+"/requests/:request_key", auth, GetImageEditResponse)
+	query := func(token string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, path+"/requests/"+key, nil)
+		request.Header.Set("Authorization", token)
+		response := httptest.NewRecorder()
+		engine.ServeHTTP(response, request)
+		return response
+	}
+	require.Equal(t, http.StatusNotFound, query("Bearer own").Code)
+	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader("reference-image"))
+	request.Header.Set("Idempotency-Key", key)
+	response := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		engine.ServeHTTP(response, request)
+		close(done)
+	}()
+	<-entered
+	processingStatus := query("Bearer own").Code
+	otherTokenStatus := query("Bearer other").Code
+	release <- struct{}{}
+	<-done
+	require.Equal(t, http.StatusTooEarly, processingStatus)
+	require.Equal(t, http.StatusNotFound, otherTokenStatus)
+	recovered := query("Bearer own")
+	require.Equal(t, http.StatusOK, recovered.Code)
+	require.JSONEq(t, result, recovered.Body.String())
+	require.Equal(t, "no-store", recovered.Header().Get("Cache-Control"))
+	require.Equal(t, http.StatusNotFound, query("Bearer other").Code)
+	require.EqualValues(t, 1, calls.Load())
+	_, err := model.GetCreationIdempotency(22, key)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	_, err = model.GetCreationIdempotency(22, imageEditRequestNamespace+key)
+	require.NoError(t, err)
+}

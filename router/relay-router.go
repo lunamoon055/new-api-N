@@ -43,6 +43,7 @@ func SetRelayRouter(router *gin.Engine) {
 	pricingRouter := router.Group("/v1/pricing")
 	pricingRouter.Use(middleware.RouteTag("relay"), middleware.TokenAuth(), middleware.GlobalAPIRateLimit())
 	pricingRouter.GET("", controller.GetModelPricing)
+	router.GET("/v1/images/edits/requests/:request_key", middleware.RouteTag("relay"), middleware.TokenAuth(), middleware.GlobalAPIRateLimit(), middleware.GetImageEditResponse)
 
 	geminiRouter := router.Group("/v1beta/models")
 	geminiRouter.Use(middleware.RouteTag("relay"))
@@ -147,7 +148,7 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.POST("/images/generations", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIImage)
 		})
-		httpRouter.POST("/images/edits", func(c *gin.Context) {
+		httpRouter.POST("/images/edits", middleware.ImageEditIdempotency(), func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIImage)
 		})
 

@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"regexp"
@@ -12,11 +13,16 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 const creationIdempotencyResponseLimit = 16 << 20
 
 var creationIdempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9:_-]{8,128}$`)
+var imageEditRequestKeyPattern = regexp.MustCompile(`^vw-edit-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// The namespace cannot be supplied as a general creation idempotency key.
+const imageEditRequestNamespace = "~image-edit:"
 
 type creationIdempotencyWriter struct {
 	gin.ResponseWriter
@@ -171,9 +177,41 @@ func waitForCreationIdempotency(tokenID int, key string) (*model.CreationIdempot
 // /v1/creation compatibility endpoints. It is deliberately optional so the
 // existing /v1 clients retain their current behavior.
 func CreationIdempotency() gin.HandlerFunc {
+	return creationIdempotency("")
+}
+
+func ImageEditIdempotency() gin.HandlerFunc {
+	return creationIdempotency(imageEditRequestNamespace)
+}
+
+func GetImageEditResponse(c *gin.Context) {
+	key := c.Param("request_key")
+	if !imageEditRequestKeyPattern.MatchString(key) {
+		creationIdempotencyError(c, http.StatusBadRequest, "invalid_image_edit_request_key", "图片编辑请求编号无效。")
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	entry, err := model.GetCreationIdempotency(c.GetInt("token_id"), imageEditRequestNamespace+key)
+	if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && (entry.UserID != c.GetInt("id") || entry.ExpiresAt <= time.Now().Unix())) {
+		creationIdempotencyError(c, http.StatusNotFound, "image_edit_request_not_found", "未查到此图片编辑请求。")
+		return
+	}
+	if err != nil {
+		creationIdempotencyError(c, http.StatusInternalServerError, "idempotency_unavailable", "图片结果查询暂时不可用。")
+		return
+	}
+	if entry.Status != model.CreationIdempotencyCompleted {
+		c.Header("Retry-After", "5")
+		creationIdempotencyError(c, http.StatusTooEarly, "image_edit_in_progress", "图片编辑仍在处理中。")
+		return
+	}
+	replayCreationIdempotency(c, entry)
+}
+
+func creationIdempotency(namespace string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		key := c.GetHeader("Idempotency-Key")
-		if key == "" {
+		if key == "" || (namespace == imageEditRequestNamespace && !imageEditRequestKeyPattern.MatchString(key)) {
 			c.Next()
 			return
 		}
@@ -188,6 +226,7 @@ func CreationIdempotency() gin.HandlerFunc {
 		}
 		tokenID := c.GetInt("token_id")
 		userID := c.GetInt("id")
+		key = namespace + key
 		entry, created, err := model.ReserveCreationIdempotency(tokenID, userID, key, requestHash)
 		if err != nil {
 			creationIdempotencyError(c, http.StatusInternalServerError, "idempotency_unavailable", "幂等服务暂时不可用。")
