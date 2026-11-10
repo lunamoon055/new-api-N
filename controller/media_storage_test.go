@@ -20,7 +20,7 @@ func TestGetMediaStorageSettingsMasksToken(t *testing.T) {
 		common.OptionMap = make(map[string]string)
 	}
 	previous := common.OptionMap[service.MediaStorageOptionKey]
-	common.OptionMap[service.MediaStorageOptionKey] = `[{"id":"host-1","enabled":true,"upload_url":"https://media.example/upload","token":"top-secret"}]`
+	common.OptionMap[service.MediaStorageOptionKey] = `[{"id":"host-1","enabled":true,"upload_url":"https://media.example/upload","token":"top-secret","r2_access_key_id":"private-access","r2_secret_access_key":"private-secret"}]`
 	common.OptionMapRWMutex.Unlock()
 	t.Cleanup(func() {
 		common.OptionMapRWMutex.Lock()
@@ -34,6 +34,10 @@ func TestGetMediaStorageSettingsMasksToken(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.NotContains(t, recorder.Body.String(), "top-secret")
 	require.Contains(t, recorder.Body.String(), `"token":"********"`)
+	require.NotContains(t, recorder.Body.String(), "private-access")
+	require.NotContains(t, recorder.Body.String(), "private-secret")
+	require.Contains(t, recorder.Body.String(), `"r2_access_key_id":"********"`)
+	require.Contains(t, recorder.Body.String(), `"r2_secret_access_key":"********"`)
 
 	recorder = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(recorder)
@@ -41,6 +45,22 @@ func TestGetMediaStorageSettingsMasksToken(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.NotContains(t, recorder.Body.String(), "top-secret")
 	require.NotContains(t, recorder.Body.String(), service.MediaStorageOptionKey)
+}
+
+func TestRestoreR2CredentialsByProviderID(t *testing.T) {
+	previous := []service.MediaStorageProvider{{ID: "r2", R2AccessKeyID: "access", R2SecretAccessKey: "secret"}}
+	providers := []service.MediaStorageProvider{
+		{ID: "r2", R2AccessKeyID: "********", R2SecretAccessKey: "********"},
+		{ID: "new", R2AccessKeyID: "********", R2SecretAccessKey: "********"},
+	}
+	restoreMediaStorageCredentials(providers, previous)
+	require.Equal(t, "access", providers[0].R2AccessKeyID)
+	require.Equal(t, "secret", providers[0].R2SecretAccessKey)
+	require.Empty(t, providers[1].R2AccessKeyID)
+	require.Empty(t, providers[1].R2SecretAccessKey)
+	providers[0].R2SecretAccessKey = "replacement"
+	restoreMediaStorageCredentials(providers, previous)
+	require.Equal(t, "replacement", providers[0].R2SecretAccessKey)
 }
 
 func TestGenericOptionEndpointRejectsMediaStorageCredentials(t *testing.T) {

@@ -30,6 +30,12 @@ func GetMediaStorageSettings(c *gin.Context) {
 		if providers[i].Token != "" {
 			providers[i].Token = "********"
 		}
+		if providers[i].R2AccessKeyID != "" {
+			providers[i].R2AccessKeyID = "********"
+		}
+		if providers[i].R2SecretAccessKey != "" {
+			providers[i].R2SecretAccessKey = "********"
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -44,20 +50,13 @@ func UpdateMediaStorageSettings(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的图床配置"})
 		return
 	}
+	previous := service.GetMediaStorageProviders()
+	restoreMediaStorageCredentials(request.Providers, previous)
 	if err := service.ValidateMediaStorageProviders(request.Providers); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	previous := service.GetMediaStorageProviders()
-	previousTokens := make(map[string]string, len(previous))
-	for _, provider := range previous {
-		previousTokens[provider.ID] = provider.Token
-	}
-	for i := range request.Providers {
-		if strings.TrimSpace(request.Providers[i].Token) == "********" {
-			request.Providers[i].Token = previousTokens[request.Providers[i].ID]
-		}
-	}
+
 	raw, err := common.Marshal(request.Providers)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "图床配置序列化失败"})
@@ -68,6 +67,25 @@ func UpdateMediaStorageSettings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+func restoreMediaStorageCredentials(providers, previous []service.MediaStorageProvider) {
+	byID := make(map[string]service.MediaStorageProvider, len(previous))
+	for _, provider := range previous {
+		byID[provider.ID] = provider
+	}
+	for i := range providers {
+		old := byID[strings.TrimSpace(providers[i].ID)]
+		if strings.TrimSpace(providers[i].Token) == "********" {
+			providers[i].Token = old.Token
+		}
+		if providers[i].R2AccessKeyID == "********" {
+			providers[i].R2AccessKeyID = old.R2AccessKeyID
+		}
+		if providers[i].R2SecretAccessKey == "********" {
+			providers[i].R2SecretAccessKey = old.R2SecretAccessKey
+		}
+	}
 }
 
 func TestMediaStorage(c *gin.Context) {

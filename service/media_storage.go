@@ -38,15 +38,22 @@ const (
 // MediaStorageProvider is an administrator-configured upload target. Token is
 // never returned by the settings read endpoint; it is only used server-side.
 type MediaStorageProvider struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Enabled    bool   `json:"enabled"`
-	UploadURL  string `json:"upload_url"`
-	AuthHeader string `json:"auth_header"`
-	AuthPrefix string `json:"auth_prefix"`
-	Token      string `json:"token"`
-	FieldName  string `json:"field_name"`
-	Priority   int    `json:"priority"`
+	Type              string `json:"type,omitempty"`
+	R2Endpoint        string `json:"r2_endpoint,omitempty"`
+	R2Bucket          string `json:"r2_bucket,omitempty"`
+	R2AccessKeyID     string `json:"r2_access_key_id,omitempty"`
+	R2SecretAccessKey string `json:"r2_secret_access_key,omitempty"`
+	R2PublicURL       string `json:"r2_public_url,omitempty"`
+	R2KeyPrefix       string `json:"r2_key_prefix,omitempty"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Enabled           bool   `json:"enabled"`
+	UploadURL         string `json:"upload_url"`
+	AuthHeader        string `json:"auth_header"`
+	AuthPrefix        string `json:"auth_prefix"`
+	Token             string `json:"token"`
+	FieldName         string `json:"field_name"`
+	Priority          int    `json:"priority"`
 	// ResponseURLPath is a dot-separated JSON path, for example "url",
 	// "data.url", or "0.src" for the first item in a JSON array. Keeping this
 	// explicit avoids guessing undocumented response shapes while allowing
@@ -106,6 +113,20 @@ func HasEnabledMediaStorage() bool {
 }
 
 func normalizeMediaStorageProvider(provider MediaStorageProvider) MediaStorageProvider {
+	provider.Type = strings.ToLower(strings.TrimSpace(provider.Type))
+	if provider.Type == "" {
+		provider.Type = "http"
+	}
+	provider.R2Endpoint = strings.TrimRight(strings.TrimSpace(provider.R2Endpoint), "/")
+	provider.R2Bucket = strings.TrimSpace(provider.R2Bucket)
+	// Accept the bucket URL copied from Cloudflare as well as its S3 origin.
+	if endpoint, err := url.Parse(provider.R2Endpoint); err == nil && provider.R2Bucket != "" && endpoint.Path == "/"+provider.R2Bucket {
+		endpoint.Path = ""
+		endpoint.RawPath = ""
+		provider.R2Endpoint = endpoint.String()
+	}
+	provider.R2PublicURL = strings.TrimRight(strings.TrimSpace(provider.R2PublicURL), "/")
+	provider.R2KeyPrefix = strings.Trim(strings.TrimSpace(provider.R2KeyPrefix), "/")
 	provider.ID = strings.TrimSpace(provider.ID)
 	provider.Name = strings.TrimSpace(provider.Name)
 	provider.UploadURL = strings.TrimSpace(provider.UploadURL)
@@ -146,6 +167,15 @@ func ValidateMediaStorageProviders(providers []MediaStorageProvider) error {
 			return fmt.Errorf("provider %q is duplicated", provider.ID)
 		}
 		seen[provider.ID] = struct{}{}
+		if provider.Type == "r2" {
+			if err := validateR2MediaStorageProvider(provider); err != nil {
+				return fmt.Errorf("provider %q: %w", provider.ID, err)
+			}
+			continue
+		}
+		if provider.Type != "http" {
+			return fmt.Errorf("provider %q: unsupported storage type", provider.ID)
+		}
 		parsed, err := url.Parse(provider.UploadURL)
 		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return fmt.Errorf("provider %q: upload_url must be an absolute http(s) URL", provider.ID)
@@ -313,7 +343,18 @@ func TestMediaStorageProvider(ctx context.Context, providerID string) (string, e
 		if err != nil {
 			return "", fmt.Errorf("decode media storage test payload: %w", err)
 		}
-		return uploadToMediaStorage(ctx, provider, data, "new-api-media-storage-test.png", "image/png")
+		storedURL, err := uploadToMediaStorage(ctx, provider, data, "new-api-media-storage-test.png", "image/png")
+		if err != nil {
+			return "", err
+		}
+		if provider.Type == "r2" {
+			// An accepted PutObject does not prove the configured public domain
+			// serves this bucket. Check it without sending the S3 credentials.
+			if err := verifyTransferredVideoURL(ctx, storedURL); err != nil {
+				return "", fmt.Errorf("R2 object uploaded but the public URL is not readable; check the public domain and bucket access")
+			}
+		}
+		return storedURL, nil
 	}
 	return "", ErrMediaStorageProviderNotFound
 }
@@ -336,6 +377,11 @@ func AttachAudioStorageURL(c *gin.Context, data []byte, filename, contentType st
 
 func uploadToMediaStorage(ctx context.Context, provider MediaStorageProvider, data []byte, filename, contentType string) (string, error) {
 	provider = normalizeMediaStorageProvider(provider)
+	if provider.Type == "r2" {
+		requestCtx, cancel := context.WithTimeout(ctx, mediaStorageUploadTimeout)
+		defer cancel()
+		return uploadToR2MediaStorage(requestCtx, provider, bytes.NewReader(data), int64(len(data)), filename, contentType)
+	}
 	if filename == "" {
 		filename = "generated.bin"
 	}

@@ -5153,6 +5153,17 @@
     "Image must not exceed {{count}} MB": "Image must not exceed {{count}} MB",
     "Output format": "Output format",
     "Background": "Background",
-    "Image size does not meet the model requirements": "Image size does not meet the model requirements"
+    "Image size does not meet the model requirements": "Image size does not meet the model requirements",
+    "Add Cloudflare R2 provider": "Add Cloudflare R2 provider",
+    "R2 S3 endpoint": "R2 S3 endpoint",
+    "Copy the S3 API endpoint from R2. A trailing bucket name is accepted.": "Copy the S3 API endpoint from R2. A trailing bucket name is accepted.",
+    "R2 bucket name": "R2 bucket name",
+    "Public media URL": "Public media URL",
+    "Use the public domain connected to this bucket. The S3 API endpoint cannot serve public media.": "Use the public domain connected to this bucket. The S3 API endpoint cannot serve public media.",
+    "Object key prefix": "Object key prefix",
+    "Use R2 S3 credentials with object read and write access to this bucket. Keep ******** unchanged to preserve saved credentials. A disabled provider can be saved without credentials.": "Use R2 S3 credentials with object read and write access to this bucket. Keep ******** unchanged to preserve saved credentials. A disabled provider can be saved without credentials.",
+    "R2 requires a provider ID and bucket name": "R2 requires a provider ID and bucket name",
+    "Provide valid HTTPS URLs for the R2 endpoint and public domain": "Provide valid HTTPS URLs for the R2 endpoint and public domain",
+    "Fill in both R2 credentials before enabling this provider": "Fill in both R2 credentials before enabling this provider"
   }
 }

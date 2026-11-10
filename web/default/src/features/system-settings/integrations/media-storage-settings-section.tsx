@@ -33,8 +33,10 @@ import {
 } from '../api'
 import type { MediaStorageProvider, MediaTransferJob } from '../types'
 import { ManualMediaTransferDialog } from './manual-media-transfer-dialog'
+import { R2StorageFields } from './r2-storage-fields'
 
 const createProvider = (): MediaStorageProvider => ({
+  type: 'http',
   id: `media-${Date.now()}`,
   name: 'GHLINK ImgHub',
   enabled: true,
@@ -45,6 +47,21 @@ const createProvider = (): MediaStorageProvider => ({
   field_name: 'file',
   priority: 0,
   response_url_path: '0.src',
+})
+
+const createR2Provider = (): MediaStorageProvider => ({
+  ...createProvider(),
+  id: `r2-${Date.now()}`,
+  type: 'r2',
+  name: 'Cloudflare R2',
+  enabled: false,
+  upload_url: '',
+  r2_endpoint: '',
+  r2_bucket: '',
+  r2_public_url: '',
+  r2_key_prefix: 'new-api/media',
+  r2_access_key_id: '',
+  r2_secret_access_key: '',
 })
 
 const sanyueImgHubPreset = {
@@ -68,6 +85,10 @@ function normalizeProvider(
     field_name: provider.field_name.trim() || 'file',
     priority: Number.isFinite(provider.priority) ? provider.priority : 0,
     response_url_path: provider.response_url_path.trim() || '0.src',
+    r2_endpoint: provider.r2_endpoint?.trim(),
+    r2_bucket: provider.r2_bucket?.trim(),
+    r2_public_url: provider.r2_public_url?.trim(),
+    r2_key_prefix: provider.r2_key_prefix?.trim(),
   }
 }
 
@@ -153,6 +174,41 @@ export function MediaStorageSettingsSection() {
 
   const save = () => {
     for (const provider of providers) {
+      if (provider.type === 'r2') {
+        if (!provider.id.trim() || !provider.r2_bucket?.trim()) {
+          toast.error(t('R2 requires a provider ID and bucket name'))
+          return
+        }
+        try {
+          for (const value of [provider.r2_endpoint, provider.r2_public_url]) {
+            const url = new URL(value ?? '')
+            if (
+              url.protocol !== 'https:' ||
+              url.username ||
+              url.password ||
+              url.search ||
+              url.hash
+            )
+              throw new Error()
+          }
+        } catch {
+          toast.error(
+            t('Provide valid HTTPS URLs for the R2 endpoint and public domain')
+          )
+          return
+        }
+        if (
+          provider.enabled &&
+          (!provider.r2_access_key_id?.trim() ||
+            !provider.r2_secret_access_key?.trim())
+        ) {
+          toast.error(
+            t('Fill in both R2 credentials before enabling this provider')
+          )
+          return
+        }
+        continue
+      }
       if (!provider.id.trim() || !provider.upload_url.trim()) {
         toast.error(t('Each media storage provider needs an ID and upload URL'))
         return
@@ -201,6 +257,9 @@ export function MediaStorageSettingsSection() {
             <div className='flex items-center justify-between gap-3'>
               <div>
                 <p className='font-medium'>{provider.name || provider.id}</p>
+                {provider.type === 'r2' && (
+                  <Badge variant='secondary'>Cloudflare R2</Badge>
+                )}
                 <p className='text-muted-foreground text-xs'>
                   {t('Priority')} {provider.priority}
                 </p>
@@ -232,15 +291,17 @@ export function MediaStorageSettingsSection() {
                     ? t('Testing upload...')
                     : t('Test upload')}
                 </Button>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='sm'
-                  disabled={saveMutation.isPending}
-                  onClick={() => updateProvider(index, sanyueImgHubPreset)}
-                >
-                  {t('Apply Sanyue ImgHub preset')}
-                </Button>
+                {provider.type !== 'r2' && (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    disabled={saveMutation.isPending}
+                    onClick={() => updateProvider(index, sanyueImgHubPreset)}
+                  >
+                    {t('Apply Sanyue ImgHub preset')}
+                  </Button>
+                )}
                 <label className='text-muted-foreground flex items-center gap-2 text-sm'>
                   {t('Enabled')}
                   <Switch
@@ -293,101 +354,120 @@ export function MediaStorageSettingsSection() {
               </label>
             </div>
 
-            <label className='block space-y-2 text-sm'>
-              <span>{t('Response URL path')}</span>
+            {provider.type === 'r2' ? (
+              <R2StorageFields
+                provider={provider}
+                onChange={(patch) => updateProvider(index, patch)}
+              />
+            ) : (
+              <>
+                <label className='block space-y-2 text-sm'>
+                  <span>{t('Response URL path')}</span>
+                  <Input
+                    value={provider.response_url_path}
+                    onChange={(event) =>
+                      updateProvider(index, {
+                        response_url_path: event.target.value,
+                      })
+                    }
+                    placeholder='0.src'
+                    autoComplete='off'
+                  />
+                  <span className='text-muted-foreground text-xs'>
+                    {t(
+                      'Dot-separated JSON path, for example 0.src or data.url'
+                    )}
+                  </span>
+                </label>
+
+                <label className='block space-y-2 text-sm'>
+                  <span>{t('Upload URL')}</span>
+                  <Input
+                    type='url'
+                    inputMode='url'
+                    value={provider.upload_url}
+                    onChange={(event) =>
+                      updateProvider(index, { upload_url: event.target.value })
+                    }
+                    placeholder='https://media.ghlink.top/upload?returnFormat=full'
+                    autoComplete='off'
+                  />
+                </label>
+
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <label className='space-y-2 text-sm'>
+                    <span>{t('Auth header')}</span>
+                    <Input
+                      value={provider.auth_header}
+                      onChange={(event) =>
+                        updateProvider(index, {
+                          auth_header: event.target.value,
+                        })
+                      }
+                      placeholder='Authorization'
+                      autoComplete='off'
+                    />
+                  </label>
+                  <label className='space-y-2 text-sm'>
+                    <span>{t('Auth prefix')}</span>
+                    <Input
+                      value={provider.auth_prefix}
+                      onChange={(event) =>
+                        updateProvider(index, {
+                          auth_prefix: event.target.value,
+                        })
+                      }
+                      placeholder={t('Leave empty for a raw token')}
+                      autoComplete='off'
+                    />
+                  </label>
+                </div>
+
+                <div className='grid gap-4 md:grid-cols-[1fr_140px_140px]'>
+                  <label className='space-y-2 text-sm'>
+                    <span>{t('Token')}</span>
+                    <Input
+                      type='password'
+                      value={provider.token}
+                      onChange={(event) =>
+                        updateProvider(index, { token: event.target.value })
+                      }
+                      placeholder={t(
+                        'Leave ******** unchanged to keep the token'
+                      )}
+                      autoComplete='new-password'
+                    />
+                  </label>
+                  <label className='space-y-2 text-sm'>
+                    <span>{t('File field')}</span>
+                    <Input
+                      value={provider.field_name}
+                      onChange={(event) =>
+                        updateProvider(index, {
+                          field_name: event.target.value,
+                        })
+                      }
+                      placeholder='file'
+                      autoComplete='off'
+                    />
+                  </label>
+                </div>
+              </>
+            )}
+            <label className='flex flex-col gap-2 text-sm'>
+              <span>{t('Priority')}</span>
               <Input
-                value={provider.response_url_path}
+                type='number'
+                min={0}
+                value={provider.priority}
                 onChange={(event) =>
                   updateProvider(index, {
-                    response_url_path: event.target.value,
+                    priority: Number(event.target.value) || 0,
                   })
                 }
-                placeholder='0.src'
-                autoComplete='off'
-              />
-              <span className='text-muted-foreground text-xs'>
-                {t('Dot-separated JSON path, for example 0.src or data.url')}
-              </span>
-            </label>
-
-            <label className='block space-y-2 text-sm'>
-              <span>{t('Upload URL')}</span>
-              <Input
-                type='url'
-                inputMode='url'
-                value={provider.upload_url}
-                onChange={(event) =>
-                  updateProvider(index, { upload_url: event.target.value })
-                }
-                placeholder='https://media.ghlink.top/upload?returnFormat=full'
-                autoComplete='off'
+                inputMode='numeric'
               />
             </label>
-
-            <div className='grid gap-4 md:grid-cols-2'>
-              <label className='space-y-2 text-sm'>
-                <span>{t('Auth header')}</span>
-                <Input
-                  value={provider.auth_header}
-                  onChange={(event) =>
-                    updateProvider(index, { auth_header: event.target.value })
-                  }
-                  placeholder='Authorization'
-                  autoComplete='off'
-                />
-              </label>
-              <label className='space-y-2 text-sm'>
-                <span>{t('Auth prefix')}</span>
-                <Input
-                  value={provider.auth_prefix}
-                  onChange={(event) =>
-                    updateProvider(index, { auth_prefix: event.target.value })
-                  }
-                  placeholder={t('Leave empty for a raw token')}
-                  autoComplete='off'
-                />
-              </label>
-            </div>
-
-            <div className='grid gap-4 md:grid-cols-[1fr_140px_140px]'>
-              <label className='space-y-2 text-sm'>
-                <span>{t('Token')}</span>
-                <Input
-                  type='password'
-                  value={provider.token}
-                  onChange={(event) =>
-                    updateProvider(index, { token: event.target.value })
-                  }
-                  placeholder={t('Leave ******** unchanged to keep the token')}
-                  autoComplete='new-password'
-                />
-              </label>
-              <label className='space-y-2 text-sm'>
-                <span>{t('File field')}</span>
-                <Input
-                  value={provider.field_name}
-                  onChange={(event) =>
-                    updateProvider(index, { field_name: event.target.value })
-                  }
-                  placeholder='file'
-                  autoComplete='off'
-                />
-              </label>
-              <label className='space-y-2 text-sm'>
-                <span>{t('Priority')}</span>
-                <Input
-                  type='number'
-                  min={0}
-                  value={provider.priority}
-                  onChange={(event) =>
-                    updateProvider(index, {
-                      priority: Number(event.target.value) || 0,
-                    })
-                  }
-                  inputMode='numeric'
-                />
-              </label>
-            </div>
           </div>
         ))}
 
@@ -401,6 +481,16 @@ export function MediaStorageSettingsSection() {
           >
             <Plus />
             {t('Add media storage provider')}
+          </Button>
+          <Button
+            type='button'
+            variant='outline'
+            onClick={() =>
+              setProviders((current) => [...current, createR2Provider()])
+            }
+          >
+            <Plus data-icon='inline-start' />
+            {t('Add Cloudflare R2 provider')}
           </Button>
           <Button
             type='button'

@@ -40,6 +40,13 @@ export type UpdateOptionResponse = {
 }
 
 export type MediaStorageProvider = {
+  type?: 'http' | 'r2'
+  r2_endpoint?: string
+  r2_bucket?: string
+  r2_access_key_id?: string
+  r2_secret_access_key?: string
+  r2_public_url?: string
+  r2_key_prefix?: string
   id: string
   name: string
   enabled: boolean

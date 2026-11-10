@@ -569,6 +569,11 @@ func uploadMediaFile(ctx context.Context, provider MediaStorageProvider, filePat
 		return "", err
 	}
 	defer file.Close()
+	if provider.Type == "r2" {
+		requestCtx, cancel := context.WithTimeout(ctx, mediaTransferTimeout("MEDIA_UPLOAD_TIMEOUT", 15*time.Minute))
+		defer cancel()
+		return uploadToR2MediaStorage(requestCtx, provider, file, size, filename, contentType)
+	}
 	var headers bytes.Buffer
 	writer := multipart.NewWriter(&headers)
 	partHeader := make(textproto.MIMEHeader)
