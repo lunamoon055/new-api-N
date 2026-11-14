@@ -262,6 +262,7 @@ export type ModelSettings = {
   'billing_setting.billing_expr': string
   'billing_setting.video_billing_mode': string
   'billing_setting.video_resolution_prices': string
+  'billing_setting.video_reference_prices': string
   'tool_price_setting.prices': string
   TopupGroupRatio: string
   GroupRatio: string
@@ -308,6 +309,7 @@ export type BillingSettings = {
   'billing_setting.billing_expr': string
   'billing_setting.video_billing_mode': string
   'billing_setting.video_resolution_prices': string
+  'billing_setting.video_reference_prices': string
   'tool_price_setting.prices': string
   TopupGroupRatio: string
   GroupRatio: string

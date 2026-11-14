@@ -38,6 +38,8 @@ export function buildVideoDocumentationBody(
     ? example?.duration
     : p?.durations?.[0]
   if (duration && p?.duration_field) body[p.duration_field] = duration
+  if (!duration && p?.duration_field && p.reference_video_billed_per_second)
+    body[p.duration_field] = example?.duration || 5
   if (!p && example?.duration) body.duration = example.duration
   body[p?.ratio_field || 'ratio'] = p?.ratios?.[0] || '16:9'
   const resolution = p?.resolutions?.includes(example?.resolution || '')
@@ -78,7 +80,9 @@ export function buildVideoDocumentationBody(
       if (
         item.field &&
         item.maximum > 0 &&
-        !isVideoCapabilityUnknown(p, item.capability)
+        (!isVideoCapabilityUnknown(p, item.capability) ||
+          (item.capability === 'max_videos' &&
+            p.reference_video_billed_per_second))
       ) {
         body[item.field] = item.field.endsWith('_url') ? item.url : [item.url]
       }
@@ -100,7 +104,8 @@ export function hasVideoReferenceMedia(
       !isVideoCapabilityUnknown(parameters, 'max_images')) ||
     (parameters.video_field &&
       parameters.max_videos > 0 &&
-      !isVideoCapabilityUnknown(parameters, 'max_videos')) ||
+      (!isVideoCapabilityUnknown(parameters, 'max_videos') ||
+        parameters.reference_video_billed_per_second)) ||
     (parameters.audio_field &&
       parameters.max_audios > 0 &&
       !isVideoCapabilityUnknown(parameters, 'max_audios'))

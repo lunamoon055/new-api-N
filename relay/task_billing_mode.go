@@ -2,6 +2,7 @@ package relay
 
 import (
 	"fmt"
+	"github.com/QuantumNous/new-api/common"
 
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -15,6 +16,19 @@ func applyTaskOtherRatiosToQuota(priceData *types.PriceData, videoBillingMode st
 	mode := billing_setting.NormalizeVideoBillingMode(videoBillingMode)
 	priceData.VideoBillingMode = mode
 	priceData.AppliedOtherRatios = false
+	if priceData.VideoReferenceBilling != nil {
+		if mode != billing_setting.VideoBillingModeTieredSeconds || !priceData.UsePrice {
+			return fmt.Errorf("reference-video pricing requires tiered_seconds mode")
+		}
+		quota, err := priceData.VideoReferenceBilling.Quota(common.QuotaPerUnit, priceData.GroupRatioInfo.GroupRatio)
+		if err != nil {
+			return err
+		}
+		priceData.Quota, priceData.QuotaToPreConsume = quota, quota
+		priceData.FreeModel = quota == 0
+		priceData.AppliedOtherRatios = true
+		return nil
+	}
 
 	if skipOtherRatios {
 		return nil

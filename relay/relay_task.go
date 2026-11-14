@@ -226,6 +226,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if err := ensureTaskBillingConfigured(info, info.PriceData, videoBillingMode); err != nil {
 		return nil, service.TaskErrorWrapperLocal(err, "model_price_error", http.StatusBadRequest)
 	}
+	if err := applyVideoReferenceBilling(c, info); err != nil {
+		return nil, service.TaskErrorWrapperLocal(err, "invalid_billing_config", http.StatusBadRequest)
+	}
 
 	// 6. 将 OtherRatios 应用到基础额度。固定视频计费模式会保留参数但不叠加倍率。
 	if err := applyTaskOtherRatiosToQuota(
@@ -373,18 +376,19 @@ func ensurePersistentTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo,
 
 func taskBillingContext(info *relaycommon.RelayInfo) *model.TaskBillingContext {
 	return &model.TaskBillingContext{
-		ModelPrice:         info.PriceData.ModelPrice,
-		GroupRatio:         info.PriceData.GroupRatioInfo.GroupRatio,
-		UserGroup:          info.UserGroup,
-		UsingGroup:         info.UsingGroup,
-		GroupSpecialRatio:  info.PriceData.GroupRatioInfo.GroupSpecialRatio,
-		HasSpecialRatio:    info.PriceData.GroupRatioInfo.HasSpecialRatio,
-		ModelRatio:         info.PriceData.ModelRatio,
-		OtherRatios:        info.PriceData.OtherRatios,
-		VideoBillingMode:   info.PriceData.VideoBillingMode,
-		AppliedOtherRatios: info.PriceData.AppliedOtherRatios,
-		OriginModelName:    info.OriginModelName,
-		PerCallBilling:     common.StringsContains(constant.TaskPricePatches, info.OriginModelName) || info.PriceData.UsePrice,
+		VideoReferenceBilling: info.PriceData.VideoReferenceBilling,
+		ModelPrice:            info.PriceData.ModelPrice,
+		GroupRatio:            info.PriceData.GroupRatioInfo.GroupRatio,
+		UserGroup:             info.UserGroup,
+		UsingGroup:            info.UsingGroup,
+		GroupSpecialRatio:     info.PriceData.GroupRatioInfo.GroupSpecialRatio,
+		HasSpecialRatio:       info.PriceData.GroupRatioInfo.HasSpecialRatio,
+		ModelRatio:            info.PriceData.ModelRatio,
+		OtherRatios:           info.PriceData.OtherRatios,
+		VideoBillingMode:      info.PriceData.VideoBillingMode,
+		AppliedOtherRatios:    info.PriceData.AppliedOtherRatios,
+		OriginModelName:       info.OriginModelName,
+		PerCallBilling:        common.StringsContains(constant.TaskPricePatches, info.OriginModelName) || info.PriceData.UsePrice,
 	}
 }
 

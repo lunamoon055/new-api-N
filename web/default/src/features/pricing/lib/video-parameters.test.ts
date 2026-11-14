@@ -22,6 +22,58 @@ import type { IntegrationParameters, PricingModel } from '../types'
 import { buildSupportedParameters } from './mock-stats'
 import { buildVideoSupportedParameters } from './video-parameters'
 
+test('paid V6K video parameters require billing inputs and distinguish an unknown upstream count', () => {
+  const result = buildVideoSupportedParameters(
+    modelWithContract({
+      duration_field: 'duration',
+      resolution_field: 'resolution',
+      resolutions: ['480p', '720p', '1080p'],
+      video_field: 'referenceVideos',
+      max_images: 0,
+      max_audios: 0,
+      max_videos: 10,
+      unknown_fields: ['durations', 'max_videos'],
+      reference_video_billed_per_second: true,
+    })
+  )!
+  assert.equal(
+    result.parameters.find((p) => p.name === 'duration')?.required,
+    true
+  )
+  assert.equal(
+    result.parameters.find((p) => p.name === 'resolution')?.required,
+    true
+  )
+  const video = result.parameters.find((p) => p.name === 'referenceVideos')!
+  assert.equal(video.availability, undefined)
+  assert.equal(video.range, '0 ~ 10')
+  assert.ok(video.notes?.some((note) => note.key.includes('billed separately')))
+  assert.ok(
+    video.notes?.some((note) => note.key === 'Site limit: {{count}} videos')
+  )
+})
+
+test('configured duration ranges keep the duration billing field required', () => {
+  for (const maximum of [15, 30]) {
+    const result = buildVideoSupportedParameters(
+      modelWithContract({
+        duration_field: 'duration',
+        durations: Array.from({ length: maximum - 4 }, (_, index) => index + 5),
+        max_images: 0,
+        max_audios: 0,
+        max_videos: 10,
+        unknown_fields: ['max_videos'],
+        reference_video_billed_per_second: true,
+      })
+    )!
+    const duration = result.parameters.find(
+      (parameter) => parameter.name === 'duration'
+    )!
+    assert.equal(duration.required, true)
+    assert.equal(duration.range, `5 ~ ${maximum}`)
+  }
+})
+
 function modelWithContract(
   parameters?: IntegrationParameters,
   modelName = 'Grok 1.5'

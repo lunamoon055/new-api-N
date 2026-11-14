@@ -40,6 +40,7 @@ const getModelDefaults = (settings: BillingSettings) => ({
   BillingExpr: settings['billing_setting.billing_expr'],
   VideoBillingMode: settings['billing_setting.video_billing_mode'],
   VideoResolutionPrices: settings['billing_setting.video_resolution_prices'],
+  VideoReferencePrices: settings['billing_setting.video_reference_prices'],
 })
 
 const getGroupDefaults = (settings: BillingSettings) => ({

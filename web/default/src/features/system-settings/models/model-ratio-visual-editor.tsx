@@ -86,6 +86,7 @@ type ModelRatioVisualEditorProps = {
   billingExpr: string
   videoBillingMode: string
   videoResolutionPrices: string
+  videoReferencePrices: string
   onChange: (field: string, value: string) => void
 }
 
@@ -104,6 +105,7 @@ type ModelRow = {
   requestRuleExpr?: string
   videoBillingMode?: string
   videoResolutionPrices?: VideoResolutionPriceMap
+  videoReferencePrices?: VideoResolutionPriceMap
   hasConflict: boolean
 }
 
@@ -230,6 +232,7 @@ export const ModelRatioVisualEditor = memo(
     billingExpr,
     videoBillingMode,
     videoResolutionPrices,
+    videoReferencePrices,
     onChange,
   }: ModelRatioVisualEditorProps) {
     const { t } = useTranslation()
@@ -344,6 +347,12 @@ export const ModelRatioVisualEditor = memo(
         fallback: {},
         context: 'video resolution prices',
       })
+      const videoReferencePricesMap = safeJsonParse<
+        Record<string, VideoResolutionPriceMap>
+      >(videoReferencePrices, {
+        fallback: {},
+        context: 'video resolution prices',
+      })
 
       const modelNames = new Set([
         ...Object.keys(priceMap),
@@ -358,6 +367,7 @@ export const ModelRatioVisualEditor = memo(
         ...Object.keys(billingExprMap),
         ...Object.keys(videoBillingModeMap),
         ...Object.keys(videoResolutionPricesMap),
+        ...Object.keys(videoReferencePricesMap),
       ])
 
       const modelData: ModelRow[] = Array.from(modelNames).map((name) => {
@@ -373,6 +383,7 @@ export const ModelRatioVisualEditor = memo(
           videoBillingModeMap[name]
         )
         const rowVideoResolutionPrices = videoResolutionPricesMap[name] || {}
+        const rowVideoReferencePrices = videoReferencePricesMap[name] || {}
 
         if (isVideoResolutionPricingMode(rowVideoBillingMode)) {
           return {
@@ -380,6 +391,7 @@ export const ModelRatioVisualEditor = memo(
             billingMode: rowVideoBillingMode,
             videoBillingMode: rowVideoBillingMode,
             videoResolutionPrices: rowVideoResolutionPrices,
+            videoReferencePrices: rowVideoReferencePrices,
             hasConflict: false,
           }
         }
@@ -399,6 +411,7 @@ export const ModelRatioVisualEditor = memo(
             requestRuleExpr,
             videoBillingMode: rowVideoBillingMode,
             videoResolutionPrices: rowVideoResolutionPrices,
+            videoReferencePrices: rowVideoReferencePrices,
             price,
             ratio,
             cacheRatio: cache,
@@ -424,6 +437,7 @@ export const ModelRatioVisualEditor = memo(
           billingMode: price !== '' ? 'per-request' : 'per-token',
           videoBillingMode: rowVideoBillingMode,
           videoResolutionPrices: rowVideoResolutionPrices,
+          videoReferencePrices: rowVideoReferencePrices,
           hasConflict:
             price !== '' &&
             (ratio !== '' ||
@@ -450,6 +464,7 @@ export const ModelRatioVisualEditor = memo(
       billingExpr,
       videoBillingMode,
       videoResolutionPrices,
+      videoReferencePrices,
     ])
 
     const modeCounts = useMemo(
@@ -507,6 +522,7 @@ export const ModelRatioVisualEditor = memo(
           requestRuleExpr: model.requestRuleExpr,
           videoBillingMode: normalizeVideoBillingMode(model.videoBillingMode),
           videoResolutionPrices: model.videoResolutionPrices,
+          videoReferencePrices: model.videoReferencePrices,
         })
         setEditorOpen(true)
         if (isMobile) setSheetOpen(true)
@@ -591,6 +607,9 @@ export const ModelRatioVisualEditor = memo(
         const videoResolutionPricesMap = safeJsonParse<
           Record<string, VideoResolutionPriceMap>
         >(videoResolutionPrices, { fallback: {}, silent: true })
+        const videoReferencePricesMap = safeJsonParse<
+          Record<string, VideoResolutionPriceMap>
+        >(videoReferencePrices, { fallback: {}, silent: true })
 
         delete priceMap[name]
         delete ratioMap[name]
@@ -604,6 +623,7 @@ export const ModelRatioVisualEditor = memo(
         delete billingExprMap[name]
         delete videoBillingModeMap[name]
         delete videoResolutionPricesMap[name]
+        delete videoReferencePricesMap[name]
 
         onChange('ModelPrice', JSON.stringify(priceMap, null, 2))
         onChange('ModelRatio', JSON.stringify(ratioMap, null, 2))
@@ -632,6 +652,10 @@ export const ModelRatioVisualEditor = memo(
           'billing_setting.video_resolution_prices',
           JSON.stringify(videoResolutionPricesMap, null, 2)
         )
+        onChange(
+          'billing_setting.video_reference_prices',
+          JSON.stringify(videoReferencePricesMap, null, 2)
+        )
       },
       [
         modelPrice,
@@ -646,6 +670,7 @@ export const ModelRatioVisualEditor = memo(
         billingExpr,
         videoBillingMode,
         videoResolutionPrices,
+        videoReferencePrices,
         onChange,
       ]
     )
@@ -845,6 +870,9 @@ export const ModelRatioVisualEditor = memo(
         const videoResolutionPricesMap = safeJsonParse<
           Record<string, VideoResolutionPriceMap>
         >(videoResolutionPrices, { fallback: {}, silent: true })
+        const videoReferencePricesMap = safeJsonParse<
+          Record<string, VideoResolutionPriceMap>
+        >(videoReferencePrices, { fallback: {}, silent: true })
 
         const setIfPresent = (
           target: Record<string, number>,
@@ -869,6 +897,7 @@ export const ModelRatioVisualEditor = memo(
           delete billingExprMap[name]
           delete videoBillingModeMap[name]
           delete videoResolutionPricesMap[name]
+          delete videoReferencePricesMap[name]
 
           if (
             isVideoResolutionPricingMode(data.billingMode) ||
@@ -879,6 +908,7 @@ export const ModelRatioVisualEditor = memo(
               : (data.videoBillingMode as VideoResolutionPricingMode)
             videoBillingModeMap[name] = videoMode
             videoResolutionPricesMap[name] = data.videoResolutionPrices || {}
+            videoReferencePricesMap[name] = data.videoReferencePrices || {}
           } else if (data.billingMode === 'tiered_expr') {
             const combined = combineBillingExpr(
               data.billingExpr || '',
@@ -942,6 +972,10 @@ export const ModelRatioVisualEditor = memo(
           'billing_setting.video_resolution_prices',
           JSON.stringify(videoResolutionPricesMap, null, 2)
         )
+        onChange(
+          'billing_setting.video_reference_prices',
+          JSON.stringify(videoReferencePricesMap, null, 2)
+        )
       },
       [
         modelPrice,
@@ -956,6 +990,7 @@ export const ModelRatioVisualEditor = memo(
         billingExpr,
         videoBillingMode,
         videoResolutionPrices,
+        videoReferencePrices,
         onChange,
       ]
     )
@@ -1173,6 +1208,7 @@ export const ModelRatioVisualEditor = memo(
       prevProps.billingExpr === nextProps.billingExpr &&
       prevProps.videoBillingMode === nextProps.videoBillingMode &&
       prevProps.videoResolutionPrices === nextProps.videoResolutionPrices &&
+      prevProps.videoReferencePrices === nextProps.videoReferencePrices &&
       prevProps.onChange === nextProps.onChange
     )
   }

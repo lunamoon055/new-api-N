@@ -187,7 +187,10 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		// submit the URL list as well and double-count or reorder references.
 		delete(copy, "audios")
 	}
-	if strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") || len(referenceAudioUploads(c)) > 0 {
+	if len(referenceVideoUploads(c)) > 0 {
+		delete(copy, "videos")
+	}
+	if strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") || len(referenceAudioUploads(c)) > 0 || len(referenceVideoUploads(c)) > 0 {
 		return buildMultipart(c, copy)
 	}
 	data, err := common.Marshal(copy)

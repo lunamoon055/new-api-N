@@ -77,6 +77,7 @@ export type PricingModel = {
   video_billing_mode?: 'dynamic' | 'fixed' | 'tiered_seconds' | 'tiered_request'
   price_configured?: boolean
   /** Per-resolution USD prices for tiered video billing. */
+  video_reference_prices?: Record<string, number>
   video_resolution_prices?: Record<string, number>
   /**
    * Optional model metadata fields. These are not yet returned by the backend
@@ -96,6 +97,7 @@ export type PricingModel = {
 
 /** Public model-specific request contract shared with relay validation. */
 export type IntegrationParameters = {
+  reference_video_billed_per_second?: boolean
   image_options?: {
     source: string
     sizes: string[]

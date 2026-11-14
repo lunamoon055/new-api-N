@@ -226,6 +226,10 @@ func resolvePricingIntegrationEndpoints(channelType int, modelName, originalMode
 	if channelType == constant.ChannelTypeV6K {
 		endpoint := makePricingMappedEndpoint(string(constant.EndpointTypeOpenAIVideo), common.EndpointInfo{Path: "/v1/videos", Method: "POST", QueryPath: "/v1/videos/{task_id}", QueryMethod: "GET"})
 		endpoint.Parameters = common.GetV6KVideoParameters(modelName)
+		if common.IsV6KSDVideoModel(modelName) {
+			endpoint.ExampleDuration, endpoint.ExampleResolution = 5, "720p"
+			endpoint.CapabilitySource = "upstream_documentation"
+		}
 		return []PricingMappedEndpoint{*endpoint}
 	}
 	if channelType == constant.ChannelTypeZongheng {

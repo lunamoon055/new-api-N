@@ -52,6 +52,21 @@ func TestV6KCapabilityNotesPreservePartialUnknownAndExplicitZero(t *testing.T) {
 	require.Zero(t, unsupported.MaxVideos)
 }
 
+func TestV6KSDCapabilityRefreshRetainsResolutionAndReferenceBilling(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodGet, r.Method)
+		require.Empty(t, r.Header.Get("Authorization"))
+		_, _ = w.Write([]byte(`{"success":true,"data":[{"model_name":"SD2.0","description":"9图3音3视/480-0.08/720-0.1/1080-0.35/4K-0.9/参考视频要钱","supported_endpoint_types":["openai-video"]},{"model_name":"SD2.5","description":"30图10音/480-0.18/720-0.3/1080-0.7/参考视频要钱","supported_endpoint_types":["openai-video"]}]}`))
+	}))
+	defer server.Close()
+	catalog, err := fetchPublicVideoCapabilityCatalog(context.Background(), server.URL, "", "v6k")
+	require.NoError(t, err)
+	for _, name := range []string{"SD2.0", "SD2.5"} {
+		require.Equal(t, common.GetV6KVideoParameters(name), catalog[name])
+		require.True(t, catalog[name].ReferenceVideoBilledPerSecond)
+	}
+}
+
 func TestChannelCapabilityRefreshTracksMappingsPersistsAndRetainsDataOnFailure(t *testing.T) {
 	db := capabilityTestDB(t)
 	fail := false

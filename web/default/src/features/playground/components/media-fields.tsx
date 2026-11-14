@@ -128,6 +128,13 @@ export function PlaygroundMediaFields(props: MediaFieldsProps) {
 
   return (
     <FieldGroup className='gap-3 px-1'>
+      {parameters.reference_video_billed_per_second && (
+        <FieldDescription>
+          {t(
+            'Reference videos are billed separately by their verified total duration at the selected output resolution. Generation and reference prices are listed in Model Square.'
+          )}
+        </FieldDescription>
+      )}
       {props.mode === 'image' && (
         <div className='flex flex-wrap gap-3'>
           {[
@@ -196,6 +203,15 @@ export function PlaygroundMediaFields(props: MediaFieldsProps) {
                   {reference.label} ·{' '}
                   {t('Maximum {{count}}', { count: reference.max })}
                 </FieldLabel>
+                {reference.kind === 'video' &&
+                  parameters.unknown_fields?.includes('max_videos') && (
+                    <FieldDescription>
+                      {t(
+                        'Upstream video limit is unconfirmed; this site accepts up to {{count}} references.',
+                        { count: reference.max }
+                      )}
+                    </FieldDescription>
+                  )}
                 <Textarea
                   id={`playground-${reference.key}`}
                   value={props.config[reference.key]}

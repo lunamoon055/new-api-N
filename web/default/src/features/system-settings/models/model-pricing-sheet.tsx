@@ -75,6 +75,7 @@ import {
   hasAnyVideoResolutionPrice,
   isVideoResolutionPricingMode,
   normalizeVideoBillingMode,
+  normalizeVideoResolutionPriceInput,
   type VideoBillingMode,
   type VideoResolutionPriceInput,
   type VideoResolutionPriceMap,
@@ -102,10 +103,7 @@ type ModelPricingFormValues = z.infer<
 >
 
 type PricingMode =
-  | 'per-token'
-  | 'per-request'
-  | 'tiered_expr'
-  | VideoResolutionPricingMode
+  'per-token' | 'per-request' | 'tiered_expr' | VideoResolutionPricingMode
 type LaneKey =
   | 'completion'
   | 'cache'
@@ -129,6 +127,7 @@ export type ModelRatioData = {
   requestRuleExpr?: string
   videoBillingMode?: VideoBillingMode
   videoResolutionPrices?: VideoResolutionPriceMap
+  videoReferencePrices?: VideoResolutionPriceMap
 }
 
 type ModelPricingSheetProps = {
@@ -340,7 +339,8 @@ function buildPreviewRows(
   promptPrice: string,
   lanePrices: Record<LaneKey, string>,
   laneEnabled: Record<LaneKey, boolean>,
-  t: (key: string) => string
+  t: (key: string) => string,
+  referencePrices: VideoResolutionPriceInput
 ): PreviewRow[] {
   if (mode === 'tiered_expr') {
     const effectiveExpr = combineBillingExpr(billingExpr, requestRuleExpr)
@@ -366,6 +366,15 @@ function buildPreviewRows(
         key: 'videoResolutionPrices',
         label: t('Video resolution prices'),
         value: formatResolutionPriceSummary(videoResolutionPrices, t),
+        multiline: true,
+      },
+      {
+        key: 'videoReferencePrices',
+        label: t('Reference video price per second'),
+        value:
+          mode === 'tiered_seconds'
+            ? formatResolutionPriceSummary(referencePrices, t)
+            : t('Not supported'),
         multiline: true,
       },
     ]
@@ -493,6 +502,10 @@ export function ModelPricingEditorPanel({
   const [laneEnabled, setLaneEnabled] = useState<Record<LaneKey, boolean>>({
     ...EMPTY_LANE_ENABLED,
   })
+  const [videoReferencePrices, setVideoReferencePrices] =
+    useState<VideoResolutionPriceInput>({
+      ...EMPTY_VIDEO_RESOLUTION_PRICE_INPUT,
+    })
   const [videoResolutionPrices, setVideoResolutionPrices] =
     useState<VideoResolutionPriceInput>({
       ...EMPTY_VIDEO_RESOLUTION_PRICE_INPUT,
@@ -546,6 +559,9 @@ export function ModelPricingEditorPanel({
       setVideoResolutionPrices(
         formatVideoResolutionPriceInput(editData.videoResolutionPrices)
       )
+      setVideoReferencePrices(
+        formatVideoResolutionPriceInput(editData.videoReferencePrices)
+      )
       setBillingExpr(editData.billingExpr || '')
       setRequestRuleExpr(editData.requestRuleExpr || '')
     } else {
@@ -563,6 +579,7 @@ export function ModelPricingEditorPanel({
       })
       setPricingMode('per-token')
       setVideoResolutionPrices({ ...EMPTY_VIDEO_RESOLUTION_PRICE_INPUT })
+      setVideoReferencePrices({ ...EMPTY_VIDEO_RESOLUTION_PRICE_INPUT })
       setBillingExpr('')
       setRequestRuleExpr('')
     }
@@ -720,7 +737,8 @@ export function ModelPricingEditorPanel({
         promptPrice,
         lanePrices,
         laneEnabled,
-        t
+        t,
+        videoReferencePrices
       ),
     [
       billingExpr,
@@ -732,6 +750,7 @@ export function ModelPricingEditorPanel({
       t,
       currentVideoBillingMode,
       videoResolutionPrices,
+      videoReferencePrices,
       watchedValues,
     ]
   )
@@ -837,7 +856,13 @@ export function ModelPricingEditorPanel({
         pricingMode,
         videoResolutionPrices
       )
-      onSave(data)
+      onSave({
+        ...data,
+        videoReferencePrices:
+          pricingMode === 'tiered_seconds'
+            ? normalizeVideoResolutionPriceInput(videoReferencePrices)
+            : {},
+      })
       form.reset()
       onCancel?.()
       return
@@ -1086,6 +1111,13 @@ export function ModelPricingEditorPanel({
                     mode='tiered_seconds'
                     prices={videoResolutionPrices}
                     onChange={handleVideoResolutionPriceChange}
+                    referencePrices={videoReferencePrices}
+                    onReferenceChange={(resolution, value) =>
+                      setVideoReferencePrices((current) => ({
+                        ...current,
+                        [resolution]: value,
+                      }))
+                    }
                   />
                 </TabsContent>
 
@@ -1255,6 +1287,11 @@ function PriceLane(props: {
 function VideoResolutionPricingFields(props: {
   mode: VideoResolutionPricingMode
   prices: VideoResolutionPriceInput
+  referencePrices?: VideoResolutionPriceInput
+  onReferenceChange?: (
+    resolution: keyof VideoResolutionPriceInput,
+    value: string
+  ) => void
   onChange: (resolution: keyof VideoResolutionPriceInput, value: string) => void
 }) {
   const { t } = useTranslation()
@@ -1292,9 +1329,36 @@ function VideoResolutionPricingFields(props: {
               />
               <InputGroupAddon align='inline-end'>{unitLabel}</InputGroupAddon>
             </InputGroup>
+            {props.mode === 'tiered_seconds' && props.referencePrices && (
+              <FieldGroup>
+                <FieldLabel>{t('Reference video price per second')}</FieldLabel>
+                <InputGroup>
+                  <InputGroupAddon>$</InputGroupAddon>
+                  <InputGroupInput
+                    aria-label={`${formatResolutionLabel(resolution)} ${t('Reference video price per second')}`}
+                    inputMode='decimal'
+                    value={props.referencePrices[resolution]}
+                    placeholder={t('Unconfigured')}
+                    onChange={(e) =>
+                      props.onReferenceChange?.(resolution, e.target.value)
+                    }
+                  />
+                  <InputGroupAddon align='inline-end'>
+                    {t('per second')}
+                  </InputGroupAddon>
+                </InputGroup>
+              </FieldGroup>
+            )}
           </Field>
         ))}
       </div>
+      {props.referencePrices && (
+        <FieldDescription>
+          {t(
+            'Total = generated seconds × generation rate + reference video seconds × reference rate. Empty means unconfigured; 0 explicitly means free. Reference duration is verified by the server.'
+          )}
+        </FieldDescription>
+      )}
     </FieldGroup>
   )
 }

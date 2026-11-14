@@ -62,7 +62,12 @@ export function formatCreationModelCost(
     }
     case 'tiered_seconds':
     case 'tiered_request':
-      return formatVideoResolutionTierCost(cost, t, mode, selectedResolution)
+      return (
+        formatVideoResolutionTierCost(cost, t, mode, selectedResolution) +
+        (Object.keys(cost.video_reference_prices ?? {}).length
+          ? ` · ${t('Reference videos billed separately')}`
+          : '')
+      )
   }
 }
 

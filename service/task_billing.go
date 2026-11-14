@@ -42,6 +42,10 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	other["is_task"] = true
 	other["request_path"] = c.Request.URL.Path
 	other["model_price"] = info.PriceData.ModelPrice
+	if bill := info.PriceData.VideoReferenceBilling; bill != nil {
+		other["video_reference_billing"] = bill
+		logContent = fmt.Sprintf("%s，生成 %.3f 秒 × $%.8f/秒 + 参考视频 %.3f 秒 × $%.8f/秒（%s，分组倍率 %.4f）", logContent, bill.GenerationSeconds, bill.GenerationPrice, bill.ReferenceSeconds, bill.ReferencePrice, bill.Resolution, info.PriceData.GroupRatioInfo.GroupRatio)
+	}
 	if info.PriceData.VideoBillingMode != "" {
 		other["video_billing_mode"] = info.PriceData.VideoBillingMode
 		other["applied_other_ratios"] = info.PriceData.AppliedOtherRatios
@@ -158,6 +162,9 @@ func taskAdjustQuota(ctx context.Context, task *model.Task, delta int) error {
 func taskBillingOther(task *model.Task) map[string]interface{} {
 	other := make(map[string]interface{})
 	if bc := task.PrivateData.BillingContext; bc != nil {
+		if bc.VideoReferenceBilling != nil {
+			other["video_reference_billing"] = bc.VideoReferenceBilling
+		}
 		other["model_price"] = bc.ModelPrice
 		if bc.ModelRatio > 0 {
 			other["model_ratio"] = bc.ModelRatio
@@ -329,6 +336,9 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 }
 
 func CalculateTaskQuotaByTokens(task *model.Task, totalTokens int) (int, string, bool) {
+	if task != nil && task.PrivateData.BillingContext != nil && task.PrivateData.BillingContext.VideoReferenceBilling != nil {
+		return 0, "", false
+	}
 	if totalTokens <= 0 {
 		return 0, "", false
 	}

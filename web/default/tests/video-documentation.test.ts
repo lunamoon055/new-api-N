@@ -6,6 +6,15 @@ import {
 } from '../src/features/pricing/lib/video-documentation'
 import { getModelEndpointPreset } from '../src/features/pricing/lib/model-endpoint-presets'
 
+test('verified paid video references remain available when only the upstream count is unknown', () => {
+  const p = {duration_field:'duration',resolution_field:'resolution',resolutions:['480p','720p','1080p'],video_field:'referenceVideos',max_images:0,max_audios:0,max_videos:10,unknown_fields:['durations','max_videos'],reference_video_billed_per_second:true}
+  expect(hasVideoReferenceMedia(p)).toBe(true)
+  const body = buildVideoDocumentationBody('Seedance2.5:(无视频参考)','demo',p,{includeReferenceMedia:true,resolution:'720p'})
+  expect(body.duration).toBe(5)
+  expect(body.resolution).toBe('720p')
+  expect(body.referenceVideos).toEqual(['https://cdn.example.com/reference.mp4'])
+})
+
 test('partially published capabilities retain confirmed references without inventing missing limits', () => {
   const p = {image_field:'referenceImages',video_field:'referenceVideos',audio_field:'referenceAudios',max_images:3,max_videos:10,max_audios:0,unknown_fields:['max_videos']}
   expect(isVideoCapabilityUnknown(p,'max_images')).toBe(false)

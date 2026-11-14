@@ -77,6 +77,27 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if err := validateModelCapabilities(upstreamModel, payload, uploadCounts); err != nil {
 		return invalid(err)
 	}
+	if common.IsV6KSDVideoModel(upstreamModel) || billing_setting.HasVideoReferencePrices(info.OriginModelName) {
+		if metadata, ok := payload["metadata"].(map[string]any); ok {
+			for _, key := range []string{"video_seconds", "reference_video_seconds", "reference_video_price", "generation_price", "billing_usage"} {
+				if _, exists := metadata[key]; exists {
+					return invalid(fmt.Errorf("metadata cannot override billing field %s", key))
+				}
+			}
+		}
+		resolution, _ := payload["resolution"].(string)
+		if resolution == "" {
+			return invalid(fmt.Errorf("resolution is required for resolution-tiered video pricing"))
+		}
+		resolution = billing_setting.NormalizeVideoResolution(resolution)
+		if resolution == "4k" {
+			resolution = "4K"
+		}
+		payload["resolution"] = resolution
+		if err := prepareReferenceVideoBilling(c, info, payload, uploadCounts["video"]); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_reference_video", http.StatusBadRequest)
+		}
+	}
 	seconds, _ := payload["seconds"].(int)
 	if seconds == 0 {
 		mode := billing_setting.GetVideoBillingMode(info.OriginModelName)
@@ -423,6 +444,20 @@ func buildMultipart(c *gin.Context, payload map[string]any) (io.Reader, error) {
 	for _, upload := range referenceAudioUploads(c) {
 		header := make(textproto.MIMEHeader)
 		header.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": "audio", "filename": upload.filename}))
+		header.Set("Content-Type", upload.contentType)
+		part, err := writer.CreatePart(header)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := part.Write(upload.data); err != nil {
+			return nil, err
+		}
+	}
+	// URL videos are measured then forwarded as these same immutable bytes,
+	// ahead of direct uploads to preserve the upstream's URL-before-file order.
+	for _, upload := range referenceVideoUploads(c) {
+		header := make(textproto.MIMEHeader)
+		header.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": "video", "filename": upload.filename}))
 		header.Set("Content-Type", upload.contentType)
 		part, err := writer.CreatePart(header)
 		if err != nil {

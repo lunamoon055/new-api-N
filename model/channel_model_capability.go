@@ -161,6 +161,12 @@ func applyPricingChannelCapability(endpoints []PricingMappedEndpoint, item Chann
 		if ep.Kind != "video" || ep.Path != "/v1/videos" {
 			continue
 		}
+		// These exact V6K contracts also drive validation and metered billing.
+		// Old note-only snapshots omit resolution tiers and paid video support;
+		// they must not hide the implemented, documented request contract.
+		if ep.CapabilitySource == "upstream_documentation" && common.IsV6KSDVideoModel(upstreamModel) {
+			continue
+		}
 		// Reuse implemented field names across renames, never old limits.
 		if ep.Parameters != nil {
 			parameters.DurationField, parameters.RatioField, parameters.ResolutionField = ep.Parameters.DurationField, ep.Parameters.RatioField, ep.Parameters.ResolutionField

@@ -43,6 +43,7 @@ func BuildDownstreamModelPricing(item model.Pricing, exchangeRate float64) Downs
 	result.BillingExpr = ""
 	result.VideoBillingMode = ""
 	result.VideoResolutionPrices = nil
+	result.VideoReferencePrices = nil
 	if result.BillingMode == billing_setting.BillingModeTieredExpr {
 		if expr, ok := billing_setting.GetBillingExpr(item.ModelName); ok && strings.TrimSpace(expr) != "" {
 			result.PriceConfigured = true
@@ -64,6 +65,12 @@ func BuildDownstreamModelPricing(item model.Pricing, exchangeRate float64) Downs
 			result.VideoResolutionPrices = make(map[string]float64, len(prices))
 			for resolution, price := range prices {
 				result.VideoResolutionPrices[resolution] = price * exchangeRate
+			}
+			if refs, ok := billing_setting.GetVideoReferencePrices(item.ModelName); ok {
+				result.VideoReferencePrices = make(map[string]float64, len(refs))
+				for resolution, price := range refs {
+					result.VideoReferencePrices[resolution] = price * exchangeRate
+				}
 			}
 			result.PriceConfigured = true
 			result.QuotaType = 1

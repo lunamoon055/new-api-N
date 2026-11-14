@@ -38,6 +38,7 @@ type Pricing struct {
 	BillingExpr            string                  `json:"billing_expr,omitempty"`
 	VideoBillingMode       string                  `json:"video_billing_mode,omitempty"`
 	VideoResolutionPrices  map[string]float64      `json:"video_resolution_prices,omitempty"`
+	VideoReferencePrices   map[string]float64      `json:"video_reference_prices,omitempty"`
 	PricingVersion         string                  `json:"pricing_version,omitempty"`
 }
 
@@ -391,10 +392,11 @@ func updatePricing() {
 				pricing.VideoBillingMode = videoBillingMode
 				pricing.VideoResolutionPrices = resolutionPrices
 			}
+			pricing.VideoReferencePrices, _ = billing_setting.GetVideoReferencePrices(model)
 		}
 		if v6kVideoModels[model] {
 			pricing.VideoBillingMode = billing_setting.GetVideoBillingMode(model)
-			pricing.PriceConfigured = common.GetPointer(findPrice || ratio_setting.HasConfiguredModelRatio(model) || pricing.BillingExpr != "")
+			pricing.PriceConfigured = common.GetPointer(findPrice || len(pricing.VideoResolutionPrices) > 0 || ratio_setting.HasConfiguredModelRatio(model) || pricing.BillingExpr != "")
 		}
 		pricingMap = append(pricingMap, pricing)
 	}

@@ -1,4 +1,4 @@
-import { getCodeSample, getImageOperationDocs, getModelDoc, getRequestParams, getResponseSample } from './model-data.js'
+import { getCodeSample, getImageOperationDocs, getModelDoc, getRequestParams, getResponseSample, getVideoReferenceBillingRows } from './model-data.js'
 
 export function getAllModelDocs(catalog, baseUrl) {
   const lines = [
@@ -20,6 +20,12 @@ export function getAllModelDocs(catalog, baseUrl) {
     lines.push(`## ${model.model_name}`, '')
     if (primaryDoc.parameters?.image_options) lines.push('支持文字生成与参考图编辑。标准能力与当前可用范围见下方参数表。', '')
     if (model.description) lines.push(primaryDoc.parameters?.image_options ? `管理员备注（旧渠道描述请以当前参数表为准）：${model.description}` : model.description, '')
+    const videoBillingRows = getVideoReferenceBillingRows(model)
+    if (videoBillingRows.length) {
+      lines.push('### 分辨率与参考视频计费', '', '总费用 =（生成秒数 × 生成单价 + 参考视频实际总秒数 × 参考单价）× 当前分组倍率。参考视频时长由服务器核验，失败退款包含附加费。', '', '| 输出分辨率 | USD / 生成秒 | USD / 参考视频秒 |', '| --- | --- | --- |')
+      for (const row of videoBillingRows) lines.push('| ' + row.join(' | ') + ' |')
+      lines.push('')
+    }
     const imageOperations = getImageOperationDocs(model, catalog.endpoints)
     const docs = imageOperations.length ? imageOperations : primaryDoc.alternatives?.length
       ? primaryDoc.alternatives.map((endpoint) => getModelDoc({...model, mapped_endpoints: [endpoint]}, catalog.endpoints))

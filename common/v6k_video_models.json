@@ -1346,5 +1346,88 @@
     "ratio_field": "ratio",
     "resolution_field": "resolution",
     "video_field": "videos"
+  },
+  "SD2.0": {
+    "durations": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "resolutions": [
+      "480p",
+      "720p",
+      "1080p",
+      "4k"
+    ],
+    "duration_field": "seconds",
+    "ratio_field": "ratio",
+    "resolution_field": "resolution",
+    "image_field": "images",
+    "video_field": "videos",
+    "audio_field": "audios",
+    "max_images": 9,
+    "max_audios": 3,
+    "max_videos": 3,
+    "max_video_size_mb": 32,
+    "validate_request": true,
+    "reference_video_billed_per_second": true
+  },
+  "SD2.5": {
+    "durations": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30
+    ],
+    "resolutions": [
+      "480p",
+      "720p",
+      "1080p"
+    ],
+    "duration_field": "seconds",
+    "ratio_field": "ratio",
+    "resolution_field": "resolution",
+    "image_field": "images",
+    "video_field": "videos",
+    "audio_field": "audios",
+    "max_images": 30,
+    "max_audios": 10,
+    "max_videos": 10,
+    "max_video_size_mb": 32,
+    "unknown_fields": [
+      "max_videos"
+    ],
+    "validate_request": true,
+    "reference_video_billed_per_second": true
   }
 }

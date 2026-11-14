@@ -18,6 +18,7 @@ const (
 	BillingExprField              = "billing_expr"
 	VideoBillingModeField         = "video_billing_mode"
 	VideoResolutionPricesField    = "video_resolution_prices"
+	VideoReferencePricesField     = "video_reference_prices"
 	VideoBillingModeDynamic       = "dynamic"
 	VideoBillingModeFixed         = "fixed"
 	VideoBillingModeTieredSeconds = "tiered_seconds"
@@ -33,6 +34,7 @@ type BillingSetting struct {
 	BillingExpr           map[string]string             `json:"billing_expr"`
 	VideoBillingMode      map[string]string             `json:"video_billing_mode"`
 	VideoResolutionPrices map[string]map[string]float64 `json:"video_resolution_prices"`
+	VideoReferencePrices  map[string]map[string]float64 `json:"video_reference_prices"`
 }
 
 var billingSetting = BillingSetting{
@@ -40,6 +42,7 @@ var billingSetting = BillingSetting{
 	BillingExpr:           make(map[string]string),
 	VideoBillingMode:      make(map[string]string),
 	VideoResolutionPrices: make(map[string]map[string]float64),
+	VideoReferencePrices:  make(map[string]map[string]float64),
 }
 
 var billingSettingMu sync.RWMutex
@@ -131,6 +134,38 @@ func GetVideoResolutionPrices(model string) (map[string]float64, bool) {
 	return copied, len(copied) > 0
 }
 
+// Reference-video prices are additive USD per input second at the selected
+// output resolution. A missing tier is not a free tier; explicit zero is free.
+func HasVideoReferencePrices(model string) bool {
+	billingSettingMu.RLock()
+	defer billingSettingMu.RUnlock()
+	return len(billingSetting.VideoReferencePrices[model]) > 0
+}
+
+func GetVideoReferencePrices(model string) (map[string]float64, bool) {
+	billingSettingMu.RLock()
+	defer billingSettingMu.RUnlock()
+	prices, ok := billingSetting.VideoReferencePrices[model]
+	if !ok {
+		return nil, false
+	}
+	copy := make(map[string]float64, len(prices))
+	for resolution, price := range prices {
+		copy[NormalizeVideoResolution(resolution)] = price
+	}
+	return copy, true
+}
+
+func GetVideoReferencePricesCopy() map[string]map[string]float64 {
+	billingSettingMu.RLock()
+	defer billingSettingMu.RUnlock()
+	result := make(map[string]map[string]float64, len(billingSetting.VideoReferencePrices))
+	for name, prices := range billingSetting.VideoReferencePrices {
+		result[name] = lo.Assign(prices)
+	}
+	return result
+}
+
 func GetBillingExpr(model string) (string, bool) {
 	billingSettingMu.RLock()
 	defer billingSettingMu.RUnlock()
@@ -183,6 +218,9 @@ func GetPricingSyncData(base map[string]any) map[string]any {
 	}
 	if prices := GetVideoResolutionPricesCopy(); len(prices) > 0 {
 		extra[VideoResolutionPricesField] = prices
+	}
+	if prices := GetVideoReferencePricesCopy(); len(prices) > 0 {
+		extra[VideoReferencePricesField] = prices
 	}
 	return lo.Assign(base, extra)
 }
@@ -303,6 +341,15 @@ func ApplyBillingConfig(modes, expressions map[string]string) {
 // Tiered mode and expression must be applied together through ApplyBillingConfig.
 func ApplyAuxiliaryConfig(key, value string) error {
 	switch key {
+	case VideoReferencePricesField:
+		prices, err := ParseVideoReferencePrices(value)
+		if err != nil {
+			return err
+		}
+		billingSettingMu.Lock()
+		billingSetting.VideoReferencePrices = prices
+		billingSettingMu.Unlock()
+		return nil
 	case VideoBillingModeField:
 		modes := make(map[string]string)
 		if err := common.UnmarshalJsonStr(value, &modes); err != nil {

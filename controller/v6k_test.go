@@ -42,7 +42,7 @@ func TestV6KZHNewModelsUseTheirOwnTestDefaults(t *testing.T) {
 	count := 0
 	for _, id := range common.V6KVideoModelIDs() {
 		p := common.GetV6KValidatedVideoParameters(id)
-		if p == nil {
+		if p == nil || len(p.Durations) == 0 {
 			continue
 		}
 		count++
@@ -54,7 +54,7 @@ func TestV6KZHNewModelsUseTheirOwnTestDefaults(t *testing.T) {
 		require.Equal(t, p.Resolutions[0], request.Resolution)
 		require.Equal(t, p.Ratios[0], request.Ratio)
 	}
-	require.Equal(t, 11, count)
+	require.Equal(t, 13, count) // 11 ZH additions plus the two configured SD models.
 }
 
 func TestV6KContentProxyKeepsTaskCredentialAndSupportsRangeAndHead(t *testing.T) {

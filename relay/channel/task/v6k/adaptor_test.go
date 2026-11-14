@@ -35,6 +35,27 @@ func testRequest(t *testing.T, payload string, baseURL string) (*gin.Context, *h
 	return c, w, info, a
 }
 
+func TestSDDurationRangesMatchTheConfiguredContract(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		maximum int
+	}{
+		{"SD2.0", 15},
+		{"SD2.5", 30},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for seconds := 5; seconds <= tc.maximum; seconds++ {
+				require.NoError(t, validateModelCapabilities(tc.name, map[string]any{"seconds": seconds}, nil))
+			}
+			for _, seconds := range []int{0, 4, tc.maximum + 1} {
+				require.Error(t, validateModelCapabilities(tc.name, map[string]any{"seconds": seconds}, nil))
+			}
+		})
+	}
+	// The change is isolated to the two exact V6K IDs.
+	require.NoError(t, validateModelCapabilities("custom-unpublished-model", map[string]any{"seconds": 16}, nil))
+}
+
 func TestUnifiedVideoLifecycleAndReferenceMetadata(t *testing.T) {
 	service.InitHttpClient()
 	var submitted map[string]any
@@ -268,8 +289,12 @@ func TestZHNewModelsForwardExactIDsAndMaximumPublishedReferences(t *testing.T) {
 		fmt.Fprint(w, "ID3audio-fixture")
 	})
 	for _, id := range common.V6KVideoModelIDs() {
+		// SD models use the metered multipart flow covered by reference_video_test.go.
+		if common.IsV6KSDVideoModel(id) {
+			continue
+		}
 		p := common.GetV6KValidatedVideoParameters(id)
-		if p == nil {
+		if p == nil || len(p.Durations) == 0 {
 			continue
 		}
 		t.Run(id, func(t *testing.T) {

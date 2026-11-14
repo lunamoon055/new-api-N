@@ -76,6 +76,7 @@ export type CreationModelCost = {
   request_price?: number
   request_quota?: number
   video_billing_mode?: 'dynamic' | 'fixed' | 'tiered_seconds' | 'tiered_request'
+  video_reference_prices?: Record<string, number>
   video_resolution_prices?: Record<string, number>
   video_resolution_quotas?: Record<string, number>
   group_ratio?: number

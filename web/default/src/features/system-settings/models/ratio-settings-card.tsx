@@ -148,6 +148,15 @@ const modelSchema = z.object({
       })
     }
   }),
+  VideoReferencePrices: z.string().superRefine((value, ctx) => {
+    const result = validateJsonString(value)
+    if (!result.valid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: result.message || 'Invalid JSON',
+      })
+    }
+  }),
 })
 
 const groupSchema = z.object({
@@ -273,6 +282,9 @@ export function RatioSettingsCard({
     VideoResolutionPrices: normalizeJsonString(
       modelDefaults.VideoResolutionPrices
     ),
+    VideoReferencePrices: normalizeJsonString(
+      modelDefaults.VideoReferencePrices
+    ),
   })
 
   const groupNormalizedDefaults = useRef({
@@ -307,6 +319,9 @@ export function RatioSettingsCard({
       VideoBillingMode: formatJsonForTextarea(modelDefaults.VideoBillingMode),
       VideoResolutionPrices: formatJsonForTextarea(
         modelDefaults.VideoResolutionPrices
+      ),
+      VideoReferencePrices: formatJsonForTextarea(
+        modelDefaults.VideoReferencePrices
       ),
     },
   })
@@ -346,6 +361,9 @@ export function RatioSettingsCard({
       VideoResolutionPrices: normalizeJsonString(
         modelDefaults.VideoResolutionPrices
       ),
+      VideoReferencePrices: normalizeJsonString(
+        modelDefaults.VideoReferencePrices
+      ),
     }
 
     modelForm.reset({
@@ -365,6 +383,9 @@ export function RatioSettingsCard({
       VideoBillingMode: formatJsonForTextarea(modelDefaults.VideoBillingMode),
       VideoResolutionPrices: formatJsonForTextarea(
         modelDefaults.VideoResolutionPrices
+      ),
+      VideoReferencePrices: formatJsonForTextarea(
+        modelDefaults.VideoReferencePrices
       ),
     })
   }, [modelDefaults, modelForm])
@@ -413,12 +434,17 @@ export function RatioSettingsCard({
         VideoResolutionPrices: normalizeJsonString(
           values.VideoResolutionPrices
         ),
+        VideoReferencePrices: normalizeJsonString(values.VideoReferencePrices),
       }
 
-      const apiKeyMap: Record<string, string> = {
-        VideoBillingMode: 'billing_setting.video_billing_mode',
-        VideoResolutionPrices: 'billing_setting.video_resolution_prices',
-      }
+      const videoKeys = [
+        'VideoBillingMode',
+        'VideoResolutionPrices',
+        'VideoReferencePrices',
+      ] as const
+      const videoChanged = videoKeys.some(
+        (key) => normalized[key] !== modelNormalizedDefaults.current[key]
+      )
 
       const billingChanged =
         normalized.BillingMode !==
@@ -427,7 +453,12 @@ export function RatioSettingsCard({
       const updates = (
         Object.keys(normalized) as Array<keyof ModelFormValues>
       ).filter((key) => {
-        if (key === 'BillingMode' || key === 'BillingExpr') return false
+        if (
+          key === 'BillingMode' ||
+          key === 'BillingExpr' ||
+          videoKeys.some((videoKey) => videoKey === key)
+        )
+          return false
         return normalized[key] !== modelNormalizedDefaults.current[key]
       })
 
@@ -441,9 +472,20 @@ export function RatioSettingsCard({
         })
       }
 
+      if (videoChanged) {
+        await updateOption.mutateAsync({
+          key: 'billing_setting.video_pricing_config',
+          value: JSON.stringify({
+            video_billing_mode: JSON.parse(normalized.VideoBillingMode),
+            video_resolution_prices: JSON.parse(
+              normalized.VideoResolutionPrices
+            ),
+            video_reference_prices: JSON.parse(normalized.VideoReferencePrices),
+          }),
+        })
+      }
       for (const key of updates) {
-        const apiKey = apiKeyMap[key as string] || (key as string)
-        await updateOption.mutateAsync({ key: apiKey, value: normalized[key] })
+        await updateOption.mutateAsync({ key, value: normalized[key] })
       }
     },
     [updateOption]
@@ -547,6 +589,8 @@ export function RatioSettingsCard({
           'billing_setting.video_billing_mode': modelDefaults.VideoBillingMode,
           'billing_setting.video_resolution_prices':
             modelDefaults.VideoResolutionPrices,
+          'billing_setting.video_reference_prices':
+            modelDefaults.VideoReferencePrices,
         }}
       />
     )

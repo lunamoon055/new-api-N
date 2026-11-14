@@ -73,6 +73,7 @@ type UpstreamRatioSyncProps = {
     'billing_setting.billing_expr': string
     'billing_setting.video_billing_mode': string
     'billing_setting.video_resolution_prices': string
+    'billing_setting.video_reference_prices': string
   }
 }
 

@@ -11,6 +11,41 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestV6KSDDocumentedMeteringContractSurvivesStaleCapabilityCache(t *testing.T) {
+	for _, name := range []string{"SD2.0", "SD2.5"} {
+		endpoints := getPricingIntegrationEndpointsForModels(constant.ChannelTypeV6K, name, "public-video", nil)
+		stale := ChannelModelCapability{ModelName: name, Parameters: `{"unknown_fields":["max_videos"],"max_images":30,"max_audios":10,"max_videos":0}`, Source: "upstream_catalog"}
+		actual := applyPricingChannelCapability(endpoints, stale, name)
+		require.Len(t, actual, 1)
+		require.True(t, actual[0].Parameters.ReferenceVideoBilledPerSecond)
+		require.True(t, actual[0].DocumentationFields.ReferenceVideoBilledPerSecond)
+		require.Equal(t, common.DefaultVideoAspectRatios(), actual[0].Parameters.Ratios)
+		require.Equal(t, "duration", actual[0].DocumentationFields.DurationField)
+		require.Equal(t, "upstream_documentation", actual[0].CapabilitySource)
+		require.Equal(t, 5, actual[0].ExampleDuration)
+		maximum := 15
+		if name == "SD2.5" {
+			maximum = 30
+		}
+		durations := make([]int, 0, maximum-4)
+		for seconds := 5; seconds <= maximum; seconds++ {
+			durations = append(durations, seconds)
+		}
+		require.Equal(t, durations, actual[0].Parameters.Durations)
+		require.Equal(t, durations, actual[0].DocumentationFields.Durations)
+		require.NotContains(t, actual[0].Parameters.UnknownFields, "durations")
+		require.NotContains(t, actual[0].DocumentationFields.UnknownFields, "durations")
+		if name == "SD2.0" {
+			require.Equal(t, []string{"480p", "720p", "1080p", "4k"}, actual[0].Parameters.Resolutions)
+			require.Equal(t, 3, actual[0].Parameters.MaxVideos)
+		} else {
+			require.Equal(t, []string{"480p", "720p", "1080p"}, actual[0].Parameters.Resolutions)
+			require.Equal(t, 10, actual[0].Parameters.MaxVideos)
+			require.Contains(t, actual[0].Parameters.UnknownFields, "max_videos")
+		}
+	}
+}
+
 func TestSuanliai005MappedAliasExposesVideoContract(t *testing.T) {
 	upstream := "005系列/sd2.5(30-10-10/5-30秒/720P)"
 	metadata := map[string]*Model{upstream: {Endpoints: `{"openai":{"path":"/v1/chat/completions"}}`}}
@@ -129,7 +164,7 @@ func TestV6KZHNewModelsExposeVideoContractsWithoutInternalFlags(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, string(encoded), "validate_request")
 	}
-	require.Equal(t, 11, count)
+	require.Equal(t, 13, count)
 }
 
 func TestEnabledAbilityIncludesChannelMapping(t *testing.T) {

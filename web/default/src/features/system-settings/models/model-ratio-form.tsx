@@ -48,6 +48,7 @@ type ModelFormValues = {
   BillingExpr: string
   VideoBillingMode: string
   VideoResolutionPrices: string
+  VideoReferencePrices: string
 }
 
 type ModelRatioFormProps = {
@@ -116,6 +117,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
               billingExpr={form.watch('BillingExpr')}
               videoBillingMode={form.watch('VideoBillingMode')}
               videoResolutionPrices={form.watch('VideoResolutionPrices')}
+              videoReferencePrices={form.watch('VideoReferencePrices')}
               onChange={(field, value) => {
                 const fieldMap: Record<string, keyof ModelFormValues> = {
                   'billing_setting.billing_mode': 'BillingMode',
@@ -123,6 +125,8 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   'billing_setting.video_billing_mode': 'VideoBillingMode',
                   'billing_setting.video_resolution_prices':
                     'VideoResolutionPrices',
+                  'billing_setting.video_reference_prices':
+                    'VideoReferencePrices',
                 }
                 const formField =
                   fieldMap[field] || (field as keyof ModelFormValues)
@@ -333,6 +337,25 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                   <FormDescription>
                     {t(
                       'JSON map of model → resolution price map for tiered video billing.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='VideoReferencePrices'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Reference video price per second')}</FormLabel>
+                  <FormControl>
+                    <Textarea rows={6} {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Total = generated seconds × generation rate + reference video seconds × reference rate.'
                     )}
                   </FormDescription>
                   <FormMessage />

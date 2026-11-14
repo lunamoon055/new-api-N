@@ -1,0 +1,173 @@
+{
+  "checked_at": "2026-11-13",
+  "sources": [
+    "https://www.v6k.top/docs?guide=unified&category=video",
+    "https://www.v6k.top/api/pricing",
+    "https://www.v6k.top/docs/openapi-video.json"
+  ],
+  "currency": "USD",
+  "upstream_usd_cny": 7.3,
+  "channel_id_local": 5,
+  "model_mapping": {
+    "Seedance2.0:(无视频参考)": "SD2.0",
+    "Seedance2.5:(无视频参考)": "SD2.5"
+  },
+  "option_updates": {
+    "ModelPrice": {
+      "Seedance2.0:(无视频参考)": 0.021917808219,
+      "Seedance2.5:(无视频参考)": 0.041095890411
+    },
+    "billing_setting.billing_mode": {
+      "Seedance2.0:(无视频参考)": "ratio",
+      "Seedance2.5:(无视频参考)": "ratio"
+    },
+    "billing_setting.video_billing_mode": {
+      "Seedance2.0:(无视频参考)": "tiered_seconds",
+      "Seedance2.5:(无视频参考)": "tiered_seconds"
+    },
+    "billing_setting.video_resolution_prices": {
+      "Seedance2.0:(无视频参考)": {
+        "480p": 0.013698630137,
+        "720p": 0.021917808219,
+        "1080p": 0.047945205479,
+        "4k": 0.123287671233
+      },
+      "Seedance2.5:(无视频参考)": {
+        "480p": 0.024657534247,
+        "720p": 0.041095890411,
+        "1080p": 0.095890410959
+      }
+    },
+    "billing_setting.video_reference_prices": {
+      "Seedance2.0:(无视频参考)": {
+        "480p": 0.013698630137,
+        "720p": 0.021917808219,
+        "1080p": 0.047945205479,
+        "4k": 0.123287671233
+      },
+      "Seedance2.5:(无视频参考)": {
+        "480p": 0.024657534247,
+        "720p": 0.041095890411,
+        "1080p": 0.095890410959
+      }
+    }
+  },
+  "model_metadata": {
+    "Seedance2.0:(无视频参考)": {
+      "description": "V6K SD2.0：9图/3音/3视频；480p、720p、1080p、4K。公开名称沿用旧 ID；基础价不含参考视频，参考视频按核验后的实际总时长另计费。时长范围以上游校验为准。",
+      "tags": "视频模型",
+      "endpoints": "{\"openai-video\":{\"path\":\"/v1/videos\",\"method\":\"POST\",\"query_path\":\"/v1/videos/{task_id}\",\"query_method\":\"GET\"}}"
+    },
+    "Seedance2.5:(无视频参考)": {
+      "description": "V6K SD2.5：30图/10音；480p、720p、1080p。支持收费的视频参考，上游视频数量上限未公布，本站最多10段。公开名称沿用旧 ID；基础价不含参考视频，参考视频按实际总时长另计费。",
+      "tags": "视频模型",
+      "endpoints": "{\"openai-video\":{\"path\":\"/v1/videos\",\"method\":\"POST\",\"query_path\":\"/v1/videos/{task_id}\",\"query_method\":\"GET\"}}"
+    }
+  },
+  "upstream_catalog": {
+    "SD2.0": {
+      "model_name": "SD2.0",
+      "description": "9图3音3视/480-0.08/720-0.1/1080-0.35/4K-0.9/原生不卡脸参考视频要钱",
+      "tags": "9图3音3视/480-0.08/720-0.1/1080-0.35/4K-0.9/原生不卡脸参考视频要钱",
+      "display_category": "video",
+      "quota_type": 0,
+      "model_ratio": 37.5,
+      "model_price": 0,
+      "owner_by": "v6k",
+      "completion_ratio": 1,
+      "enable_groups": [
+        "default"
+      ],
+      "supported_endpoint_types": [
+        "openai-video"
+      ],
+      "billing_mode": "tiered_expr",
+      "billing_expr": "u(\"resolution\") == \"480p\" ? tier(\"480p\", u(\"reference_video_seconds\") * 0.013698630137 + u(\"video_seconds\") * 0.013698630137) : u(\"resolution\") == \"720p\" ? tier(\"720p\", u(\"reference_video_seconds\") * 0.021917808219 + u(\"video_seconds\") * 0.021917808219) : u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"reference_video_seconds\") * 0.047945205479 + u(\"video_seconds\") * 0.047945205479) : tier(\"4K\", u(\"reference_video_seconds\") * 0.123287671233 + u(\"video_seconds\") * 0.123287671233)",
+      "billing_usage_schema": {
+        "reference_video_seconds": {
+          "type": "number",
+          "unit": "second",
+          "description": {
+            "en": "Reference video unit price",
+            "zh": "参考视频单价"
+          }
+        },
+        "resolution": {
+          "enum": [
+            "480p",
+            "720p",
+            "1080p",
+            "4K"
+          ],
+          "description": {
+            "en": "Output video resolution",
+            "zh": "输出视频分辨率"
+          }
+        },
+        "video_seconds": {
+          "type": "number",
+          "unit": "second",
+          "description": {
+            "en": "Video generation unit price",
+            "zh": "生成视频单价"
+          }
+        }
+      }
+    },
+    "SD2.5": {
+      "model_name": "SD2.5",
+      "description": "30图10音/480-0.18/720-0.3/1080-0.7/原生不卡脸 参考视频要钱",
+      "tags": "30图10音/480-0.18/720-0.3/1080-0.7/原生不卡脸 参考视频要钱",
+      "display_category": "video",
+      "quota_type": 0,
+      "model_ratio": 37.5,
+      "model_price": 0,
+      "owner_by": "v6k",
+      "completion_ratio": 1,
+      "enable_groups": [
+        "default"
+      ],
+      "supported_endpoint_types": [
+        "openai-video"
+      ],
+      "billing_mode": "tiered_expr",
+      "billing_expr": "u(\"resolution\") == \"480p\" ? tier(\"480p\", u(\"reference_video_seconds\") * 0.024657534247 + u(\"video_seconds\") * 0.024657534247) : u(\"resolution\") == \"720p\" ? tier(\"720p\", u(\"reference_video_seconds\") * 0.041095890411 + u(\"video_seconds\") * 0.041095890411) : u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"reference_video_seconds\") * 0.095890410959 + u(\"video_seconds\") * 0.095890410959) : tier(\"4K\", u(\"reference_video_seconds\") * 0 + u(\"video_seconds\") * 0)",
+      "billing_usage_schema": {
+        "reference_video_seconds": {
+          "type": "number",
+          "unit": "second",
+          "description": {
+            "en": "Reference video unit price",
+            "zh": "参考视频单价"
+          }
+        },
+        "resolution": {
+          "enum": [
+            "480p",
+            "720p",
+            "1080p",
+            "4K"
+          ],
+          "description": {
+            "en": "Output video resolution",
+            "zh": "输出视频分辨率"
+          }
+        },
+        "video_seconds": {
+          "type": "number",
+          "unit": "second",
+          "description": {
+            "en": "Video generation unit price",
+            "zh": "生成视频单价"
+          }
+        }
+      }
+    }
+  },
+  "notes": [
+    "Merge these exact keys into current configuration; preserve all other models and global currency settings.",
+    "The SD2.0 expression and pricing detail table supersede the conflicting note prices.",
+    "SD2.5 4K zero fallback is not configured as a free tier.",
+    "Reference price and generation price are independently editable."
+  ]
+}

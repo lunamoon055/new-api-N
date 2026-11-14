@@ -8,6 +8,7 @@ import (
 
 // UI hints transcribed from V6K's public video catalog on 2026-10-24,
 // with the explicitly selected ZH additions verified on 2026-10-26.
+// SD2.0/SD2.5 duration ranges follow operator policy confirmed on 2026-11-13.
 // Empty duration/resolution ranges remain unpublished. Missing ratios use the
 // site's full ratio menu. Runtime model authorization remains with the upstream API.
 //
@@ -24,6 +25,8 @@ var v6kVideoParameters = func() map[string]*v6kVideoSpec {
 	_ = Unmarshal(v6kVideoSnapshot, &values)
 	return values
 }()
+
+func IsV6KSDVideoModel(name string) bool { return name == "SD2.0" || name == "SD2.5" }
 
 func GetV6KVideoParameters(modelName string) *ModelIntegrationParameters {
 	if parameters := v6kVideoParameters[strings.TrimSpace(modelName)]; parameters != nil {

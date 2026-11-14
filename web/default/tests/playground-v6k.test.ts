@@ -49,6 +49,50 @@ const info: PlaygroundModelInfo = {
   endpoints: {},
 }
 
+it('V6K SD aliases share configured duration ranges, full ratios and billed references', () => {
+  const specs = JSON.parse(
+    readFileSync(
+      new URL('../../../common/v6k_video_models.json', import.meta.url),
+      'utf8'
+    )
+  )
+  for (const upstream of ['SD2.0', 'SD2.5']) {
+    const name =
+      upstream === 'SD2.0'
+        ? 'Seedance2.0:(无视频参考)'
+        : 'Seedance2.5:(无视频参考)'
+    const selected = structuredClone(info)
+    selected.model.model_name = name
+    selected.model.mapped_endpoints![0].parameters = specs[upstream]
+    const choices = getPlaygroundVideoChoices(name, selected)
+    expect(choices.manualDuration).toBe(false)
+    expect(choices.durations).toEqual(
+      Array.from({ length: upstream === 'SD2.0' ? 11 : 26 }, (_, index) =>
+        String(index + 5)
+      )
+    )
+    expect(choices.aspectRatios).toHaveLength(8)
+    expect(choices.resolutions.includes('4k')).toBe(upstream === 'SD2.0')
+    const request = buildPlaygroundMediaRequest(
+      name,
+      [message],
+      'video',
+      'auto',
+      {},
+      { duration: '5', aspectRatio: '21:9', resolution: '720p' },
+      selected,
+      { videos: 'https://cdn.example.com/ref.mp4' }
+    )
+    expect(request).toMatchObject({
+      model: name,
+      seconds: 5,
+      ratio: '21:9',
+      resolution: '720p',
+      videos: ['https://cdn.example.com/ref.mp4'],
+    })
+  }
+})
+
 describe('V6K unified video request', () => {
   it('uses the documented fixed duration and seconds field', () => {
     const selection = { duration: '5', aspectRatio: '16:9', resolution: '720p' }
@@ -101,26 +145,62 @@ describe('V6K unified video request', () => {
   })
 })
 
-
 describe('ZH new video model catalog contracts', () => {
-  type Parameters = NonNullable<NonNullable<PlaygroundModelInfo['model']['mapped_endpoints']>[number]['parameters']>
-  const parameters = JSON.parse(readFileSync(new URL('../../../common/v6k_video_models.json', import.meta.url), 'utf8')) as Record<string, Parameters>
+  type Parameters = NonNullable<
+    NonNullable<
+      PlaygroundModelInfo['model']['mapped_endpoints']
+    >[number]['parameters']
+  >
+  const parameters = JSON.parse(
+    readFileSync(
+      new URL('../../../common/v6k_video_models.json', import.meta.url),
+      'utf8'
+    )
+  ) as Record<string, Parameters>
   for (const [name, duration, resolution] of [
-    ['Cseadanco2.0-1','15','720p'], ['Cseadanco2.0-fast','15','720p'], ['Cseadanco2.0-mini','15','720p'],
-    ['Cseadanco2.5-720','30','720p'], ['TTTseadanco2.5/480','30','480p'], ['TTTseadanco2.5/720','30','720p'],
-    ['XXseadanco2.5-1080','30','1080p'], ['XXseadanco2.5-480','30','480p'], ['XXseadanco2.5-720','30','720p'],
-    ['dola2.5','15','720p'], ['wan3.M','30','480p'],
+    ['Cseadanco2.0-1', '15', '720p'],
+    ['Cseadanco2.0-fast', '15', '720p'],
+    ['Cseadanco2.0-mini', '15', '720p'],
+    ['Cseadanco2.5-720', '30', '720p'],
+    ['TTTseadanco2.5/480', '30', '480p'],
+    ['TTTseadanco2.5/720', '30', '720p'],
+    ['XXseadanco2.5-1080', '30', '1080p'],
+    ['XXseadanco2.5-480', '30', '480p'],
+    ['XXseadanco2.5-720', '30', '720p'],
+    ['dola2.5', '15', '720p'],
+    ['wan3.M', '30', '480p'],
   ]) {
     it(`uses the exact contract for ${name}`, () => {
       const selected = structuredClone(info)
       selected.model.model_name = name
       selected.model.mapped_endpoints![0].parameters = parameters[name]
-      const choices = getPlaygroundVideoChoices(name,selected)
+      const choices = getPlaygroundVideoChoices(name, selected)
       expect(choices.durations).toContain(duration)
       expect(choices.resolutions).toContain(resolution)
-      expect(choices.aspectRatios).toEqual(['16:9', '9:16', '1:1', '4:3', '3:4', '2:3', '3:2', '21:9'])
-      const request = buildPlaygroundMediaRequest(name,[message],'video','auto',{}, { duration, aspectRatio:'16:9',resolution },selected)
-      expect(request).toMatchObject({ model:name,seconds:Number(duration),resolution })
+      expect(choices.aspectRatios).toEqual([
+        '16:9',
+        '9:16',
+        '1:1',
+        '4:3',
+        '3:4',
+        '2:3',
+        '3:2',
+        '21:9',
+      ])
+      const request = buildPlaygroundMediaRequest(
+        name,
+        [message],
+        'video',
+        'auto',
+        {},
+        { duration, aspectRatio: '16:9', resolution },
+        selected
+      )
+      expect(request).toMatchObject({
+        model: name,
+        seconds: Number(duration),
+        resolution,
+      })
       expect(request).toHaveProperty('ratio', '16:9')
       expect(request).not.toHaveProperty('duration')
     })

@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
@@ -44,6 +45,11 @@ func withDownstreamPrices(t *testing.T) {
 
 func TestDownstreamPricingUnitsAndCurrency(t *testing.T) {
 	withDownstreamPrices(t)
+	previousReferencePrices, _ := common.Marshal(billing_setting.GetVideoReferencePricesCopy())
+	t.Cleanup(func() {
+		require.NoError(t, billing_setting.ApplyAuxiliaryConfig(billing_setting.VideoReferencePricesField, string(previousReferencePrices)))
+	})
+	require.NoError(t, billing_setting.ApplyAuxiliaryConfig(billing_setting.VideoReferencePricesField, `{"zz-price-tier":{"720p":0.1,"1080p":0}}`))
 	video := []constant.EndpointType{constant.EndpointTypeOpenAIVideo}
 	for _, tc := range []struct {
 		name       string
@@ -79,6 +85,9 @@ func TestDownstreamPricingUnitsAndCurrency(t *testing.T) {
 			if tc.name == "zz-price-tier" {
 				require.InDelta(t, 1.4, got.VideoResolutionPrices["720p"], 1e-12)
 				require.InDelta(t, 2.8, got.VideoResolutionPrices["1080p"], 1e-12)
+				require.InDelta(t, 0.7, got.VideoReferencePrices["720p"], 1e-12)
+				require.Contains(t, got.VideoReferencePrices, "1080p")
+				require.Zero(t, got.VideoReferencePrices["1080p"])
 			}
 			if tc.name == "zz-price-image-tier" {
 				require.Contains(t, got.VideoResolutionPrices, "1k")

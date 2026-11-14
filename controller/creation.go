@@ -988,6 +988,7 @@ func buildCreationModelCost(item model.Pricing, groupRatio float64) *dto.Creatio
 				BillingMode:           videoBillingMode,
 				VideoBillingMode:      videoBillingMode,
 				VideoResolutionPrices: buildCreationVideoResolutionPrices(prices, groupRatio),
+				VideoReferencePrices:  buildCreationVideoResolutionPrices(item.VideoReferencePrices, groupRatio),
 				VideoResolutionQuotas: buildCreationVideoResolutionQuotas(prices, groupRatio),
 				GroupRatio:            groupRatio,
 			}

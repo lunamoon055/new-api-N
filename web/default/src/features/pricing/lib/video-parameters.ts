@@ -50,6 +50,7 @@ function durationParameter(
       name: p.duration_field,
       type: p.duration_field === 'seconds' ? 'string' : 'integer',
       availability: 'unconfirmed',
+      required: p.reference_video_billed_per_second || undefined,
       descriptionKey: 'Video length in seconds',
     }
   }
@@ -58,6 +59,7 @@ function durationParameter(
   return {
     name: p.duration_field,
     type: p.duration_field === 'seconds' ? 'string' : 'integer',
+    required: p.reference_video_billed_per_second || undefined,
     ...(contiguous && values.length > 2
       ? { range: `${values[0]} ~ ${values[values.length - 1]}` }
       : { enumValues: values.map(String) }),
@@ -107,6 +109,7 @@ export function buildVideoSupportedParameters(
     parameters.push({
       name: p.resolution_field,
       type: 'string',
+      required: p.reference_video_billed_per_second || undefined,
       enumValues: resolutions,
       ...(!resolutions.length ? { availability: 'unconfirmed' as const } : {}),
       descriptionKey: 'Output video resolution',
@@ -143,7 +146,14 @@ export function buildVideoSupportedParameters(
     if (!item.field) continue
     const notes: NonNullable<SupportedParameter['notes']> = []
     let availability: SupportedParameter['availability']
-    if (isVideoCapabilityUnknown(p, item.capability)) {
+    const paidVideo =
+      item.capability === 'max_videos' && p.reference_video_billed_per_second
+    if (paidVideo && isVideoCapabilityUnknown(p, item.capability)) {
+      notes.push({
+        key: 'Site limit: {{count}} videos',
+        values: { count: item.max },
+      })
+    } else if (isVideoCapabilityUnknown(p, item.capability)) {
       availability = 'unconfirmed'
     } else if (item.max <= 0) {
       availability = 'unsupported'
@@ -151,6 +161,11 @@ export function buildVideoSupportedParameters(
       notes.push({
         key: 'At most {{count}} references.',
         values: { count: item.max },
+      })
+    }
+    if (paidVideo) {
+      notes.push({
+        key: 'Reference videos are billed separately by their verified total duration at the selected output resolution. Generation and reference prices are listed in Model Square.',
       })
     }
     if (item.size && item.size > 0) {

@@ -228,6 +228,16 @@ export function getVideoResolutionTierPriceEntries(
   })
 }
 
+export function getVideoReferenceTierPriceEntries(
+  model: PricingModel,
+  options: VideoResolutionTierPriceOptions = {}
+) {
+  return getVideoResolutionTierPriceEntries(
+    { ...model, video_resolution_prices: model.video_reference_prices ?? {} },
+    options
+  )
+}
+
 /**
  * Apply recharge rate to price
  *

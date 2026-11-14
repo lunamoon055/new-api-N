@@ -67,6 +67,7 @@ import {
   formatGroupPrice,
   getMediaPriceShortUnitLabelKey,
   getVideoResolutionTierPriceEntries,
+  getVideoReferenceTierPriceEntries,
   getVideoResolutionTierShortUnitLabelKey,
   isVideoResolutionTierModel,
 } from '../lib/price'
@@ -411,6 +412,15 @@ function PriceSection(props: {
       usdExchangeRate: props.usdExchangeRate,
       groupRatioMultiplier: 1,
     })
+    const videoReferenceEntries = getVideoReferenceTierPriceEntries(
+      props.model,
+      {
+        showWithRecharge: props.showRechargePrice,
+        priceRate: props.priceRate,
+        usdExchangeRate: props.usdExchangeRate,
+        groupRatioMultiplier: 1,
+      }
+    )
 
     return (
       <section>
@@ -430,9 +440,28 @@ function PriceSection(props: {
                   /{videoTierUnit}
                 </span>
               </div>
+              {videoReferenceEntries.find(
+                (item) => item.resolution === entry.resolution
+              ) && (
+                <p className='text-muted-foreground mt-2 text-xs'>
+                  {t('Reference video price per second')}:{' '}
+                  {
+                    videoReferenceEntries.find(
+                      (item) => item.resolution === entry.resolution
+                    )?.formatted
+                  }
+                </p>
+              )}
             </div>
           ))}
         </div>
+        {videoReferenceEntries.length > 0 && (
+          <p className='text-muted-foreground mt-2 text-xs'>
+            {t(
+              'Total = generated seconds × generation rate + reference video seconds × reference rate.'
+            )}
+          </p>
+        )}
       </section>
     )
   }
@@ -764,9 +793,17 @@ function GroupPricingSection(props: {
             </TableHeader>
             <TableBody>
               {availableGroups.map((group) => {
-                const ratio = props.groupRatio[group] || 1
+                const ratio = props.groupRatio[group] ?? 1
                 const priceByResolution = new Map(
                   getVideoResolutionTierPriceEntries(props.model, {
+                    showWithRecharge: showRechargePrice,
+                    priceRate: props.priceRate,
+                    usdExchangeRate: props.usdExchangeRate,
+                    groupRatioMultiplier: ratio,
+                  }).map((entry) => [entry.resolution, entry.formatted])
+                )
+                const referenceByResolution = new Map(
+                  getVideoReferenceTierPriceEntries(props.model, {
                     showWithRecharge: showRechargePrice,
                     priceRate: props.priceRate,
                     usdExchangeRate: props.usdExchangeRate,
@@ -790,6 +827,13 @@ function GroupPricingSection(props: {
                         {priceByResolution.get(entry.resolution)
                           ? `${priceByResolution.get(entry.resolution)}/${videoTierUnit}`
                           : '-'}
+                        {referenceByResolution.has(entry.resolution) && (
+                          <div className='text-muted-foreground text-xs'>
+                            {t('Reference video')}:{' '}
+                            {referenceByResolution.get(entry.resolution)}/
+                            {t('seconds')}
+                          </div>
+                        )}
                       </TableCell>
                     ))}
                   </TableRow>

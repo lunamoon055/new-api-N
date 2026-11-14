@@ -8,9 +8,39 @@ import (
 
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestReferenceVideoSurchargeIsPersistedAndRefundedExactlyOnce(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+	seedUser(t, 141, 7000)
+	seedToken(t, 141, 141, "sk-reference-refund-fixture", 2000)
+	seedChannel(t, 141)
+	task := makeTask(141, 141, 3000, 141, BillingSourceWallet, 0)
+	task.PrivateData.BillingContext.VideoReferenceBilling = &types.VideoReferenceBilling{Resolution: "720p", GenerationSeconds: 5, GenerationPrice: 0.0004, ReferenceSeconds: 20, ReferencePrice: 0.0002}
+	task.PrivateData.BillingContext.PerCallBilling = true
+	task.Status = model.TaskStatusFailure
+	task.FailReason = "fixture upstream failed"
+	persistBillingTask(t, task, "task_reference_refund", model.TaskBillingStatusFinalizePending, 0)
+	stale := reloadBillingTask(t, task.ID)
+	applied, err := ApplyPendingTaskBilling(ctx, task, task.FailReason)
+	require.NoError(t, err)
+	require.True(t, applied)
+	applied, err = ApplyPendingTaskBilling(ctx, stale, stale.FailReason)
+	require.NoError(t, err)
+	require.False(t, applied)
+	saved := reloadBillingTask(t, task.ID)
+	require.Equal(t, model.TaskBillingStatusRefunded, saved.BillingStatus)
+	require.Zero(t, saved.Quota)
+	require.Equal(t, 10000, getUserQuota(t, 141))
+	require.Equal(t, 5000, getTokenRemainQuota(t, 141))
+	require.EqualValues(t, 1, countLogs(t))
+	require.Equal(t, 20.0, saved.PrivateData.BillingContext.VideoReferenceBilling.ReferenceSeconds)
+	require.Contains(t, taskBillingOther(saved), "video_reference_billing")
+}
 
 func persistBillingTask(t *testing.T, task *model.Task, taskID string, billingStatus model.TaskBillingStatus, targetQuota int) {
 	t.Helper()

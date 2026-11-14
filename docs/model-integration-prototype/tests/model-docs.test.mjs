@@ -6,6 +6,25 @@ import { getAllModelDocs } from '../src/all-model-docs.js'
 import { getCatalogHttpError, getPricingRequestHeaders } from '../src/catalog-auth.js'
 import { getCodeSample, getImageOperationDocs, getModelDoc, getModelKind, getRequestBody, getRequestParams } from '../src/model-data.js'
 
+test('V6K SD aliases keep public fields and publish separate generation and reference-second rates',()=>{
+  const patch=JSON.parse(readFileSync(new URL('../../v6k-sd-models-2026-11-13.json',import.meta.url),'utf8'))
+  const specs=JSON.parse(readFileSync(new URL('../../../common/v6k_video_models.json',import.meta.url),'utf8'))
+  for(const [name,upstream] of Object.entries(patch.model_mapping)){
+    const live=specs[upstream]
+    const parameters={...live,duration_field:'duration',ratio_field:'ratio',ratios:['16:9','9:16'],image_field:'referenceImages',video_field:'referenceVideos',audio_field:'referenceAudios'}
+    const model={model_name:name,video_resolution_prices:patch.option_updates['billing_setting.video_resolution_prices'][name],video_reference_prices:patch.option_updates['billing_setting.video_reference_prices'][name],mapped_endpoints:[{type:'openai-video',kind:'video',path:'/v1/videos',example_duration:5,example_resolution:'720p',parameters:live,documentation_fields:parameters}]}
+    const doc=getModelDoc(model,{})
+    assert.equal(getRequestBody(model,doc).model,name);assert.equal(getRequestBody(model,doc).duration,5)
+    const rows=getRequestParams(doc);assert.equal(rows.find(row=>row[0]==='resolution')[2],'是');assert.match(rows.find(row=>row[0]==='referenceVideos')[3],/实际总时长另计/)
+    const copied=getAllModelDocs({models:[model],endpoints:{}},'https://gateway.example')
+    assert.match(copied,/USD \/ 参考视频秒/);assert.match(copied,/失败退款包含附加费/)
+    if(upstream==='SD2.5'){
+      assert.equal(model.video_resolution_prices['4k'],undefined)
+      assert.match(rows.find(row=>row[0]==='referenceVideos')[3],/支持视频参考，上游数量上限未公布/)
+    }
+  }
+})
+
 test('unknown supplier image metadata retains conservative fallback and complementary editing', () => {
   for (const name of ['gpt-image-2','gpt-image-2.5-flare','gpt-image-2.5-sunburst']) {
     const model = {model_name:name,mapped_endpoints:[{type:'image-generation',kind:'image',method:'POST',path:'/v1/images/generations',parameters:{capabilities_unknown:true,max_images:0,max_videos:0,max_audios:0}}]}

@@ -4,6 +4,12 @@
 
 export const standardImageOverview = '支持文字生成与参考图编辑。OpenAI 标准能力与当前可用渠道参数见下表；比例、分辨率预设和自定义尺寸均可使用。'
 
+export function getVideoReferenceBillingRows(model) {
+  if (!Object.keys(model.video_reference_prices || {}).length) return []
+  const order = ['480p', '720p', '1080p', '1k', '2k', '4k']
+  return Object.entries(model.video_resolution_prices || {}).sort(([a], [b]) => order.indexOf(a.toLowerCase()) - order.indexOf(b.toLowerCase())).map(([resolution, price]) => [resolution, String(price), Object.hasOwn(model.video_reference_prices, resolution) ? String(model.video_reference_prices[resolution]) : '未配置'])
+}
+
 const imageNames = new Set([
   'gpt-image-2',
   'gpt-image-2.5-flare',
@@ -175,6 +181,7 @@ export function getRequestBody(model, doc) {
     const body = { model: model.model_name, prompt: doc.kind === 'image' ? '一张简洁的海边日落电影海报' : '海边日落时，人物缓缓走向镜头，画面稳定' }
     if (doc.kind === 'image') body.n = 1
     if (p.duration_field && p.durations?.length) body[p.duration_field] = p.durations.includes(doc.details?.duration) ? doc.details.duration : p.durations[0]
+    if (p.duration_field && p.reference_video_billed_per_second && !p.durations?.length) body[p.duration_field] = doc.details?.duration || 5
     if (p.ratio_field && p.ratios?.length) body[p.ratio_field] = p.ratios[0]
     if (p.resolution_field && p.resolutions?.length) body[p.resolution_field] = p.request_resolution || p.resolutions[0]
     if (p.min_images && p.image_field && !isUnknown(p, 'max_images')) body[p.image_field] = isFileImageEdit(doc) ? ['reference.png'] : p.image_field.endsWith('_url') ? 'https://cdn.example.com/reference.jpg' : ['https://cdn.example.com/reference.jpg']
@@ -245,10 +252,10 @@ export function getRequestParams(doc) {
       const values = p.durations || []
       const contiguous = values.length > 1 && values.every((value, index) => index === 0 || value === values[index - 1] + 1)
       const range = contiguous ? `${values[0]}–${values.at(-1)}` : values.join('、')
-      rows.push([p.duration_field, 'integer', '按模型', range ? `支持时长：${range} 秒` : '时长范围未公布，请以该模型备注和上游校验为准'])
+      rows.push([p.duration_field, 'integer', p.reference_video_billed_per_second ? '是' : '按模型', range ? `支持时长：${range} 秒` : '时长范围未公布，请以该模型备注和上游校验为准；5 秒仅为请求格式示例'])
     }
     if (p.ratio_field) rows.push([p.ratio_field, 'string', doc.kind === 'video' ? '是' : '否', p.ratios?.length ? `支持比例：${p.ratios.join('、')}` : '请显式填写比例，例如 16:9'])
-    if (p.resolution_field) rows.push([p.resolution_field, 'string', '按模型', p.resolutions?.length ? `支持分辨率：${p.resolutions.join('、')}` : '未确认：上游未公布分辨率范围'])
+    if (p.resolution_field) rows.push([p.resolution_field, 'string', p.reference_video_billed_per_second ? '是' : '按模型', p.resolutions?.length ? `支持分辨率：${p.resolutions.join('、')}` : '未确认：上游未公布分辨率范围'])
     for (const [field, count, label, capability] of [[p.image_field, p.max_images, '图片', 'max_images'], [p.video_field, p.max_videos, '视频', 'max_videos'], [p.audio_field, p.max_audios, '音频', 'max_audios']]) {
       if (!field) continue
       if (isFileImageEdit(doc) && field === p.image_field) {
@@ -262,6 +269,8 @@ export function getRequestParams(doc) {
       let description = `最多 ${count} 个可公开访问的${label} URL`
       if (isUnknown(p, capability) || count == null) description = `未确认：上游未公布${label}参考能力或数量限制`
       else if (count <= 0) description = `不支持${label}参考`
+      if (field === p.video_field && p.reference_video_billed_per_second && isUnknown(p, capability)) description = '支持视频参考，上游数量上限未公布'
+      if (field === p.video_field && p.reference_video_billed_per_second) description += `；参考视频按实际总时长另计，服务端核验并转发同一文件内容。支持 MP4/WebM，本站单段最多 32 MiB、合计 96 MiB${isUnknown(p, capability) ? `、单次最多 ${count} 段` : ''}`
       rows.push([field, field.endsWith('_url') ? 'string' : 'string[]', field === p.image_field && p.min_images && !isUnknown(p, capability) ? '是' : '否', description])
     }
     return rows

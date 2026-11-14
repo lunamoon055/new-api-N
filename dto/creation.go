@@ -77,6 +77,7 @@ type CreationModelCost struct {
 	RequestQuota          *int               `json:"request_quota,omitempty"`
 	VideoBillingMode      string             `json:"video_billing_mode,omitempty"`
 	VideoResolutionPrices map[string]float64 `json:"video_resolution_prices,omitempty"`
+	VideoReferencePrices  map[string]float64 `json:"video_reference_prices,omitempty"`
 	VideoResolutionQuotas map[string]int     `json:"video_resolution_quotas,omitempty"`
 	GroupRatio            float64            `json:"group_ratio,omitempty"`
 }

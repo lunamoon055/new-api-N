@@ -215,10 +215,13 @@ func loadOptionsFromDatabase() {
 	if err := applyBillingOptionsFromSnapshot(optionValues); err != nil {
 		common.SysError("failed to load billing configuration: " + err.Error())
 	}
+	if err := applyVideoPricingOptionsFromSnapshot(optionValues); err != nil {
+		common.SysError("failed to load video pricing configuration: " + err.Error())
+	}
 	billingOptionsMu.Unlock()
 
 	for _, option := range options {
-		if option.Key == billingModeOptionKey || option.Key == billingExprOptionKey {
+		if option.Key == billingModeOptionKey || option.Key == billingExprOptionKey || isVideoPricingOption(option.Key) {
 			continue
 		}
 		err := updateOptionMap(option.Key, option.Value)
@@ -237,6 +240,16 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
+	if isVideoPricingOption(key) {
+		billingOptionsMu.Lock()
+		defer billingOptionsMu.Unlock()
+	}
+	if key == "billing_setting.video_reference_prices" {
+		_, err := billing_setting.ParseVideoReferencePrices(value)
+		if err != nil {
+			return err
+		}
+	}
 	if key == "Notice" {
 		return updateNoticeOption(value, time.Now())
 	}

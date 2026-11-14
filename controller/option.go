@@ -209,6 +209,14 @@ func UpdateOption(c *gin.Context) {
 	if updateBillingOption(c, option.Key, option.Value.(string)) {
 		return
 	}
+	if option.Key == model.VideoPricingConfigOptionKey {
+		if err := model.UpdateVideoPricingConfig(option.Value.(string)); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+		return
+	}
 	if option.Key == service.MediaStorageOptionKey {
 		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,

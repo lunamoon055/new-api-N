@@ -240,6 +240,11 @@ func fetchPublicVideoCapabilityCatalog(ctx context.Context, baseURL, proxy, prov
 				note += "/" + item.ModelName
 			}
 			p := parseV6KCapabilityNote(note)
+			if provider == "v6k" && common.IsV6KSDVideoModel(item.ModelName) {
+				// SD notes use price shorthand (480-0.18), not a resolution
+				// list. Keep the verified adapter/billing contract on refresh.
+				p = common.GetV6KVideoParameters(item.ModelName)
+			}
 			if provider == "suanliai" {
 				supplementSuanliaiReferenceTuple(p, item.ModelName)
 			}
